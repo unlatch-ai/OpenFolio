@@ -1,0 +1,25 @@
+# Security & Privacy
+
+OpenFolio is designed to store sensitive personal and professional data. Security is a core concern, especially as an open-source project where the codebase is publicly auditable.
+
+## Design Principles
+
+1. **No privileged admin role** — There is no global admin account that can access other users' data. Every user goes through normal workspace membership checks.
+2. **Workspace isolation via RLS** — All data access is enforced by PostgreSQL Row Level Security policies at the database level, not just in application code.
+3. **Minimal service role usage** — The Supabase service role key (which bypasses RLS) is only used for background jobs (embedding generation, sync) and auth operations (signup, invites).
+4. **Encrypted tokens** — OAuth tokens from integrations are encrypted at rest using AES-256-GCM.
+5. **Security headers** — HTTP responses include HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, and Permissions-Policy.
+
+## What Data Is Stored
+
+| Data Type | Where | Encryption |
+|-----------|-------|------------|
+| Contact names, emails, phones | `people` table | At rest (Supabase managed) |
+| Interaction content (emails, notes) | `interactions`, `notes` tables | At rest (Supabase managed) |
+| OAuth access/refresh tokens | `integrations` table | AES-256-GCM application-level encryption |
+| User passwords | Supabase Auth (bcrypt) | Hashed, never stored in plaintext |
+| Embeddings | Entity tables (`embedding` column) | At rest (Supabase managed) |
+
+## Reporting Security Issues
+
+If you discover a security vulnerability, please report it responsibly by emailing the maintainers directly rather than opening a public issue. See [SECURITY.md](https://github.com/unlatch-ai/OpenFolio/blob/main/SECURITY.md) for details.

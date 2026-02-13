@@ -1,0 +1,40 @@
+# Authentication
+
+OpenFolio uses **Supabase Auth** with email/password authentication. Sessions are managed via secure HTTP-only cookies.
+
+## Hosted Mode (Default)
+
+In the hosted version, account creation is **invite-only**:
+
+1. An `app_invites` token is required to sign up (`/signup?token=...`)
+2. Workspace invites are sent by email and accepted via `/invite?token=...`
+3. This prevents unauthorized signups
+
+## Self-Hosted Mode
+
+When `OPENFOLIO_MODE=self-hosted` is set, open registration is enabled:
+
+1. Anyone can create an account at `/signup`
+2. A default workspace is created automatically for new users
+3. No invite token is required
+
+## OAuth (Google)
+
+For Google integrations (Gmail, Calendar, Contacts), OpenFolio uses OAuth 2.0:
+
+- **State parameter** is HMAC-signed with a timestamp to prevent CSRF
+- **Timing-safe comparison** is used for state verification
+- **State expires** after 10 minutes
+- Tokens are encrypted at rest with AES-256-GCM
+
+## Session Management
+
+- Sessions are stored as HTTP-only, secure cookies via Supabase SSR
+- The middleware (`middleware.ts`) refreshes sessions on each request
+- Expired sessions redirect to the login page
+
+## E2E Testing Bypass
+
+A test-only auth bypass (`E2E_BYPASS_AUTH`) exists for Playwright tests. It is:
+- Guarded by `process.env.NODE_ENV !== "production"` — cannot be activated in production
+- Only used in CI/CD test pipelines

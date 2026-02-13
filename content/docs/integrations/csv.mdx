@@ -1,0 +1,34 @@
+# CSV Import
+
+Import contacts from any CSV file.
+
+## How It Works
+
+1. Go to **Settings > Import**
+2. Upload a CSV file (max 10 MB)
+3. Map CSV columns to OpenFolio fields (email, first_name, last_name, etc.)
+4. Review the mapping and start the import
+
+## Column Mapping
+
+The import UI suggests column mappings based on header names. You can manually adjust:
+
+| OpenFolio Field | Description |
+|----------------|-------------|
+| `email` | Contact email address (used for deduplication) |
+| `first_name` | First name |
+| `last_name` | Last name |
+| `phone` | Phone number |
+| `company_name` | Company name (auto-creates company) |
+| `job_title` | Job title / role |
+| `location` | Location |
+| `bio` | Bio or notes |
+| `skip` | Ignore this column |
+
+## Deduplication
+
+Contacts are deduplicated by email address within the workspace. If a person with the same email already exists, their record is updated with new data (non-null fields override).
+
+## Import Progress
+
+Large imports run in the background via Trigger.dev. You can track progress in the Settings page.

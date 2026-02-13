@@ -1,0 +1,75 @@
+# Self-Hosting
+
+Run OpenFolio on your own infrastructure using Docker Compose.
+
+## Prerequisites
+
+- Docker and Docker Compose
+- An OpenAI API key (for embeddings and AI features)
+- (Optional) Google OAuth credentials for Gmail/Calendar sync
+
+## Quick Start
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/unlatch-ai/OpenFolio.git
+cd openfolio
+
+# 2. Run the setup script
+./scripts/setup.sh
+
+# 3. Add your API keys
+nano .env
+# Set OPENAI_API_KEY=sk-...
+
+# 4. Start all services
+docker compose up -d
+
+# 5. Visit http://localhost:3000
+```
+
+The setup script generates:
+- `POSTGRES_PASSWORD` — random database password
+- `JWT_SECRET` — for Supabase Auth tokens
+- `INTEGRATION_ENCRYPTION_KEY` — for encrypting stored OAuth tokens
+- Sets `OPENFOLIO_MODE=self-hosted` for open registration
+
+## Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `app` | 3000 | OpenFolio Next.js application |
+| `db` | — | PostgreSQL 16 with pgvector |
+| `auth` | 9999 | Supabase Auth (GoTrue) |
+| `rest` | 3001 | PostgREST API |
+
+## Initial Setup
+
+1. Visit http://localhost:3000
+2. Click "Sign Up" to create your account (no invite required in self-hosted mode)
+3. A default workspace ("My CRM") is created automatically
+4. Start importing contacts or connecting integrations
+
+## Updating
+
+```bash
+git pull
+docker compose build app
+docker compose up -d
+```
+
+Database migrations are applied automatically when the database container starts.
+
+## Data Persistence
+
+PostgreSQL data is stored in a Docker volume (`pgdata`). To back up:
+
+```bash
+docker compose exec db pg_dump -U postgres openfolio > backup.sql
+```
+
+To restore:
+
+```bash
+docker compose exec -T db psql -U postgres openfolio < backup.sql
+```

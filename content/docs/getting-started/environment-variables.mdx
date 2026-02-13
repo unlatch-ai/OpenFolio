@@ -1,0 +1,49 @@
+# Environment Variables
+
+OpenFolio uses environment variables for configuration. Copy `.example.env.local` to `.env.local` for local development.
+
+## Required Variables
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous (publishable) key |
+| `OPENAI_API_KEY` | OpenAI API key for embeddings and AI features |
+| `TRIGGER_SECRET_KEY` | Trigger.dev secret key for background jobs |
+
+## Server-Side Only
+
+These are used for service operations and should never be exposed to the client:
+
+| Variable | Description |
+|----------|-------------|
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (bypasses RLS) |
+| `SUPABASE_URL` | Supabase URL for server-side operations |
+
+## Local Supabase
+
+After running `pnpm supabase:start`, get local values from `supabase status`:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<from supabase status>
+SUPABASE_SERVICE_ROLE_KEY=<from supabase status>
+SUPABASE_URL=http://127.0.0.1:54321
+```
+
+## Optional Variables
+
+| Variable | Description |
+|----------|-------------|
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID (for Gmail/Calendar sync) |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
+| `INTEGRATION_ENCRYPTION_KEY` | AES-256-GCM key for encrypting stored OAuth tokens |
+| `OPENFOLIO_MODE` | Set to `self-hosted` for open registration (no invite required) |
+
+## Production
+
+For Vercel deployments, set environment variables via the Vercel Dashboard or CLI:
+
+```bash
+vercel env add <VAR_NAME> production
+```

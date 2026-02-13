@@ -1,0 +1,29 @@
+# Contact Deduplication
+
+The dedup system finds potential duplicate contacts using multiple matching strategies.
+
+## Matching Strategies
+
+### Deterministic Matching (High Confidence)
+- **Same email address** — exact match
+- **Same phone number** — exact match
+
+### Fuzzy Matching (Lower Confidence)
+- **Name similarity** — Levenshtein distance on first + last name
+- **Email domain matching** — same domain with similar names
+
+## How It Works
+
+1. A Trigger.dev task (`find-duplicates`) runs periodically or on demand
+2. It compares contacts within the same workspace
+3. Matches are stored in the `duplicate_candidates` table with a confidence score
+4. Users review candidates in the UI and choose to merge or dismiss
+
+## Merging
+
+When duplicates are confirmed, the merge process:
+1. Combines fields from both records (preferring non-null values)
+2. Relinks all interactions to the surviving contact
+3. Moves notes, tags, and social profiles
+4. Deletes the duplicate record
+5. Triggers re-embedding of the merged contact

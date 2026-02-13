@@ -1,0 +1,213 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-dm-sans);
+  --font-serif: var(--font-newsreader);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+/* Warm Editorial Design System
+   ===========================
+   A sophisticated, trust-building palette inspired by premium notebooks
+   and editorial publications. Warm neutrals replace cold grays.
+*/
+
+:root {
+  --radius: 0.5rem;
+
+  /* Warm cream background - like quality paper */
+  --background: #FDFBF7;
+  --foreground: #1C1917;
+
+  /* Cards slightly warmer than background */
+  --card: #FFFFFF;
+  --card-foreground: #1C1917;
+
+  --popover: #FFFFFF;
+  --popover-foreground: #1C1917;
+
+  /* Terracotta primary - warm, confident, not corporate */
+  --primary: #C2410C;
+  --primary-foreground: #FDFBF7;
+
+  /* Warm stone secondary */
+  --secondary: #F5F0E8;
+  --secondary-foreground: #44403C;
+
+  /* Muted warm grays */
+  --muted: #F5F0E8;
+  --muted-foreground: #78716C;
+
+  --accent: #FEF3E2;
+  --accent-foreground: #9A3412;
+
+  --destructive: #DC2626;
+
+  /* Warm borders */
+  --border: #E7E0D6;
+  --input: #E7E0D6;
+  --ring: #C2410C;
+
+  /* Chart colors - warm palette */
+  --chart-1: #C2410C;
+  --chart-2: #0D9488;
+  --chart-3: #7C3AED;
+  --chart-4: #DB2777;
+  --chart-5: #CA8A04;
+
+  /* Sidebar - subtle warmth */
+  --sidebar: #FAF8F5;
+  --sidebar-foreground: #1C1917;
+  --sidebar-primary: #C2410C;
+  --sidebar-primary-foreground: #FDFBF7;
+  --sidebar-accent: #FEF3E2;
+  --sidebar-accent-foreground: #9A3412;
+  --sidebar-border: #E7E0D6;
+  --sidebar-ring: #C2410C;
+}
+
+.dark {
+  --background: #1C1917;
+  --foreground: #FAF8F5;
+
+  --card: #292524;
+  --card-foreground: #FAF8F5;
+
+  --popover: #292524;
+  --popover-foreground: #FAF8F5;
+
+  --primary: #FB923C;
+  --primary-foreground: #1C1917;
+
+  --secondary: #44403C;
+  --secondary-foreground: #FAF8F5;
+
+  --muted: #44403C;
+  --muted-foreground: #A8A29E;
+
+  --accent: #44403C;
+  --accent-foreground: #FB923C;
+
+  --destructive: #EF4444;
+
+  --border: #44403C;
+  --input: #44403C;
+  --ring: #FB923C;
+
+  --chart-1: #FB923C;
+  --chart-2: #2DD4BF;
+  --chart-3: #A78BFA;
+  --chart-4: #F472B6;
+  --chart-5: #FACC15;
+
+  --sidebar: #292524;
+  --sidebar-foreground: #FAF8F5;
+  --sidebar-primary: #FB923C;
+  --sidebar-primary-foreground: #1C1917;
+  --sidebar-accent: #44403C;
+  --sidebar-accent-foreground: #FB923C;
+  --sidebar-border: #44403C;
+  --sidebar-ring: #FB923C;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  /* Serif headings for editorial feel */
+  h1, h2, h3 {
+    font-family: var(--font-newsreader), Georgia, serif;
+    letter-spacing: -0.02em;
+  }
+
+  /* Smooth transitions globally */
+  a, button {
+    transition: all 0.15s ease;
+  }
+}
+
+/* Custom scrollbar for refined feel */
+@layer utilities {
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-up {
+    animation: fade-up 0.7s ease both;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 3px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
+}

@@ -1,0 +1,60 @@
+# Testing Guide
+
+## Running Tests
+
+```bash
+pnpm test              # Run all tests
+pnpm test:watch        # Watch mode for development
+pnpm test:coverage     # Generate coverage report
+```
+
+## Test Structure
+
+```
+tests/
+├── lib/               # Unit tests for lib functions
+│   ├── auth.test.ts   # Workspace context, permissions
+│   ├── embeddings.test.ts  # Text builders, merge helpers
+│   ├── dedup.test.ts  # Deduplication logic
+│   └── ...
+├── api/               # API route tests
+│   ├── people.test.ts # People CRUD
+│   ├── companies.test.ts   # Companies CRUD
+│   ├── interactions.test.ts # Interactions CRUD
+│   ├── tags-notes.test.ts  # Tags and notes
+│   ├── auth-patterns.test.ts # Auth contract tests
+│   └── ...
+├── ai/                # AI tool and agent tests
+└── integration/       # Integration tests (RPC, etc.)
+```
+
+## Test Philosophy
+
+Tests verify **contracts and invariants** — things that shouldn't break from UI changes:
+
+- Auth enforcement on every API route
+- Workspace isolation (no cross-workspace data access)
+- Permission checks (owner vs member)
+- Data validation and error handling
+
+If a test fails after a feature change, either:
+1. The test needs updating (intentional behavior change)
+2. There's a bug or unintended side effect
+
+## Mocking
+
+Tests mock external services in `tests/setup.ts`:
+
+- **Supabase** — both server and browser clients
+- **OpenAI** — embedding generation
+- **Next.js headers** — for API route testing
+
+## Writing Tests
+
+When adding a new API route:
+
+1. Mock `getWorkspaceContext` to return a valid context
+2. Test auth enforcement (401 for no auth, 403 for wrong workspace)
+3. Test the happy path
+4. Test error cases (validation, not found, etc.)
+5. Verify workspace isolation (queries include `workspace_id`)

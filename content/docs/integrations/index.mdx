@@ -1,0 +1,28 @@
+# Integrations
+
+OpenFolio connects to external services to import your contacts and interactions.
+
+## Available Integrations
+
+| Integration | Type | What It Imports |
+|-------------|------|-----------------|
+| **CSV** | File upload | People from CSV files |
+| **Google Gmail** | OAuth | Email interactions |
+| **Google Calendar** | OAuth | Meeting interactions |
+| **Google Contacts** | OAuth | People with phone numbers, addresses, etc. |
+
+## How Integrations Work
+
+1. **Connect** — OAuth flow or file upload
+2. **Sync** — Connector fetches data and normalizes it
+3. **Process** — The Integration Gateway upserts people, creates companies, links interactions
+4. **Embed** — Background jobs generate embeddings for new/updated entities
+
+All integrations go through the same gateway, ensuring consistent data handling regardless of source.
+
+## Managing Integrations
+
+Go to **Settings > Integrations** in the dashboard to:
+- Connect new integrations
+- View sync status and history
+- Disconnect integrations

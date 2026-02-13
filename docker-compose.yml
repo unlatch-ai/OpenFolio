@@ -1,0 +1,100 @@
+# OpenFolio Self-Hosted Docker Compose
+#
+# Usage:
+#   1. Run: ./scripts/setup.sh to generate .env
+#   2. Run: docker compose up -d
+#   3. Run migrations: docker compose exec db psql -U postgres -d openfolio -f /docker-entrypoint-initdb.d/schema.sql
+#   4. Visit http://localhost:3000
+#
+# SECURITY: Do NOT use default credentials. Run scripts/setup.sh first.
+
+services:
+  # PostgreSQL with pgvector
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    # Port NOT exposed by default for security. Uncomment for local dev:
+    # ports:
+    #   - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/setup.sh to generate .env}
+      POSTGRES_DB: openfolio
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Supabase Auth (GoTrue)
+  auth:
+    image: supabase/gotrue:v2.170.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:3000}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/openfolio?sslmode=disable
+      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:3000}
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:?Run scripts/setup.sh to generate .env}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+    ports:
+      - "9999:9999"
+
+  # Supabase REST (PostgREST)
+  rest:
+    image: postgrest/postgrest:v12.2.3
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/openfolio
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "3001:3000"
+
+  # OpenFolio Next.js App
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-http://localhost:8000}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      auth:
+        condition: service_started
+      rest:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-http://localhost:8000}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_URL: ${SUPABASE_URL:-http://rest:3000}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      TRIGGER_SECRET_KEY: ${TRIGGER_SECRET_KEY:-}
+      OPENFOLIO_MODE: ${OPENFOLIO_MODE:-self-hosted}
+      INTEGRATION_ENCRYPTION_KEY: ${INTEGRATION_ENCRYPTION_KEY:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+
+volumes:
+  pgdata:

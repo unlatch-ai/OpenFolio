@@ -1,0 +1,36 @@
+# OpenFolio Documentation
+
+OpenFolio is an **open-source, AI-native personal CRM**. It helps you organize your professional network, track interactions, and get AI-powered insights about your relationships.
+
+## What is OpenFolio?
+
+OpenFolio stores your contacts, companies, and interactions — then uses AI embeddings (via OpenAI) to enable semantic search and an intelligent assistant that understands your network.
+
+**Key features:**
+
+- **People & Companies** — Organize contacts with rich profiles, tags, and notes
+- **Interaction Tracking** — Log emails, meetings, calls, and more
+- **AI Assistant** — Ask natural language questions about your network
+- **Semantic Search** — Find contacts by meaning, not just keywords
+- **Integrations** — Import from CSV, Gmail, Google Calendar, and Google Contacts
+- **Multi-Workspace** — Separate personal and professional networks
+- **Self-Hostable** — Run on your own infrastructure with Docker Compose
+
+## Quick Links
+
+- [Getting Started](/docs/getting-started) — Set up your development environment
+- [Architecture](/docs/architecture) — Understand how OpenFolio works
+- [Security & Privacy](/docs/security) — How we protect your data
+- [Self-Hosting](/docs/self-hosting) — Run OpenFolio on your own servers
+- [Integrations](/docs/integrations) — Connect external data sources
+- [Contributing](/docs/contributing) — Help build OpenFolio
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, shadcn/ui |
+| Backend | Next.js API Routes, Supabase (Postgres + pgvector) |
+| AI | OpenAI (text-embedding-3-small, GPT-4o) |
+| Background Jobs | Trigger.dev |
+| Auth | Supabase Auth (email/password) |

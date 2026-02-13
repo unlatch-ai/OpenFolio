@@ -1,0 +1,43 @@
+# Integration Gateway
+
+The gateway provides a pluggable connector system for importing data from external sources.
+
+## Connector Interface
+
+Each connector implements the `IntegrationConnector` interface:
+
+- `id`, `name`, `description`, `icon` — metadata
+- `auth` — authentication type (`oauth`, `file`, or `none`)
+- `getAuthUrl()` / `handleCallback()` — for OAuth connectors
+- `sync()` — incremental data fetching
+- `parseFile()` — for file-based connectors (CSV)
+
+## Sync Pipeline
+
+1. Connector produces a `SyncResult` with normalized people and interactions
+2. The gateway `processSync()` handles:
+   - **Person upsert** — dedup by email within workspace
+   - **Company auto-creation** — from company name or email domain
+   - **Social profile creation** — LinkedIn, Twitter, etc.
+   - **Interaction creation** — with participant linking by email
+   - **Embedding generation** — triggers async Trigger.dev tasks
+
+## Adding a Connector
+
+1. Create `lib/integrations/connectors/my-connector.ts` implementing `IntegrationConnector`
+2. Register it in `lib/integrations/registry.ts`
+3. If OAuth: add connect/callback API routes under `app/api/integrations/`
+4. The connector appears automatically in Settings > Integrations
+
+## Built-in Connectors
+
+| Connector | Auth Type | What It Syncs |
+|-----------|-----------|---------------|
+| CSV | File | People from uploaded CSV files |
+| Google Gmail | OAuth | Email interactions |
+| Google Calendar | OAuth | Meeting interactions |
+| Google Contacts | OAuth | People and their details |
+
+## Token Security
+
+OAuth tokens are encrypted at rest using **AES-256-GCM** via `lib/integrations/encryption.ts`. The encryption key is derived from the `INTEGRATION_ENCRYPTION_KEY` environment variable.

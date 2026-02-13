@@ -1,0 +1,49 @@
+# Workspace Isolation
+
+All data in OpenFolio is scoped to workspaces via `workspace_id` foreign keys. Row Level Security (RLS) policies enforce that users can only access data in workspaces they belong to.
+
+## Server-Side Auth Pattern
+
+Every API route validates workspace access:
+
+```typescript
+import { getWorkspaceContext, isWorkspaceContextError, requireOwner } from "@/lib/auth";
+
+export async function GET(request: NextRequest) {
+  const ctx = await getWorkspaceContext(request);
+  if (isWorkspaceContextError(ctx)) {
+    return NextResponse.json({ error: ctx.error }, { status: ctx.status });
+  }
+
+  // ctx.workspaceId - validated workspace ID
+  // ctx.user.id - authenticated user ID
+  // ctx.workspaceRole - 'owner' or 'member'
+
+  // For owner-only operations:
+  if (!requireOwner(ctx)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+}
+```
+
+## Client-Side
+
+The client automatically includes the workspace ID in every request:
+
+```typescript
+import { apiFetch } from "@/lib/api";
+
+// apiFetch adds x-workspace-id header from workspace context
+const data = await apiFetch("/api/people");
+```
+
+## Roles
+
+| Role | Scope | Permissions |
+|------|-------|-------------|
+| `owner` | Workspace | Full access — manage members, settings, all data |
+| `member` | Workspace | View and edit data within the workspace |
+
+## Multi-Workspace
+
+Users can belong to multiple workspaces. The active workspace is tracked client-side and sent via the `x-workspace-id` header. Users can switch workspaces in the UI.

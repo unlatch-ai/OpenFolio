@@ -1,0 +1,35 @@
+# AI Agent
+
+The AI assistant uses OpenAI's tool-calling capability with dedicated tools for querying the CRM.
+
+## Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `searchPeople` | Semantic search across contacts |
+| `searchCompanies` | Search companies |
+| `searchInteractions` | Search interaction history |
+| `getPersonDetails` | Get full person profile with related data |
+| `getRelationshipInsights` | Analyze relationship patterns |
+| `createNote` | Add notes to contacts |
+| `executeSql` | Run read-only SQL for complex queries (fallback) |
+
+## How It Works
+
+1. User sends a message in the chat UI (`/app/plan`)
+2. The message is sent to the `/api/agent` route
+3. OpenAI processes the message and decides which tools to call
+4. Tools execute queries against the workspace's data (scoped by `workspace_id`)
+5. Results are returned to OpenAI for natural language synthesis
+6. The response streams back to the user
+
+## SQL Safety
+
+The `executeSql` tool runs queries through a read-only PostgreSQL function (`execute_readonly_query`) that:
+- Only allows `SELECT` statements
+- Runs with `SECURITY INVOKER` — RLS policies apply
+- Rejects DDL, DML, and dangerous operations
+
+## Custom Instructions
+
+Workspace owners can set custom instructions in Settings that are included in the AI system prompt. This lets users tailor the assistant's behavior to their specific use case.

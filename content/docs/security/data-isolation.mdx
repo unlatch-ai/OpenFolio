@@ -1,0 +1,51 @@
+# Data Isolation
+
+## Row Level Security (RLS)
+
+Every table containing user data has RLS policies that enforce workspace-based isolation at the database level. This means even if application code has a bug, the database itself prevents cross-workspace data access.
+
+### How It Works
+
+1. All data tables have a `workspace_id` column
+2. RLS policies check that the current user is a member of the workspace
+3. The `workspace_members` table is the source of truth for access
+
+### Example Policy
+
+```sql
+CREATE POLICY "people workspace isolation" ON people
+  FOR ALL
+  USING (
+    workspace_id IN (
+      SELECT workspace_id FROM workspace_members
+      WHERE user_id = auth.uid()
+    )
+  );
+```
+
+## No Global Admin
+
+OpenFolio intentionally has **no global admin role**. This means:
+
+- The host/operator cannot access user data through the application
+- Every user must be a member of a workspace to see its data
+- Workspace owners can manage members and settings, but only for their own workspace
+
+The `profiles.role` column is constrained to `'user'` only — the database itself prevents escalation.
+
+## Service Role Key
+
+The Supabase service role key bypasses RLS and is used only for:
+
+- **Background jobs** (Trigger.dev) — embedding generation, integration sync, dedup
+- **Auth operations** — user creation during signup, invite processing
+- **AI tools** — the agent needs cross-table access within the workspace context
+
+The service role key is:
+- Never exposed to the client
+- Protected by `server-only` import guard
+- Only accessible in server-side code
+
+## IDOR Prevention
+
+API routes that accept entity IDs (e.g., `/api/people/[id]/tags`) verify that the entity belongs to the caller's workspace before performing operations. This prevents Insecure Direct Object Reference attacks.

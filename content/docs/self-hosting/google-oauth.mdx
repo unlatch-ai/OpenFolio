@@ -1,0 +1,43 @@
+# Google OAuth Setup
+
+To enable Gmail, Google Calendar, and Google Contacts sync, you need to set up Google OAuth credentials.
+
+## Steps
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project (or select an existing one)
+3. Enable these APIs:
+   - Gmail API
+   - Google Calendar API
+   - People API
+4. Go to **Credentials** > **Create Credentials** > **OAuth 2.0 Client ID**
+5. Select **Web Application** as the type
+6. Add authorized redirect URI:
+   ```
+   http://localhost:3000/api/integrations/google/callback
+   ```
+   (Replace with your domain if not running locally)
+7. Copy the Client ID and Client Secret
+
+## Configuration
+
+Add the credentials to your `.env` file:
+
+```env
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+```
+
+Restart the app:
+
+```bash
+docker compose restart app
+```
+
+## Custom Domain
+
+If running on a custom domain, update the redirect URI in Google Cloud Console to match:
+
+```
+https://your-domain.com/api/integrations/google/callback
+```

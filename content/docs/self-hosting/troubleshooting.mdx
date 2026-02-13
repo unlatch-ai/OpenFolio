@@ -1,0 +1,62 @@
+# Troubleshooting
+
+## App Can't Connect to Database
+
+Make sure the `db` service is healthy:
+
+```bash
+docker compose ps
+docker compose logs db
+```
+
+Check that `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_URL` point to the correct host.
+
+## Embeddings Not Generating
+
+1. Verify `OPENAI_API_KEY` is set in your `.env` file
+2. Check the app logs for OpenAI errors:
+   ```bash
+   docker compose logs app
+   ```
+3. Restart the app:
+   ```bash
+   docker compose restart app
+   ```
+
+## OAuth Redirect Issues
+
+Make sure the redirect URI in Google Cloud Console exactly matches your app's URL:
+
+```
+http://localhost:3000/api/integrations/google/callback
+```
+
+Common mistakes:
+- HTTP vs HTTPS mismatch
+- Missing or extra trailing slash
+- Wrong port number
+
+## Database Migration Errors
+
+If migrations fail, check the database logs:
+
+```bash
+docker compose logs db
+```
+
+You can manually reset the database:
+
+```bash
+docker compose down
+docker volume rm openfolio_pgdata
+docker compose up -d
+```
+
+**Warning:** This deletes all data. Make a backup first.
+
+## Performance Issues
+
+If the app is slow:
+- Ensure embeddings are generated (they're required for semantic search)
+- Check if the database has sufficient memory
+- Consider increasing Docker resource limits

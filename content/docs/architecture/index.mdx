@@ -1,0 +1,71 @@
+# Architecture Overview
+
+```
++---------------------------------------------------+
+|                   Next.js App                      |
+|  +----------+  +----------+  +--------------+     |
+|  |  Pages   |  |   API    |  |  AI Agent    |     |
+|  |  (React) |  |  Routes  |  |  (Tool Use)  |     |
+|  +----------+  +----------+  +--------------+     |
+|                      |                             |
+|  +--------------------------------------------+   |
+|  |        Integration Gateway                  |   |
+|  |  +------+ +------+ +-------+ +--------+   |   |
+|  |  | CSV  | |Gmail | | Cal   | |Contacts|   |   |
+|  |  +------+ +------+ +-------+ +--------+   |   |
+|  +--------------------------------------------+   |
++---------------------------------------------------+
+         |              |              |
+    +---------+   +---------+   +---------+
+    |Supabase |   | OpenAI  |   |Trigger  |
+    |Postgres |   |  API    |   |  .dev   |
+    |+pgvector|   |         |   |         |
+    +---------+   +---------+   +---------+
+```
+
+## Directory Structure
+
+```
+app/
+├── (auth)/                    # Public auth routes
+├── app/(dashboard)/           # Protected dashboard routes
+│   ├── people/                # People directory + detail
+│   ├── companies/             # Companies directory + detail
+│   ├── interactions/          # Interactions timeline
+│   ├── plan/                  # AI assistant chat
+│   ├── search/                # Semantic search
+│   └── settings/              # Import, integrations, workspace
+└── api/                       # API routes
+    ├── people/                # CRUD + duplicates + merge
+    ├── companies/             # CRUD
+    ├── interactions/          # CRUD
+    ├── integrations/          # Connect, disconnect, sync
+    ├── search/                # Vector search
+    └── agent/                 # AI chat
+
+lib/
+├── integrations/
+│   ├── types.ts               # Connector interface
+│   ├── registry.ts            # Connector registry
+│   ├── gateway.ts             # Sync processing pipeline
+│   ├── encryption.ts          # AES-256-GCM token encryption
+│   └── connectors/            # Built-in connectors
+├── ai/                        # AI tools and prompts
+├── supabase/                  # Client helpers
+├── auth.ts                    # Workspace context
+├── embeddings.ts              # Text builders
+└── dedup.ts                   # Deduplication logic
+
+src/trigger/                   # Background tasks
+├── generate-embeddings.ts
+├── sync-integration.ts
+└── find-duplicates.ts
+```
+
+## Key Design Decisions
+
+- **Workspace-scoped data** — All data is isolated per workspace via RLS policies
+- **Server components by default** — Client components only where interactivity is needed
+- **Embeddings on entities** — Vectors stored directly on rows, not in a separate table
+- **Background jobs for heavy work** — Embedding generation and sync run via Trigger.dev
+- **Pluggable connectors** — New integrations implement a standard interface

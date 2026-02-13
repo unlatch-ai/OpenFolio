@@ -1,0 +1,43 @@
+# How to Contribute
+
+We welcome contributions to OpenFolio! Here's how to get started.
+
+## Getting Started
+
+1. Fork the repository
+2. Clone your fork: `git clone https://github.com/YOUR-USERNAME/openfolio.git`
+3. Follow the [Development Setup](/docs/getting-started/development) guide
+4. Create a feature branch: `git checkout -b my-feature`
+5. Make your changes
+6. Run tests: `pnpm test`
+7. Run lint: `pnpm lint`
+8. Open a pull request
+
+## What to Work On
+
+- Check [GitHub Issues](https://github.com/unlatch-ai/OpenFolio/issues) for open tasks
+- Look for `good first issue` labels for beginner-friendly tasks
+- Propose new features by opening an issue first
+
+## Coding Standards
+
+- **TypeScript** with strict mode
+- **2-space indentation**, semicolons required
+- **kebab-case** for files, **PascalCase** for components
+- All data queries must use `ctx.workspaceId` for workspace isolation
+- API routes must use `getWorkspaceContext()` for auth
+- New features should include tests
+
+## Pull Request Guidelines
+
+- Keep PRs focused — one feature or fix per PR
+- Include a clear description of what changed and why
+- Add tests for new functionality
+- Update docs if your change affects the public API or user-facing behavior
+- Ensure all tests pass before requesting review
+
+## Architecture Decisions
+
+For significant changes, please discuss the approach in an issue before starting work. This helps avoid wasted effort and ensures alignment with the project direction.
+
+See [Architecture](/docs/architecture) for an overview of how the system works.

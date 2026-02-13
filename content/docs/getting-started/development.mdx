@@ -1,0 +1,67 @@
+# Development Setup
+
+## Package Manager
+
+This project uses **pnpm**. Install it via:
+
+```bash
+npm install -g pnpm
+# or
+corepack enable
+```
+
+## Local Supabase
+
+OpenFolio uses Supabase for the database (PostgreSQL + pgvector), authentication, and the PostgREST API.
+
+```bash
+# Start local Supabase (requires Docker)
+pnpm supabase:start
+
+# Stop local Supabase
+pnpm supabase:stop
+
+# Reset database (re-run migrations + seed)
+pnpm db:reset
+```
+
+After starting, `supabase status` shows the local URLs and keys to put in `.env.local`.
+
+## Type Generation
+
+When you change the database schema, regenerate TypeScript types:
+
+```bash
+pnpm db:types:local
+```
+
+This updates `lib/supabase/database.types.ts` from your local schema.
+
+## Testing
+
+```bash
+pnpm test              # Run all tests
+pnpm test:watch        # Watch mode
+pnpm test:coverage     # Coverage report
+```
+
+Tests mock external services (Supabase, OpenAI) and verify:
+- Auth and workspace context validation
+- Embedding text builders and data merging
+- API route auth enforcement and workspace isolation
+
+## Linting
+
+```bash
+pnpm lint
+```
+
+## Coding Conventions
+
+- **TypeScript** with strict mode
+- **2-space indentation**, semicolons required
+- **kebab-case** for file names, **PascalCase** for components
+- **Server components by default** — use `"use client"` only for interactivity
+- **Path alias**: `@/*` maps to project root
+- Forms use `react-hook-form` + Zod validation
+- Toast notifications via Sonner

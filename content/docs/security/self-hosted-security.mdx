@@ -1,0 +1,57 @@
+# Self-Hosted Security
+
+When self-hosting OpenFolio, you are responsible for securing your infrastructure.
+
+## Setup Script
+
+The `scripts/setup.sh` script generates secure random values for:
+
+- `POSTGRES_PASSWORD` — database password
+- `JWT_SECRET` — for Supabase Auth tokens
+- `INTEGRATION_ENCRYPTION_KEY` — for encrypting OAuth tokens
+
+**Never use default or example credentials in production.**
+
+## Docker Compose
+
+The Docker Compose configuration:
+
+- **Does not expose PostgreSQL** to the host by default (port is commented out)
+- **Requires environment variables** — fails with a clear error if `.env` is missing
+- Uses Docker volumes for data persistence
+
+## Network Security
+
+- Keep the database port (5432) unexposed or firewalled
+- Use a reverse proxy (nginx, Caddy) with TLS for the app
+- Consider running all services on an internal Docker network
+
+## Backups
+
+```bash
+# Create a backup
+docker compose exec db pg_dump -U postgres openfolio > backup.sql
+
+# Restore from backup
+docker compose exec -T db psql -U postgres openfolio < backup.sql
+```
+
+## Updates
+
+```bash
+git pull
+docker compose build app
+docker compose up -d
+```
+
+Database migrations are applied automatically when the database container starts.
+
+## What the Host Can Access
+
+Even with no admin role, the infrastructure operator has access to:
+
+- The database via `psql` or Supabase dashboard
+- The service role key (bypasses RLS)
+- Server logs
+
+OpenFolio's security model protects users from each other via RLS, but it cannot fully protect against a malicious infrastructure operator. This is a fundamental limitation of any hosted service. For maximum data sovereignty, users should self-host their own instance.

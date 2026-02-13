@@ -1,0 +1,42 @@
+# Embedding Pipeline
+
+Every entity (person, company, interaction, note) has an `embedding` column storing a 1536-dimensional vector from OpenAI's `text-embedding-3-small` model.
+
+## How It Works
+
+1. Entity is created or updated via API
+2. A Trigger.dev task (`generate-embeddings`) fires asynchronously
+3. The task builds semantic text from entity fields (name, bio, company, tags, notes, etc.)
+4. Text is sent to OpenAI for embedding
+5. The resulting vector is stored in the entity's `embedding` column
+6. Search uses cosine similarity via pgvector's `<=>` operator
+
+## Text Builders
+
+Each entity type has a text builder that combines relevant fields into a single string for embedding:
+
+- **Person**: name, email, bio, location, company, job title, tags, notes
+- **Company**: name, domain, industry, location, description
+- **Interaction**: type, subject, content, participants
+- **Note**: content, associated person/company name
+
+## Vector Search
+
+Semantic search queries are embedded with the same model, then matched against stored vectors:
+
+```sql
+SELECT *, embedding <=> $1 AS distance
+FROM people
+WHERE workspace_id = $2
+ORDER BY distance
+LIMIT 10;
+```
+
+## Indexes
+
+ivfflat indexes on all embedding columns for fast approximate nearest neighbor search:
+
+```sql
+CREATE INDEX idx_people_embedding ON people
+  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+```

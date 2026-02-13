@@ -1,0 +1,42 @@
+# API Security
+
+## Auth Enforcement
+
+Every API route follows the same pattern:
+
+1. Call `getWorkspaceContext(request)` to validate auth + workspace membership
+2. Check for errors with `isWorkspaceContextError()`
+3. Use `ctx.workspaceId` in all database queries
+4. Check `requireOwner(ctx)` for privileged operations
+
+## Security Headers
+
+All responses include:
+
+| Header | Value | Purpose |
+|--------|-------|---------|
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | Force HTTPS |
+| `X-Frame-Options` | `SAMEORIGIN` | Prevent clickjacking |
+| `X-Content-Type-Options` | `nosniff` | Prevent MIME sniffing |
+| `Referrer-Policy` | `origin-when-cross-origin` | Limit referrer leakage |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | Restrict browser APIs |
+
+## Rate Limiting
+
+API routes use in-memory rate limiting (`lib/rate-limit.ts`) to prevent abuse.
+
+## File Upload Limits
+
+CSV file uploads are limited to **10 MB** to prevent denial-of-service via large file uploads.
+
+## SQL Injection Prevention
+
+- All database queries use the Supabase client's parameterized query builder
+- The `execute_readonly_query` RPC function runs with `SECURITY INVOKER` so RLS policies apply
+- Only `SELECT` statements are allowed in the SQL tool
+
+## Input Validation
+
+- API routes validate request bodies with Zod schemas
+- Path parameters are validated before database queries
+- Entity ownership is verified before mutations (IDOR prevention)

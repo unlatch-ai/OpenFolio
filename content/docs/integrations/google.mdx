@@ -1,0 +1,39 @@
+# Google Integration
+
+Connect Gmail, Google Calendar, and Google Contacts to automatically import interactions and contacts.
+
+## Setup
+
+See [Google OAuth Setup](/docs/self-hosting/google-oauth) for credential configuration.
+
+## What Gets Synced
+
+### Gmail
+- Email messages as interactions
+- Sender and recipient emails linked to contacts
+- Subject line and message body
+
+### Google Calendar
+- Calendar events as interactions
+- Event attendees linked to contacts
+- Event title, description, and time
+
+### Google Contacts
+- Contact names, emails, phone numbers
+- Organization and job title
+- Social profiles (if available)
+
+## Incremental Sync
+
+After the initial sync, subsequent syncs only fetch new or updated items using sync cursors. This is efficient and avoids re-processing old data.
+
+## Sync Frequency
+
+Syncs run on demand from Settings > Integrations. Automatic periodic sync is planned for a future release.
+
+## Disconnecting
+
+Disconnecting a Google integration:
+- Revokes the stored OAuth tokens
+- Does **not** delete previously imported data
+- Can be reconnected at any time

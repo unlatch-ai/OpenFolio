@@ -1,0 +1,62 @@
+# Database
+
+OpenFolio uses **Supabase Postgres** with the **pgvector** extension for vector similarity search.
+
+## Core Tables
+
+| Table | Purpose |
+|-------|---------|
+| `workspaces` | Multi-tenant containers |
+| `profiles` | User profiles (synced from auth.users) |
+| `workspace_members` | User-workspace memberships with roles |
+| `workspace_invites` | Pending workspace invitations |
+| `people` | Contacts with embeddings |
+| `companies` | Organizations |
+| `interactions` | Emails, meetings, calls, etc. |
+| `person_companies` | Person-company relationships |
+| `interaction_people` | Interaction participants |
+| `social_profiles` | LinkedIn, Twitter, etc. links |
+| `tags` | Workspace-scoped tags |
+| `person_tags` / `company_tags` | Tag associations |
+| `notes` | Free-form notes on people/companies |
+| `integrations` | Connected external services |
+| `sync_logs` | Integration sync history |
+| `duplicate_candidates` | Potential duplicate contacts |
+| `import_records` | CSV import tracking |
+| `chats` / `chat_messages` | AI assistant conversations |
+
+## Embeddings
+
+Every entity (person, company, interaction, note) has an `embedding` column storing a **1536-dimensional vector** from OpenAI's `text-embedding-3-small` model.
+
+Vectors are indexed with **ivfflat** for fast cosine similarity search:
+
+```sql
+CREATE INDEX idx_people_embedding ON people
+  USING ivfflat (embedding vector_cosine_ops)
+  WITH (lists = 100);
+```
+
+## Row Level Security (RLS)
+
+All tables enforce **workspace-based isolation** via RLS policies. Users can only access data in workspaces they belong to through `workspace_members`.
+
+## Migrations
+
+Schema is managed via Supabase migrations in `supabase/migrations/`:
+
+```bash
+# Apply migrations to local DB
+pnpm db:reset
+
+# Push to production
+pnpm db:push
+```
+
+## Schema Sync Workflow
+
+1. Start local Supabase: `pnpm supabase:start`
+2. Make schema changes (SQL or migrations)
+3. Commit migrations in `supabase/migrations/`
+4. Apply to prod when ready: `pnpm db:push`
+5. Regenerate types: `pnpm db:types:local`

@@ -1,0 +1,101 @@
+# Building Connectors
+
+Add new data sources to OpenFolio by implementing the `IntegrationConnector` interface.
+
+## Connector Interface
+
+```typescript
+interface IntegrationConnector {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  auth: "oauth" | "file" | "none";
+
+  // OAuth connectors
+  getAuthUrl?(workspaceId: string, userId: string): Promise<string>;
+  handleCallback?(code: string, state: string): Promise<OAuthTokens>;
+
+  // Data sync
+  sync(integration: Integration): Promise<SyncResult>;
+
+  // File-based connectors
+  parseFile?(file: File): Promise<SyncResult>;
+}
+```
+
+## SyncResult
+
+Every connector produces a normalized `SyncResult`:
+
+```typescript
+interface SyncResult {
+  people: NormalizedPerson[];
+  interactions: NormalizedInteraction[];
+  cursor?: Record<string, unknown>; // For incremental sync
+}
+```
+
+## Steps to Add a Connector
+
+### 1. Create the Connector
+
+```bash
+# Create connector file
+touch lib/integrations/connectors/my-connector.ts
+```
+
+Implement the `IntegrationConnector` interface:
+
+```typescript
+import type { IntegrationConnector, SyncResult } from "../types";
+
+export const myConnector: IntegrationConnector = {
+  id: "my-connector",
+  name: "My Service",
+  description: "Import contacts from My Service",
+  icon: "plug",
+  auth: "oauth",
+
+  async getAuthUrl(workspaceId, userId) {
+    // Return OAuth authorization URL
+  },
+
+  async handleCallback(code, state) {
+    // Exchange code for tokens
+  },
+
+  async sync(integration) {
+    // Fetch data and return normalized results
+    return { people: [...], interactions: [...] };
+  },
+};
+```
+
+### 2. Register the Connector
+
+Add it to `lib/integrations/registry.ts`:
+
+```typescript
+import { myConnector } from "./connectors/my-connector";
+
+export const connectors = [
+  csvConnector,
+  googleConnector,
+  myConnector, // Add here
+];
+```
+
+### 3. Add OAuth Routes (if applicable)
+
+Create API routes for OAuth flow:
+
+```
+app/api/integrations/my-connector/
+├── connect/route.ts    # Initiate OAuth
+└── callback/route.ts   # Handle callback
+```
+
+### 4. Done
+
+The connector appears automatically in Settings > Integrations. The Integration Gateway handles all the upsert logic, company creation, and embedding generation.
