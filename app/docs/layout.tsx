@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Footer, Layout, Navbar } from "nextra-theme-docs";
-import { Head, Search } from "nextra/components";
+import { Search } from "nextra/components";
 import { getPageMap } from "nextra/page-map";
 
 import "nextra-theme-docs/style.css";
@@ -20,7 +21,7 @@ export default async function DocsLayout({ children }: { children: ReactNode }) 
     <Layout
       navbar={
         <Navbar
-          logo={<a href="/"><b>OpenFolio</b></a>}
+          logo={<Link href="/"><b>OpenFolio</b></Link>}
           projectLink="https://github.com/unlatch-ai/OpenFolio"
         />
       }
