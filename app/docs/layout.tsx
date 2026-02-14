@@ -32,6 +32,7 @@ export default async function DocsLayout({ children }: { children: ReactNode }) 
       search={<Search />}
       pageMap={pageMap}
       docsRepositoryBase="https://github.com/unlatch-ai/OpenFolio/tree/main/content"
+
       editLink="Edit this page on GitHub"
       sidebar={{ defaultMenuCollapseLevel: 1 }}
       toc={{ backToTop: true }}

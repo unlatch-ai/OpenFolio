@@ -77,7 +77,7 @@ app/
     ├── chats/            # Chat session management
     └── draft-email/      # Email generation
 
-content/docs/             # Documentation MDX content (Nextra)
+content/                  # Documentation MDX content (Nextra)
 
 components/
 ├── ui/                   # shadcn/ui components (Radix + Tailwind)
@@ -222,11 +222,11 @@ Set env vars in Vercel Dashboard or via `vercel env add <VAR> production`.
 
 The documentation site is built with **Nextra 4** and lives at `/docs` in the app.
 
-- **Content**: `content/docs/` — MDX files organized by section
+- **Content**: `content/` — MDX files organized by section
 - **Route**: `app/docs/` — Nextra layout + catch-all route
 - **Sections**: Getting Started, Architecture, Security & Privacy, Self-Hosting, Integrations, Contributing
 
-To add or edit documentation, modify MDX files in `content/docs/` and update `_meta.js` for sidebar ordering.
+To add or edit documentation, modify MDX files in `content/` and update `_meta.js` for sidebar ordering.
 
 
 <!-- TRIGGER.DEV basic START -->
