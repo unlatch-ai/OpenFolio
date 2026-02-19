@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans, Newsreader, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { Toaster } from "@/components/ui/sonner";
+import { ForceLightMode } from "@/components/force-light-mode";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -70,10 +71,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${dmSans.variable} ${newsreader.variable} ${geistMono.variable} font-sans`}
       >
+        <ForceLightMode />
         {children}
         <Toaster
           position="top-right"
