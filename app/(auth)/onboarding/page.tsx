@@ -1,7 +1,5 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -29,7 +27,6 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
-  const supabase = createClient();
 
   const {
     register,
@@ -42,6 +39,7 @@ export default function OnboardingPage() {
   // Check if user already has an organization
   useEffect(() => {
     const checkOrg = async () => {
+      const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
@@ -84,7 +82,7 @@ export default function OnboardingPage() {
     };
 
     checkOrg();
-  }, [supabase, router]);
+  }, [router]);
 
   const onSubmit = async (data: OnboardingFormData) => {
     setIsLoading(true);
