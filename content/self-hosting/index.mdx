@@ -32,7 +32,8 @@ The setup script generates:
 - `POSTGRES_PASSWORD` — random database password
 - `JWT_SECRET` — for Supabase Auth tokens
 - `INTEGRATION_ENCRYPTION_KEY` — for encrypting stored OAuth tokens
-- Sets `OPENFOLIO_MODE=self-hosted` for open registration
+- Sets `OPENFOLIO_MODE=self-hosted` and `NEXT_PUBLIC_OPENFOLIO_MODE=self-hosted`
+- Self-host defaults to no-auth single-user behavior (no additional mode vars required)
 
 ## Services
 
@@ -46,9 +47,16 @@ The setup script generates:
 ## Initial Setup
 
 1. Visit http://localhost:3000
-2. Click "Sign Up" to create your account (no invite required in self-hosted mode)
-3. A default workspace ("My CRM") is created automatically
+2. OpenFolio auto-bootstraps a local singleton user + personal workspace on first app/API request
+3. You are routed straight into `/app` (no signup/login/onboarding screens)
 4. Start importing contacts or connecting integrations
+
+## Self-Hosted Behavior
+
+- Auth mode defaults to `none` in self-hosted deployments
+- Team/members/invite management is disabled
+- Billing checks are disabled
+- Recommended deployment model is private network/VPN/reverse proxy auth if internet exposed
 
 ## Updating
 

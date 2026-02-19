@@ -48,6 +48,9 @@ describe("GET /auth/callback", () => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_SUPABASE_URL = "http://localhost:54321";
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role";
+    process.env.OPENFOLIO_DEPLOYMENT_MODE = "hosted";
+    process.env.OPENFOLIO_AUTH_MODE = "supabase";
   });
 
   it("redirects to /login when code is missing", async () => {
@@ -80,12 +83,12 @@ describe("GET /auth/callback", () => {
     expect(response.headers.get("location")).toBe("http://localhost:3000/app");
   });
 
-  it("redirects new users to /onboarding", async () => {
+  it("redirects new users to /app after auto-provision", async () => {
     buildSupabaseClient({ membership: null });
 
     const request = new NextRequest("http://localhost:3000/auth/callback?code=abc");
     const response = await GET(request);
 
-    expect(response.headers.get("location")).toBe("http://localhost:3000/onboarding");
+    expect(response.headers.get("location")).toBe("http://localhost:3000/app");
   });
 });

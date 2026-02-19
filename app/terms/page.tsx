@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { getRuntimeMode } from "@/lib/runtime-mode";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
@@ -10,8 +11,7 @@ export const metadata: Metadata = {
   },
 };
 
-const isSelfHosted =
-  process.env.NEXT_PUBLIC_OPENFOLIO_MODE === "self-hosted";
+const isSelfHosted = getRuntimeMode().deploymentMode === "self-hosted";
 
 const lastUpdated = "February 13, 2026";
 const contactEmail = isSelfHosted ? null : "me@kevinfang.tech";

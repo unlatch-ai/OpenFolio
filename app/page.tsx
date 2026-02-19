@@ -4,11 +4,12 @@ import { Hero } from "@/components/landing/hero";
 import { Features } from "@/components/landing/features";
 import { SelfHostSection } from "@/components/landing/self-host-section";
 import { Footer } from "@/components/landing/footer";
+import { getRuntimeMode } from "@/lib/runtime-mode";
 
 export default function LandingPage() {
-  const mode = process.env.OPENFOLIO_MODE || process.env.NEXT_PUBLIC_OPENFOLIO_MODE;
+  const mode = getRuntimeMode();
 
-  if (mode === "self-hosted") {
+  if (mode.deploymentMode === "self-hosted") {
     redirect("/app");
   }
 

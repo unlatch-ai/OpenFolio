@@ -36,6 +36,22 @@ Common mistakes:
 - Missing or extra trailing slash
 - Wrong port number
 
+## App Still Shows Login/Signup in Self-Hosted Mode
+
+Verify mode variables in your `.env`:
+
+```env
+OPENFOLIO_MODE=self-hosted
+NEXT_PUBLIC_OPENFOLIO_MODE=self-hosted
+```
+
+Then rebuild/restart the app container so client build-time envs are refreshed:
+
+```bash
+docker compose build app
+docker compose up -d
+```
+
 ## Database Migration Errors
 
 If migrations fail, check the database logs:

@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react";
 import { getCurrentWorkspaceId, setCurrentWorkspaceId, apiJson } from "@/lib/api";
 import type { Workspace } from "@/types";
+import { getClientRuntimeMode } from "@/lib/runtime-mode";
 
 interface WorkspaceWithRole extends Workspace {
   role: 'owner' | 'member';
@@ -30,9 +31,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       setError(null);
+      const mode = getClientRuntimeMode();
 
-      // Claim any pending invites first
-      await fetch("/api/auth/claim-invites", { method: "POST" }).catch(() => {});
+      if (mode.authMode !== "none") {
+        // Claim any pending invites first
+        await fetch("/api/auth/claim-invites", { method: "POST" }).catch(() => {});
+      }
 
       const data = await apiJson<{ workspaces: WorkspaceWithRole[] }>("/api/user/workspaces");
       setWorkspaces(data.workspaces);

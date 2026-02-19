@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getRuntimeMode } from "@/lib/runtime-mode";
 
 /**
  * POST /api/auth/claim-invites
@@ -12,6 +13,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
  */
 export async function POST() {
   try {
+    if (getRuntimeMode().authMode === "none") {
+      return NextResponse.json({ claimed: 0, message: "Invite claiming disabled in no-auth mode" });
+    }
+
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 

@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { User, Building2, MessageSquare, Pin, PinOff, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiJson } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
+import { getClientRuntimeMode } from "@/lib/runtime-mode";
 import type { Person, Company, Interaction } from "@/types";
 import {
   PlanItem,
@@ -112,33 +114,47 @@ function getLinkForItem(item: PlanItem) {
 }
 
 async function fetchDetails(item: PlanItem): Promise<SelectionData | null> {
-  const supabase = createClient();
-  if (item.type === "person") {
+  const noAuthMode = getClientRuntimeMode().authMode === "none";
+  if (!noAuthMode) {
+    const supabase = createClient();
+    if (item.type === "person") {
+      const { data } = await supabase
+        .from("people")
+        .select(
+          "id,email,first_name,last_name,display_name,relationship_type,relationship_strength,last_contacted_at,location,bio,created_at,updated_at"
+        )
+        .eq("id", item.id)
+        .single();
+      return (data as SelectionPerson) || null;
+    }
+    if (item.type === "company") {
+      const { data } = await supabase
+        .from("companies")
+        .select(
+          "id,name,domain,website,industry,location,description,created_at,updated_at"
+        )
+        .eq("id", item.id)
+        .single();
+      return (data as SelectionCompany) || null;
+    }
     const { data } = await supabase
-      .from("people")
-      .select(
-        "id,email,first_name,last_name,display_name,relationship_type,relationship_strength,last_contacted_at,location,bio,created_at,updated_at"
-      )
+      .from("interactions")
+      .select("id,interaction_type,direction,subject,content,summary,occurred_at,duration_minutes,created_at")
       .eq("id", item.id)
       .single();
-    return (data as SelectionPerson) || null;
+    return (data as SelectionInteraction) || null;
+  }
+
+  if (item.type === "person") {
+    const response = await apiJson<{ data: SelectionPerson }>(`/api/people/${item.id}`);
+    return response.data || null;
   }
   if (item.type === "company") {
-    const { data } = await supabase
-      .from("companies")
-      .select(
-        "id,name,domain,website,industry,location,description,created_at,updated_at"
-      )
-      .eq("id", item.id)
-      .single();
-    return (data as SelectionCompany) || null;
+    const response = await apiJson<{ data: SelectionCompany }>(`/api/companies/${item.id}`);
+    return response.data || null;
   }
-  const { data } = await supabase
-    .from("interactions")
-    .select("id,interaction_type,direction,subject,content,summary,occurred_at,duration_minutes,created_at")
-    .eq("id", item.id)
-    .single();
-  return (data as SelectionInteraction) || null;
+  const response = await apiJson<{ data: SelectionInteraction }>(`/api/interactions/${item.id}`);
+  return response.data || null;
 }
 
 function DetailRow({ label, value }: { label: string; value?: string | null }) {

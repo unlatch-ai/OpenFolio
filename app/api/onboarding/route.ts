@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getRuntimeMode } from "@/lib/runtime-mode";
+import { ensureProfile } from "@/lib/workspaces/provision";
 import { z } from "zod";
 
 const onboardingSchema = z.object({
@@ -8,7 +11,16 @@ const onboardingSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const mode = getRuntimeMode();
+    if (mode.authMode === "none") {
+      return NextResponse.json(
+        { error: "Onboarding is disabled in no-auth mode" },
+        { status: 400 }
+      );
+    }
+
     const supabase = await createClient();
+    const admin = createAdminClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -20,12 +32,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already has any workspace membership
-    const { data: existingMembership } = await supabase
+    const { data: existingMembership } = await admin
       .from("workspace_members")
       .select("id")
       .eq("user_id", user.id)
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (existingMembership) {
       return NextResponse.json(
@@ -53,10 +65,10 @@ export async function POST(request: NextRequest) {
     const uniqueSlug = `${baseSlug}-${Date.now()}`;
 
     // Create workspace
-    const { data: workspaceData, error: workspaceError } = await supabase
+    const { data: workspaceData, error: workspaceError } = await admin
       .from("workspaces")
       .insert({ name: organizationName, slug: uniqueSlug })
-      .select()
+      .select("id, name, slug")
       .single();
 
     if (workspaceError) {
@@ -67,35 +79,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Ensure profile exists
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile) {
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .insert({ id: user.id, role: "user" });
-
-      if (profileError) {
-        await supabase.from("workspaces").delete().eq("id", workspaceData.id);
-        console.error("Error creating profile:", profileError);
-        return NextResponse.json(
-          { error: "Failed to create profile" },
-          { status: 500 }
-        );
-      }
-    }
+    await ensureProfile(admin, {
+      userId: user.id,
+      email: user.email,
+      fullName: (user.user_metadata?.full_name as string | undefined) || null,
+    });
 
     // Create membership as owner
-    const { error: membershipError } = await supabase
+    const { error: membershipError } = await admin
       .from("workspace_members")
       .insert({ user_id: user.id, workspace_id: workspaceData.id, role: "owner" });
 
     if (membershipError) {
-      await supabase.from("workspaces").delete().eq("id", workspaceData.id);
+      await admin.from("workspaces").delete().eq("id", workspaceData.id);
       console.error("Error creating membership:", membershipError);
       return NextResponse.json(
         { error: "Failed to create membership" },

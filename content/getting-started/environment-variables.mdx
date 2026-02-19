@@ -38,7 +38,21 @@ SUPABASE_URL=http://127.0.0.1:54321
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID (for Gmail/Calendar sync) |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
 | `INTEGRATION_ENCRYPTION_KEY` | AES-256-GCM key for encrypting stored OAuth tokens |
-| `OPENFOLIO_MODE` | Set to `self-hosted` for open registration (no invite required) |
+| `OPENFOLIO_MODE` | `self-hosted` (single-user no-auth default) or `hosted` (auth-required managed mode) |
+| `NEXT_PUBLIC_OPENFOLIO_MODE` | Client mirror of `OPENFOLIO_MODE` |
+
+## Mode Overrides (Advanced, Optional)
+
+Most deployments do not need these. They exist to force behavior when needed:
+
+| Variable | Values |
+|----------|--------|
+| `OPENFOLIO_DEPLOYMENT_MODE` | `self-hosted` \| `hosted` |
+| `OPENFOLIO_AUTH_MODE` | `none` \| `supabase` |
+| `OPENFOLIO_BILLING_MODE` | `disabled` \| `enabled` |
+| `NEXT_PUBLIC_OPENFOLIO_DEPLOYMENT_MODE` | client mirror |
+| `NEXT_PUBLIC_OPENFOLIO_AUTH_MODE` | client mirror |
+| `NEXT_PUBLIC_OPENFOLIO_BILLING_MODE` | client mirror |
 
 ## Production
 

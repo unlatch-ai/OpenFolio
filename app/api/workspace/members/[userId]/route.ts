@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext, isWorkspaceContextError, requireOwner } from "@/lib/auth";
+import { getRuntimeMode } from "@/lib/runtime-mode";
 import { z } from "zod";
 
 const updateMemberSchema = z.object({
@@ -15,6 +16,10 @@ export async function PATCH(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
+    if (getRuntimeMode().authMode === "none") {
+      return NextResponse.json({ error: "Team management is disabled in no-auth mode" }, { status: 403 });
+    }
+
     const ctx = await getWorkspaceContext(request);
     if (isWorkspaceContextError(ctx)) {
       return NextResponse.json({ error: ctx.error }, { status: ctx.status });
@@ -91,6 +96,10 @@ export async function DELETE(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
+    if (getRuntimeMode().authMode === "none") {
+      return NextResponse.json({ error: "Team management is disabled in no-auth mode" }, { status: 403 });
+    }
+
     const ctx = await getWorkspaceContext(request);
     if (isWorkspaceContextError(ctx)) {
       return NextResponse.json({ error: ctx.error }, { status: ctx.status });

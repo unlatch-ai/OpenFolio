@@ -30,8 +30,6 @@ type InviteInfo = {
   inviterName?: string | null;
 };
 
-const isSelfHosted =
-  process.env.NEXT_PUBLIC_OPENFOLIO_MODE === "self-hosted";
 const hasGoogleOAuth = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
 export default function SignupClient() {
@@ -41,15 +39,11 @@ export default function SignupClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const [waitlistName, setWaitlistName] = useState("");
-  const [waitlistEmail, setWaitlistEmail] = useState("");
-  const [waitlistComplete, setWaitlistComplete] = useState(false);
-  const [isWaitlistSubmitting, setIsWaitlistSubmitting] = useState(false);
   const supabase = createClient();
 
   const oauthRedirectTo = inviteToken
     ? `/invite?token=${encodeURIComponent(inviteToken)}`
-    : "/onboarding";
+    : "/app";
 
   const {
     register,
@@ -90,12 +84,6 @@ export default function SignupClient() {
     setIsLoading(true);
 
     try {
-      if (!isSelfHosted && inviteInfo?.type !== "workspace" && !data.organizationName?.trim()) {
-        toast.error("Organization name is required");
-        setIsLoading(false);
-        return;
-      }
-
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -133,89 +121,6 @@ export default function SignupClient() {
       setIsLoading(false);
     }
   };
-
-  if (!inviteToken && !isSelfHosted) {
-    return (
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-serif font-medium tracking-tight text-foreground">
-            Invite-only access
-          </h1>
-          <p className="text-muted-foreground">
-            OpenFolio is currently invite only. If you have an invite link, please use it to sign up. If you are having trouble, please email <span className="font-medium text-foreground">me@kevinfang.tech</span>.
-          </p>
-        </div>
-        <div className="space-y-4">
-          {waitlistComplete ? (
-            <div className="rounded-xl border border-border bg-background/60 p-4 text-sm text-muted-foreground">
-              Thanks! We will email you to learn more about your interest in OpenFolio.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label htmlFor="waitlist-name">Name</Label>
-                <Input
-                  id="waitlist-name"
-                  placeholder="Alex Johnson"
-                  value={waitlistName}
-                  onChange={(event) => setWaitlistName(event.target.value)}
-                  disabled={isWaitlistSubmitting}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="waitlist-email">Email</Label>
-                <Input
-                  id="waitlist-email"
-                  type="email"
-                  placeholder="alex@community.org"
-                  value={waitlistEmail}
-                  onChange={(event) => setWaitlistEmail(event.target.value)}
-                  disabled={isWaitlistSubmitting}
-                />
-              </div>
-              <Button
-                className="w-full h-11 font-medium"
-                onClick={async () => {
-                  if (!waitlistName.trim() || !waitlistEmail.trim()) {
-                    toast.error("Name and email are required");
-                    return;
-                  }
-                  setIsWaitlistSubmitting(true);
-                  try {
-                    const res = await fetch("/api/waitlist", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ name: waitlistName, email: waitlistEmail }),
-                    });
-                    const data = await res.json();
-                    if (!res.ok) {
-                      throw new Error(data.error || "Failed to join waitlist");
-                    }
-                    setWaitlistComplete(true);
-                    toast.success("Added to waitlist");
-                  } catch (error) {
-                    toast.error(error instanceof Error ? error.message : "Failed to join waitlist");
-                  } finally {
-                    setIsWaitlistSubmitting(false);
-                  }
-                }}
-                disabled={isWaitlistSubmitting}
-              >
-                {isWaitlistSubmitting ? "Submitting..." : "Join waitlist"}
-              </Button>
-            </div>
-          )}
-          <Button
-            variant="outline"
-            className="w-full h-11 font-medium"
-            onClick={() => router.push("/login")}
-          >
-            Log in
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   if (inviteError) {
     return (
@@ -268,7 +173,7 @@ export default function SignupClient() {
         </p>
       </div>
 
-      {(inviteToken || (isSelfHosted && hasGoogleOAuth)) ? (
+      {hasGoogleOAuth ? (
         <div className="space-y-4">
           <GoogleOAuthButton
             type="signup"
@@ -305,7 +210,7 @@ export default function SignupClient() {
             )}
           </div>
 
-          {!isSelfHosted && inviteInfo?.type !== "workspace" && (
+          {inviteInfo?.type === "app" && (
             <div className="space-y-2">
               <Label htmlFor="organizationName" className="text-sm font-medium">
                 Organization

@@ -10,6 +10,10 @@ import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { MobileNav } from "./mobile-nav";
 import { navItems } from "./nav-items";
 import ClaimInvitesOnAuth from "@/components/auth/ClaimInvitesOnAuth";
+import { getRuntimeMode } from "@/lib/runtime-mode";
+import { ensureSelfHostedContext } from "@/lib/selfhost/bootstrap";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { ensurePersonalWorkspace, ensureProfile } from "@/lib/workspaces/provision";
 
 export default async function DashboardLayout({
   children,
@@ -17,11 +21,18 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const isE2EBypass = process.env.E2E_BYPASS_AUTH === "1";
+  const mode = getRuntimeMode();
+  const noAuthMode = mode.authMode === "none";
 
   let userName = "Test User";
   let userEmail = "test@example.com";
   let userInitials = "TU";
-  if (!isE2EBypass) {
+  if (noAuthMode) {
+    const context = await ensureSelfHostedContext();
+    userName = process.env.OPENFOLIO_SELFHOST_DEFAULT_NAME || "Local User";
+    userEmail = context.userEmail;
+    userInitials = "LU";
+  } else if (!isE2EBypass) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -38,8 +49,16 @@ export default async function DashboardLayout({
       .single();
 
     if (!membership) {
-      // User doesn't have any organization, redirect to onboarding
-      redirect("/onboarding");
+      const admin = createAdminClient();
+      await ensureProfile(admin, {
+        userId: user.id,
+        email: user.email,
+        fullName: (user.user_metadata?.full_name as string | undefined) || null,
+      });
+      await ensurePersonalWorkspace(admin, {
+        userId: user.id,
+        fullName: (user.user_metadata?.full_name as string | undefined) || null,
+      });
     }
 
     userName =
@@ -58,7 +77,7 @@ export default async function DashboardLayout({
   return (
     <WorkspaceProvider>
       <div className="min-h-screen flex bg-background">
-        <ClaimInvitesOnAuth />
+        {!noAuthMode ? <ClaimInvitesOnAuth /> : null}
         {/* Sidebar - Warm Editorial Style */}
         <aside className="hidden md:flex w-60 border-r border-border bg-sidebar flex-col">
           {/* Logo & Org Switcher */}
@@ -77,7 +96,7 @@ export default async function DashboardLayout({
                 OpenFolio
               </span>
             </Link>
-            <WorkspaceSwitcher />
+            {!noAuthMode ? <WorkspaceSwitcher /> : null}
           </div>
 
           {/* Navigation */}
@@ -120,9 +139,11 @@ export default async function DashboardLayout({
                 <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
               </div>
             </div>
-            <div className="mt-2">
-              <LogoutButton />
-            </div>
+            {!noAuthMode ? (
+              <div className="mt-2">
+                <LogoutButton />
+              </div>
+            ) : null}
           </div>
         </aside>
 

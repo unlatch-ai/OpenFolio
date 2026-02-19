@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hashInviteToken, isInviteExpired } from "@/lib/invites";
+import { getRuntimeMode } from "@/lib/runtime-mode";
 
 export async function POST(request: NextRequest) {
   try {
+    if (getRuntimeMode().authMode === "none") {
+      return NextResponse.json({ error: "Invites are disabled in no-auth mode" }, { status: 403 });
+    }
+
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 

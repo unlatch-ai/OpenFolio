@@ -12,6 +12,10 @@ import { updateSession } from "@/lib/supabase/middleware";
 describe("updateSession middleware", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.OPENFOLIO_DEPLOYMENT_MODE = "hosted";
+    process.env.OPENFOLIO_AUTH_MODE = "supabase";
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "http://localhost:54321";
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
   });
 
   it("redirects authenticated users from root to /app", async () => {

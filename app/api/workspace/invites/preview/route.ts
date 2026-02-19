@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hashInviteToken, isInviteExpired } from "@/lib/invites";
+import { getRuntimeMode } from "@/lib/runtime-mode";
 
 export async function GET(request: NextRequest) {
   try {
+    if (getRuntimeMode().authMode === "none") {
+      return NextResponse.json({ error: "Invites are disabled in no-auth mode" }, { status: 403 });
+    }
+
     const url = new URL(request.url);
     const token = url.searchParams.get("token");
 

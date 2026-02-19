@@ -57,7 +57,7 @@ ENCRYPTION_KEY=$(openssl rand -hex 32)
 echo "  POSTGRES_PASSWORD generated"
 echo "  JWT_SECRET generated"
 echo "  INTEGRATION_ENCRYPTION_KEY generated"
-echo "  OPENFOLIO_MODE=self-hosted"
+echo "  Self-hosted mode defaults enabled (auth + billing inferred automatically)"
 
 echo ""
 echo "==================================="

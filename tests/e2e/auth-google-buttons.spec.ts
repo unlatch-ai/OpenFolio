@@ -35,9 +35,9 @@ test("signup with token shows Google button", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("signup without token hides Google button", async ({ page }) => {
+test("signup without token shows Google button", async ({ page }) => {
   await page.goto("/signup");
   await expect(
     page.getByRole("img", { name: /sign up with google/i })
-  ).toHaveCount(0);
+  ).toBeVisible();
 });

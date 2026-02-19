@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { getClientRuntimeMode } from "@/lib/runtime-mode";
 
 const CLAIM_INVITES_FLAG = "of_claim_invites";
 
@@ -10,6 +11,7 @@ export default function ClaimInvitesOnAuth() {
   const didRun = useRef(false);
 
   useEffect(() => {
+    if (getClientRuntimeMode().authMode === "none") return;
     if (didRun.current) return;
     didRun.current = true;
 

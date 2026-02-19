@@ -13,8 +13,9 @@ import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import GoogleOAuthButton from "@/components/auth/GoogleOAuthButton";
 
-const isSelfHosted =
-  process.env.NEXT_PUBLIC_OPENFOLIO_MODE === "self-hosted";
+import { getClientRuntimeMode } from "@/lib/runtime-mode";
+
+const isSelfHosted = getClientRuntimeMode().deploymentMode === "self-hosted";
 const hasGoogleOAuth = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
 const loginSchema = z.object({

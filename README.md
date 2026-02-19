@@ -32,7 +32,11 @@ cd openfolio
 docker compose up -d       # Start all services
 ```
 
-Visit http://localhost:3000 to create your account.
+Visit http://localhost:3000 to open the app.
+
+In self-hosted mode, OpenFolio now defaults to single-user no-auth:
+- No signup/login required
+- A local singleton user + personal workspace are auto-created on first app/API use
 
 See the [Self-Hosting Guide](https://openfolio.ai/docs/self-hosting) for detailed instructions.
 
@@ -130,6 +134,7 @@ See [.env.example](.env.example) for all available variables. Key ones:
 | `GOOGLE_CLIENT_ID` | No | For Gmail/Calendar sync |
 | `GOOGLE_CLIENT_SECRET` | No | For Gmail/Calendar sync |
 | `INTEGRATION_ENCRYPTION_KEY` | No | For storing OAuth tokens |
+| `OPENFOLIO_MODE` | No | `self-hosted` (single-user no-auth) or `hosted` (auth required) |
 
 ## Roadmap
 
@@ -156,4 +161,4 @@ Full documentation at [openfolio.ai/docs](https://openfolio.ai/docs).
 
 [AGPL-3.0](LICENSE) — OpenFolio is free and open source.
 
-The hosted version at [openfolio.ai](https://openfolio.ai) is currently invite-only while we set up billing. [Self-hosting](#self-hosted-docker-compose) is available now for anyone.
+The hosted version at [openfolio.ai](https://openfolio.ai) uses managed authentication and workspace provisioning. [Self-hosting](#self-hosted-docker-compose) defaults to private single-user mode.

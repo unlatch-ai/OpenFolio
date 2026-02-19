@@ -1,9 +1,37 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getRuntimeMode } from "@/lib/runtime-mode";
 
 export async function updateSession(request: NextRequest) {
+  const mode = getRuntimeMode();
   if (process.env.E2E_BYPASS_AUTH === "1" && process.env.NODE_ENV !== "production") {
     return NextResponse.next({ request });
+  }
+
+  const pathname = request.nextUrl.pathname;
+  const isProtectedRoute = pathname === "/app" || pathname.startsWith("/app/");
+  const isAuthRoute =
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname === "/onboarding" ||
+    pathname === "/invite";
+
+  if (mode.authMode === "none") {
+    if (pathname === "/" && mode.deploymentMode === "self-hosted") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/app";
+      return NextResponse.redirect(url);
+    }
+
+    if (isAuthRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/app";
+      return NextResponse.redirect(url);
+    }
+
+    if (isProtectedRoute) {
+      return NextResponse.next({ request });
+    }
   }
 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -42,13 +70,8 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
-
-  // Define protected routes (authenticated app only)
-  const isProtectedRoute = pathname === "/app" || pathname.startsWith("/app/");
-
   // Define auth routes (login, signup)
-  const isAuthRoute = pathname === "/login" || pathname === "/signup";
+  const isLoginOrSignupRoute = pathname === "/login" || pathname === "/signup";
 
   // Onboarding is a special route - authenticated users without orgs need access
   const isOnboardingRoute = pathname === "/onboarding";
@@ -69,7 +92,7 @@ export async function updateSession(request: NextRequest) {
 
   // Redirect authenticated users away from auth pages to app
   // But allow onboarding page
-  if (user && isAuthRoute && !isOnboardingRoute) {
+  if (user && isLoginOrSignupRoute && !isOnboardingRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/app";
     return NextResponse.redirect(url);

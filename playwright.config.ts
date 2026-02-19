@@ -12,7 +12,8 @@ export default defineConfig({
     headless: true,
   },
   webServer: {
-    command: "E2E_BYPASS_AUTH=1 pnpm dev --port 3001",
+    command:
+      "OPENFOLIO_DEPLOYMENT_MODE=hosted OPENFOLIO_AUTH_MODE=supabase NEXT_PUBLIC_OPENFOLIO_DEPLOYMENT_MODE=hosted NEXT_PUBLIC_OPENFOLIO_AUTH_MODE=supabase NEXT_PUBLIC_GOOGLE_CLIENT_ID=playwright-google-client E2E_BYPASS_AUTH=1 pnpm dev --port 3001",
     url: "http://127.0.0.1:3001",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

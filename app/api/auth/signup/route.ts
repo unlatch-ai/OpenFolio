@@ -2,17 +2,27 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { hashInviteToken } from "@/lib/invites";
+import { getRuntimeMode } from "@/lib/runtime-mode";
+import { ensurePersonalWorkspace, ensureProfile, createWorkspaceForOwner } from "@/lib/workspaces/provision";
 
 const signupSchema = z.object({
   fullName: z.string().min(2),
   email: z.string().email(),
   password: z.string().min(6),
   organizationName: z.string().optional(),
-  inviteToken: z.string().min(10),
+  inviteToken: z.string().min(10).optional(),
 });
 
 export async function POST(request: NextRequest) {
   try {
+    const mode = getRuntimeMode();
+    if (mode.authMode === "none") {
+      return NextResponse.json(
+        { error: "Signup is disabled in no-auth mode" },
+        { status: 400 }
+      );
+    }
+
     const body = await request.json();
     const parsed = signupSchema.safeParse(body);
 
@@ -36,51 +46,49 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    const tokenHash = hashInviteToken(inviteToken);
+    const normalizedEmail = email.toLowerCase().trim();
+    const tokenHash = inviteToken ? hashInviteToken(inviteToken) : null;
     const nowIso = new Date().toISOString();
 
-    // Determine invite type
-    const { data: appInvite } = await supabaseAdmin
-      .from("app_invites")
-      .select("id, email, expires_at, accepted_at")
-      .eq("token_hash", tokenHash)
-      .maybeSingle();
+    const { data: appInvite } = tokenHash
+      ? await supabaseAdmin
+          .from("app_invites")
+          .select("id, email, expires_at, accepted_at")
+          .eq("token_hash", tokenHash)
+          .maybeSingle()
+      : { data: null };
 
-    const { data: workspaceInvite } = await supabaseAdmin
-      .from("workspace_invites")
-      .select("id, workspace_id, role, email, expires_at, accepted_at")
-      .eq("token_hash", tokenHash)
-      .maybeSingle();
+    const { data: workspaceInvite } = tokenHash
+      ? await supabaseAdmin
+          .from("workspace_invites")
+          .select("id, workspace_id, role, email, expires_at, accepted_at")
+          .eq("token_hash", tokenHash)
+          .maybeSingle()
+      : { data: null };
 
     const isAppInviteValid = appInvite && !appInvite.accepted_at && appInvite.expires_at && new Date(appInvite.expires_at).getTime() > Date.now();
     const isWorkspaceInviteValid = workspaceInvite && !workspaceInvite.accepted_at && workspaceInvite.expires_at && new Date(workspaceInvite.expires_at).getTime() > Date.now();
 
-    if (!isAppInviteValid && !isWorkspaceInviteValid) {
-      return NextResponse.json(
-        { error: "Invite required or expired" },
-        { status: 403 }
-      );
+    if (inviteToken && !isAppInviteValid && !isWorkspaceInviteValid) {
+      return NextResponse.json({ error: "Invite expired or invalid" }, { status: 403 });
     }
 
-    const inviteEmail = isAppInviteValid ? appInvite!.email : workspaceInvite!.email;
+    const inviteEmail = isAppInviteValid
+      ? appInvite!.email
+      : isWorkspaceInviteValid
+      ? workspaceInvite!.email
+      : null;
 
-    if (inviteEmail.toLowerCase() !== email.toLowerCase()) {
+    if (inviteEmail && inviteEmail.toLowerCase() !== normalizedEmail) {
       return NextResponse.json(
         { error: "Invite email does not match signup email" },
         { status: 403 }
       );
     }
 
-    if (isAppInviteValid && (!organizationName || organizationName.trim().length < 2)) {
-      return NextResponse.json(
-        { error: "Organization name is required" },
-        { status: 400 }
-      );
-    }
-
     // Create auth user
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email,
+      email: normalizedEmail,
       password,
       email_confirm: true,
       user_metadata: { full_name: fullName },
@@ -101,12 +109,13 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = authData.user.id;
-    // Create profile (global, no org_id)
-    const { error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .upsert({ id: userId, role: "user", email, full_name: fullName });
-
-    if (profileError) {
+    try {
+      await ensureProfile(supabaseAdmin, {
+        userId,
+        email: normalizedEmail,
+        fullName,
+      });
+    } catch {
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return NextResponse.json(
         { error: "Failed to create profile" },
@@ -114,61 +123,49 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (isAppInviteValid) {
-      const baseSlug = organizationName!.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-      const uniqueSlug = `${baseSlug}-${Date.now()}`;
+    try {
+      if (isWorkspaceInviteValid) {
+        const { error: membershipError } = await supabaseAdmin
+          .from("workspace_members")
+          .insert({
+            user_id: userId,
+            workspace_id: workspaceInvite!.workspace_id,
+            role: workspaceInvite!.role,
+          });
 
-      // Create workspace
-      const { data: orgData, error: orgError } = await supabaseAdmin
-        .from("workspaces")
-        .insert({ name: organizationName, slug: uniqueSlug })
-        .select()
-        .single();
+        if (membershipError && membershipError.code !== "23505") {
+          throw membershipError;
+        }
 
-      if (orgError) {
-        await supabaseAdmin.auth.admin.deleteUser(userId);
+        await supabaseAdmin
+          .from("workspace_invites")
+          .update({ accepted_at: nowIso })
+          .eq("id", workspaceInvite!.id);
+      } else if (isAppInviteValid && organizationName?.trim()) {
+        await createWorkspaceForOwner(supabaseAdmin, {
+          userId,
+          name: organizationName.trim(),
+        });
+
+        await supabaseAdmin
+          .from("app_invites")
+          .update({ accepted_at: nowIso })
+          .eq("id", appInvite!.id);
+      } else {
+        await ensurePersonalWorkspace(supabaseAdmin, {
+          userId,
+          fullName,
+        });
+      }
+    } catch (error) {
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (error && typeof error === "object" && "message" in error) {
         return NextResponse.json(
-          { error: "Failed to create organization" },
+          { error: (error as { message: string }).message || "Failed to create workspace" },
           { status: 500 }
         );
       }
-
-      const { error: membershipError } = await supabaseAdmin
-        .from("workspace_members")
-        .insert({ user_id: userId, workspace_id: orgData.id, role: "owner" });
-
-      if (membershipError) {
-        await supabaseAdmin.auth.admin.deleteUser(userId);
-        await supabaseAdmin.from("workspaces").delete().eq("id", orgData.id);
-        return NextResponse.json(
-          { error: "Failed to create membership" },
-          { status: 500 }
-        );
-      }
-
-      await supabaseAdmin
-        .from("app_invites")
-        .update({ accepted_at: nowIso })
-        .eq("id", appInvite!.id);
-    }
-
-    if (isWorkspaceInviteValid) {
-      const { error: membershipError } = await supabaseAdmin
-        .from("workspace_members")
-        .insert({ user_id: userId, workspace_id: workspaceInvite!.workspace_id, role: workspaceInvite!.role });
-
-      if (membershipError && membershipError.code !== "23505") {
-        await supabaseAdmin.auth.admin.deleteUser(userId);
-        return NextResponse.json(
-          { error: "Failed to create membership" },
-          { status: 500 }
-        );
-      }
-
-      await supabaseAdmin
-        .from("workspace_invites")
-        .update({ accepted_at: nowIso })
-        .eq("id", workspaceInvite!.id);
+      return NextResponse.json({ error: "Failed to create workspace" }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, userId });

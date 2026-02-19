@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { getClientRuntimeMode } from "@/lib/runtime-mode";
 
 type Member = {
   id: string;
@@ -35,6 +36,7 @@ type Invite = {
 };
 
 export default function SettingsMembersPage() {
+  const noAuthMode = getClientRuntimeMode().authMode === "none";
   const { workspaceRole } = useWorkspace();
   const isOwner = workspaceRole === "owner";
 
@@ -62,17 +64,34 @@ export default function SettingsMembersPage() {
   };
 
   useEffect(() => {
+    if (noAuthMode) return;
     loadData();
-  }, []);
+  }, [noAuthMode]);
 
   const pendingInvites = useMemo(() => {
+    if (noAuthMode) return [];
     const now = Date.now();
     return invites.filter((invite) => {
       if (invite.accepted_at) return false;
       if (!invite.expires_at) return true;
       return new Date(invite.expires_at).getTime() > now;
     });
-  }, [invites]);
+  }, [invites, noAuthMode]);
+
+  if (noAuthMode) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <header>
+          <h1 className="text-3xl font-serif font-medium tracking-tight text-foreground">
+            Members & Invites
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Team management is disabled in self-hosted single-user mode.
+          </p>
+        </header>
+      </div>
+    );
+  }
 
   const handleInvite = async () => {
     if (!inviteEmail) return;

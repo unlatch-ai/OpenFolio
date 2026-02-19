@@ -14,8 +14,9 @@ import { createClient } from "@/lib/supabase/client";
 import { Loader2 } from "lucide-react";
 import ClaimInvitesOnAuth from "@/components/auth/ClaimInvitesOnAuth";
 
-const isSelfHosted =
-  process.env.NEXT_PUBLIC_OPENFOLIO_MODE === "self-hosted";
+import { getClientRuntimeMode } from "@/lib/runtime-mode";
+
+const isSelfHosted = getClientRuntimeMode().deploymentMode === "self-hosted";
 
 const onboardingSchema = z.object({
   organizationName: z.string().min(2, "Organization name must be at least 2 characters"),

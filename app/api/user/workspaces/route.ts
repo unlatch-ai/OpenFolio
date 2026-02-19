@@ -1,11 +1,31 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getRuntimeMode } from "@/lib/runtime-mode";
+import { ensureSelfHostedContext } from "@/lib/selfhost/bootstrap";
 
 /**
  * GET /api/user/workspaces - List workspaces the user belongs to
  */
 export async function GET() {
   try {
+    const mode = getRuntimeMode();
+    if (mode.authMode === "none") {
+      const context = await ensureSelfHostedContext();
+      const admin = createAdminClient();
+      const { data: workspace } = await admin
+        .from("workspaces")
+        .select("id, name, slug, settings, created_at")
+        .eq("id", context.workspaceId)
+        .single();
+
+      return NextResponse.json({
+        workspaces: workspace
+          ? [{ ...workspace, role: "owner" as const }]
+          : [],
+      });
+    }
+
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 

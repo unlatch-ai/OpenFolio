@@ -11,6 +11,8 @@ const personId = "6c789a82-b0e5-4a57-9b2b-9d6849788938";
 describe("Plan citation selection", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    process.env.NEXT_PUBLIC_OPENFOLIO_DEPLOYMENT_MODE = "hosted";
+    process.env.NEXT_PUBLIC_OPENFOLIO_AUTH_MODE = "supabase";
 
     vi.mocked(createClient).mockReturnValue({
       from: (table: string) => ({

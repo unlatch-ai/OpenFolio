@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext, isWorkspaceContextError, requireOwner } from "@/lib/auth";
+import { getRuntimeMode } from "@/lib/runtime-mode";
 import { sendWorkspaceInviteEmail } from "@/lib/email";
 import { hashInviteToken, getInviteExpiry, isInviteExpired } from "@/lib/invites";
 import { z } from "zod";
@@ -16,6 +17,10 @@ const createInviteSchema = z.object({
  */
 export async function GET(request: NextRequest) {
   try {
+    if (getRuntimeMode().authMode === "none") {
+      return NextResponse.json({ error: "Invites are disabled in no-auth mode" }, { status: 403 });
+    }
+
     const ctx = await getWorkspaceContext(request);
     if (isWorkspaceContextError(ctx)) {
       return NextResponse.json({ error: ctx.error }, { status: ctx.status });
@@ -52,6 +57,10 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    if (getRuntimeMode().authMode === "none") {
+      return NextResponse.json({ error: "Invites are disabled in no-auth mode" }, { status: 403 });
+    }
+
     const ctx = await getWorkspaceContext(request);
     if (isWorkspaceContextError(ctx)) {
       return NextResponse.json({ error: ctx.error }, { status: ctx.status });

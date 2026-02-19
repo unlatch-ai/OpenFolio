@@ -1,9 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
+import { ensureSelfHostedContext } from "@/lib/selfhost/bootstrap";
+import { getRuntimeMode } from "@/lib/runtime-mode";
 
 export interface WorkspaceContext {
   user: { id: string; email?: string };
   workspaceId: string;
   workspaceRole: 'owner' | 'member';
+  authMode?: "supabase" | "none";
 }
 
 export interface WorkspaceContextError {
@@ -24,6 +27,17 @@ export function isWorkspaceContextError(result: WorkspaceContextResult): result 
  * @returns WorkspaceContext on success, WorkspaceContextError on failure
  */
 export async function getWorkspaceContext(request: Request): Promise<WorkspaceContextResult> {
+  const mode = getRuntimeMode();
+  if (mode.authMode === "none") {
+    const bootstrap = await ensureSelfHostedContext();
+    return {
+      user: { id: bootstrap.userId, email: bootstrap.userEmail },
+      workspaceId: bootstrap.workspaceId,
+      workspaceRole: "owner",
+      authMode: "none",
+    };
+  }
+
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -50,6 +64,7 @@ export async function getWorkspaceContext(request: Request): Promise<WorkspaceCo
       user: { id: user.id, email: user.email },
       workspaceId,
       workspaceRole: membership.role as 'owner' | 'member',
+      authMode: "supabase",
     };
   }
 
@@ -70,6 +85,7 @@ export async function getWorkspaceContext(request: Request): Promise<WorkspaceCo
     user: { id: user.id, email: user.email },
     workspaceId: firstMembership.workspace_id,
     workspaceRole: firstMembership.role as 'owner' | 'member',
+    authMode: "supabase",
   };
 }
 
