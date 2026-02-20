@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getRuntimeMode } from "@/lib/runtime-mode";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DashboardStats } from "./dashboard-stats";
 import { RecentInteractions } from "./recent-interactions";
@@ -14,17 +15,22 @@ import {
 } from "lucide-react";
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
+  const mode = getRuntimeMode();
+  let userName = process.env.OPENFOLIO_SELFHOST_DEFAULT_NAME || "there";
 
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
+  if (mode.authMode !== "none") {
+    const supabase = await createClient();
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
 
-  if (!authUser) {
-    redirect("/login");
+    if (!authUser) {
+      redirect("/login");
+    }
+
+    userName = authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || "there";
   }
 
-  const userName = authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || "there";
   const firstName = String(userName).split(" ")[0];
 
   return (
