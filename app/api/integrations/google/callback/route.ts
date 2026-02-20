@@ -81,7 +81,6 @@ export async function GET(request: NextRequest) {
         .upsert(
           {
             workspace_id: state.workspaceId,
-            user_id: state.userId,
             provider,
             access_token_encrypted: encrypt(tokens.accessToken),
             refresh_token_encrypted: tokens.refreshToken
