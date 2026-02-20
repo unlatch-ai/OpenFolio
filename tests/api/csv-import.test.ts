@@ -28,6 +28,15 @@ vi.mock('@/lib/openai', () => ({
   generateEmbeddings: (...args: unknown[]) => mockGenerateEmbeddings(...args),
 }))
 
+// Mock Trigger.dev tasks
+const mockTasksTrigger = vi.fn().mockResolvedValue({ id: 'run-1' })
+vi.mock('@trigger.dev/sdk', () => ({
+  tasks: {
+    trigger: (...args: unknown[]) => mockTasksTrigger(...args),
+  },
+  schemaTask: vi.fn((config: unknown) => config),
+}))
+
 // Mock Supabase with more control - supports chaining
 const createMockChain = (returnValue: Record<string, unknown> = { data: null, error: null }) => {
   const chain: Record<string, unknown> = {
@@ -93,6 +102,7 @@ function createMockJsonRequest(body: unknown): NextRequest {
 describe('CSV Import API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockTasksTrigger.mockResolvedValue({ id: 'run-1' })
 
     // Default successful auth context
     mockGetWorkspaceContext.mockResolvedValue({
@@ -371,105 +381,19 @@ describe('CSV Import API', () => {
       expect(data.error).toContain('not found')
     })
 
-    it('creates new people for emails that do not exist', async () => {
-      // Track upsert calls
-      const upsertCallArgs: unknown[] = []
-
-      // Create chain that returns import record first, then empty existing people, then handles insert
+    it('queues import job and returns 202', async () => {
       const importRecord = {
         id: 'test-upload-123',
         workspace_id: 'test-workspace-123',
-        result: {
-          raw_csv: 'email,first_name\nnew@example.com,John',
-        },
+        status: 'pending',
+        result: { raw_csv: 'email,first_name\nnew@example.com,John' },
       }
-      
-      // First call returns import record, second call (for existing people) returns empty
-      let callCount = 0
+
       currentMockChain = {
+        ...createMockChain(),
         select: vi.fn().mockReturnThis(),
-        upsert: vi.fn().mockImplementation((data) => {
-          upsertCallArgs.push(data)
-          return {
-            select: vi.fn().mockResolvedValue({
-              data: Array.isArray(data) ? data.map((_, idx) => ({ id: `id-${idx}` })) : [],
-              error: null,
-            }),
-          }
-        }),
-        update: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
-        in: vi.fn().mockImplementation(() => {
-          callCount++
-          // Second call is for checking existing people
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            in: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ 
-              data: callCount === 1 ? importRecord : [], 
-              error: null 
-            }),
-          }
-        }),
-        single: vi.fn().mockResolvedValue({ data: importRecord, error: null }),
-      }
-      
-      const request = createMockJsonRequest({
-        upload_id: 'test-upload-123',
-        mappings: [
-          { csv_column: 'email', maps_to: 'email', is_system_field: true },
-          { csv_column: 'first_name', maps_to: 'first_name', is_system_field: true },
-        ],
-      })
-      
-      const { POST } = await import('@/app/api/import/csv/process/route')
-      const response = await POST(request)
-      
-      expect(response.status).toBe(200)
-      const data = await response.json()
-      expect(data.people_created).toBeGreaterThan(0)
-    })
-
-    it('deduplicates duplicate emails within the CSV', async () => {
-      const upsertCallArgs: unknown[] = []
-
-      const importRecord = {
-        id: 'test-upload-123',
-        workspace_id: 'test-workspace-123',
-        result: {
-          raw_csv: 'email,first_name,role\nsame@example.com,Jane,CEO\nsame@example.com,,CTO',
-        },
-      }
-
-      mockGenerateEmbeddings.mockResolvedValue([new Array(1536).fill(0.1)])
-
-      let callCount = 0
-      currentMockChain = {
-        select: vi.fn().mockReturnThis(),
-        upsert: vi.fn().mockImplementation((data) => {
-          upsertCallArgs.push(data)
-          return {
-            select: vi.fn().mockResolvedValue({
-              data: Array.isArray(data) ? data.map((_, idx) => ({ id: `id-${idx}` })) : [],
-              error: null,
-            }),
-          }
-        }),
         update: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        in: vi.fn().mockImplementation(() => {
-          callCount++
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            in: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({
-              data: callCount === 1 ? importRecord : [],
-              error: null,
-            }),
-          }
-        }),
         single: vi.fn().mockResolvedValue({ data: importRecord, error: null }),
       }
 
@@ -478,256 +402,121 @@ describe('CSV Import API', () => {
         mappings: [
           { csv_column: 'email', maps_to: 'email', is_system_field: true },
           { csv_column: 'first_name', maps_to: 'first_name', is_system_field: true },
-          { csv_column: 'role', maps_to: 'role', is_system_field: false },
         ],
       })
 
       const { POST } = await import('@/app/api/import/csv/process/route')
       const response = await POST(request)
 
-      expect(response.status).toBe(200)
+      expect(response.status).toBe(202)
       const data = await response.json()
-      expect(data.people_created).toBe(1)
-
-      const firstBatch = upsertCallArgs[0] as Record<string, unknown>[]
-      expect(firstBatch.length).toBe(1)
-      expect(firstBatch[0].first_name).toBe('Jane')
-      expect((firstBatch[0].custom_data as Record<string, unknown>).role).toBe('CTO')
+      expect(data.success).toBe(true)
+      expect(data.uploadId).toBe('test-upload-123')
+      expect(mockTasksTrigger).toHaveBeenCalledWith(
+        'process-csv-import',
+        expect.objectContaining({
+          uploadId: 'test-upload-123',
+          workspaceId: 'test-workspace-123',
+        })
+      )
     })
 
-    it('handles comma-separated values as arrays in custom data', async () => {
-      const upsertCallArgs: unknown[] = []
-      
+    it('passes mappings correctly to the queued task', async () => {
       const importRecord = {
         id: 'test-upload-123',
         workspace_id: 'test-workspace-123',
-        result: {
-          raw_csv: 'email,expertise\ntest@example.com,"AI/ML, Healthcare, Finance"',
-        },
+        status: 'pending',
+        result: { raw_csv: 'email,first_name,role\nsame@example.com,Jane,CEO\nsame@example.com,,CTO' },
       }
-      
-      let callCount = 0
+
       currentMockChain = {
+        ...createMockChain(),
         select: vi.fn().mockReturnThis(),
-        upsert: vi.fn().mockImplementation((data) => {
-          upsertCallArgs.push(data)
-          return {
-            select: vi.fn().mockResolvedValue({
-              data: Array.isArray(data) ? data.map((_, idx) => ({ id: `id-${idx}` })) : [],
-              error: null,
-            }),
-          }
-        }),
-        update: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
-        in: vi.fn().mockImplementation(() => {
-          callCount++
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            in: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ 
-              data: callCount === 1 ? importRecord : [], 
-              error: null 
-            }),
-          }
-        }),
+        update: vi.fn().mockReturnThis(),
         single: vi.fn().mockResolvedValue({ data: importRecord, error: null }),
       }
-      
+
+      const mappings = [
+        { csv_column: 'email', maps_to: 'email', is_system_field: true },
+        { csv_column: 'first_name', maps_to: 'first_name', is_system_field: true },
+        { csv_column: 'role', maps_to: 'role', is_system_field: false },
+      ]
       const request = createMockJsonRequest({
         upload_id: 'test-upload-123',
-        mappings: [
-          { csv_column: 'email', maps_to: 'email', is_system_field: true },
-          { csv_column: 'expertise', maps_to: 'expertise', is_system_field: false },
-        ],
+        mappings,
       })
-      
+
       const { POST } = await import('@/app/api/import/csv/process/route')
-      await POST(request)
-      
-      // Check that upsert was called with array data
-      expect(upsertCallArgs.length).toBeGreaterThan(0)
+      const response = await POST(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(202)
+      expect(data.success).toBe(true)
+      expect(mockTasksTrigger).toHaveBeenCalledWith(
+        'process-csv-import',
+        expect.objectContaining({ mappings })
+      )
     })
 
-    it('validates email format before processing', async () => {
+    it('queues import with correct workspace and upload IDs', async () => {
       const importRecord = {
         id: 'test-upload-123',
         workspace_id: 'test-workspace-123',
-        result: {
-          raw_csv: 'email\ninvalid-email\nanother@bad',
-        },
+        status: 'pending',
+        result: { raw_csv: 'email\ntest@example.com' },
       }
-      
-      let callCount = 0
+
       currentMockChain = {
+        ...createMockChain(),
         select: vi.fn().mockReturnThis(),
-        upsert: vi.fn().mockImplementation((data) => {
-          return {
-            select: vi.fn().mockResolvedValue({
-              data: Array.isArray(data) ? data.map((_, idx) => ({ id: `id-${idx}` })) : [],
-              error: null,
-            }),
-          }
-        }),
-        update: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
-        in: vi.fn().mockImplementation(() => {
-          callCount++
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            in: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ 
-              data: callCount === 1 ? importRecord : [], 
-              error: null 
-            }),
-          }
-        }),
+        update: vi.fn().mockReturnThis(),
         single: vi.fn().mockResolvedValue({ data: importRecord, error: null }),
       }
-      
+
       const request = createMockJsonRequest({
         upload_id: 'test-upload-123',
         mappings: [{ csv_column: 'email', maps_to: 'email', is_system_field: true }],
       })
-      
+
       const { POST } = await import('@/app/api/import/csv/process/route')
       const response = await POST(request)
-      
-      // Should return 200 but with errors in result
-      expect(response.status).toBe(200)
-      const data = await response.json()
-      expect(data.errors.length).toBeGreaterThan(0)
-    })
-  })
 
-  describe('Batch Operations', () => {
-    it('generates embeddings in batches of 100', async () => {
-      // Create CSV with 250 rows
-      const rows = ['email,name']
-      for (let i = 0; i < 250; i++) {
-        rows.push(`user${i}@example.com,User${i}`)
-      }
-      
+      expect(response.status).toBe(202)
+      expect(mockTasksTrigger).toHaveBeenCalledWith('process-csv-import', {
+        uploadId: 'test-upload-123',
+        workspaceId: 'test-workspace-123',
+        mappings: [{ csv_column: 'email', maps_to: 'email', is_system_field: true }],
+      })
+    })
+
+    it('returns 400 if CSV data is missing from import record', async () => {
       const importRecord = {
         id: 'test-upload-123',
         workspace_id: 'test-workspace-123',
-        result: { raw_csv: rows.join('\n') },
+        status: 'pending',
+        result: {},
       }
-      
-      let callCount = 0
-      currentMockChain = {
-        select: vi.fn().mockReturnThis(),
-        upsert: vi.fn().mockImplementation((data) => {
-          return {
-            select: vi.fn().mockResolvedValue({
-              data: Array.isArray(data) ? data.map((_, idx) => ({ id: `id-${idx}` })) : [],
-              error: null,
-            }),
-          }
-        }),
-        update: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        in: vi.fn().mockImplementation(() => {
-          callCount++
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            in: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ 
-              data: callCount === 1 ? importRecord : [], 
-              error: null 
-            }),
-          }
-        }),
-        single: vi.fn().mockResolvedValue({ data: importRecord, error: null }),
-      }
-      
-      // Setup embedding mock to track batch sizes
-      const batchSizes: number[] = []
-      mockGenerateEmbeddings.mockImplementation((texts: string[]) => {
-        batchSizes.push(texts.length)
-        return Promise.resolve(texts.map(() => new Array(1536).fill(0.1)))
-      })
-      
-      const request = createMockJsonRequest({
-        upload_id: 'test-upload-123',
-        mappings: [
-          { csv_column: 'email', maps_to: 'email', is_system_field: true },
-          { csv_column: 'name', maps_to: 'first_name', is_system_field: true },
-        ],
-      })
-      
-      const { POST } = await import('@/app/api/import/csv/process/route')
-      await POST(request)
-      
-      // Should have batched the 250 people into 3 batches (100, 100, 50)
-      expect(batchSizes.length).toBeGreaterThan(0)
-      expect(batchSizes[0]).toBeLessThanOrEqual(100)
-    })
 
-    it('inserts people in batches of 50', async () => {
-      // Create CSV with 120 rows
-      const rows = ['email,name']
-      for (let i = 0; i < 120; i++) {
-        rows.push(`user${i}@example.com,User${i}`)
-      }
-      
-      const importRecord = {
-        id: 'test-upload-123',
-        workspace_id: 'test-workspace-123',
-        result: { raw_csv: rows.join('\n') },
-      }
-      
-      const upsertCalls: unknown[][] = []
-      let callCount = 0
-      
       currentMockChain = {
+        ...createMockChain(),
         select: vi.fn().mockReturnThis(),
-        upsert: vi.fn().mockImplementation((data: unknown) => {
-          if (Array.isArray(data)) {
-            upsertCalls.push(data)
-          }
-          return {
-            select: vi.fn().mockResolvedValue({
-              data: Array.isArray(data) ? data.map((_, idx) => ({ id: `id-${idx}` })) : [],
-              error: null,
-            }),
-          }
-        }),
-        update: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
-        in: vi.fn().mockImplementation(() => {
-          callCount++
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            in: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ 
-              data: callCount === 1 ? importRecord : [], 
-              error: null 
-            }),
-          }
-        }),
+        update: vi.fn().mockReturnThis(),
         single: vi.fn().mockResolvedValue({ data: importRecord, error: null }),
       }
-      
+
       const request = createMockJsonRequest({
         upload_id: 'test-upload-123',
-        mappings: [
-          { csv_column: 'email', maps_to: 'email', is_system_field: true },
-          { csv_column: 'name', maps_to: 'first_name', is_system_field: true },
-        ],
+        mappings: [{ csv_column: 'email', maps_to: 'email', is_system_field: true }],
       })
-      
+
       const { POST } = await import('@/app/api/import/csv/process/route')
-      await POST(request)
-      
-      // Should have at least 3 insert calls (50, 50, 20)
-      // First two should be full batches of 50
-      expect(upsertCalls.length).toBeGreaterThanOrEqual(2)
-      expect((upsertCalls[0] as unknown[]).length).toBeLessThanOrEqual(50)
+      const response = await POST(request)
+
+      expect(response.status).toBe(400)
+      expect(mockTasksTrigger).not.toHaveBeenCalled()
     })
   })
 })

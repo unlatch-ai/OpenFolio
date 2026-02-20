@@ -206,7 +206,7 @@ vi.mock("@/src/trigger/sync-integration", () => ({
 function signedState() {
   const payload = JSON.stringify({ workspaceId: "ws-1", userId: "user-1", ts: Date.now() });
   const sig = crypto
-    .createHmac("sha256", process.env.SUPABASE_SERVICE_ROLE_KEY as string)
+    .createHmac("sha256", process.env.OAUTH_STATE_SECRET as string)
     .update(payload)
     .digest("hex");
   return `${Buffer.from(payload).toString("base64url")}.${sig}`;
@@ -220,6 +220,7 @@ describe("Provider OAuth -> schedule lifecycle flow", () => {
 
     process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-secret";
+    process.env.OAUTH_STATE_SECRET = "test-secret";
 
     googleHandleCallbackMock.mockResolvedValue({
       accessToken: "google-access",

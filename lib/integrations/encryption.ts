@@ -27,7 +27,7 @@ export function encrypt(text: string): string {
 export function decrypt(data: string): string {
   const key = getKey();
   const parts = data.split(":");
-  if (parts.length !== 3 || parts.some((p) => !p)) {
+  if (parts.length !== 3 || !parts[0] || !parts[1]) {
     throw new Error("Invalid encrypted data format");
   }
   const [ivHex, tagHex, encryptedHex] = parts;

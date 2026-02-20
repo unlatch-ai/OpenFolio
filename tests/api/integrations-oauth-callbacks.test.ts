@@ -52,6 +52,7 @@ describe("Integration OAuth callbacks", () => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-secret";
+    process.env.OAUTH_STATE_SECRET = "test-secret";
 
     mockHandleCallback.mockResolvedValue({
       accessToken: "access-token",
@@ -79,7 +80,7 @@ describe("Integration OAuth callbacks", () => {
         userId: "user-1",
         ts: Date.now(),
       },
-      process.env.SUPABASE_SERVICE_ROLE_KEY as string
+      process.env.OAUTH_STATE_SECRET as string
     );
 
     const { GET } = await import("@/app/api/integrations/google/callback/route");
@@ -119,7 +120,7 @@ describe("Integration OAuth callbacks", () => {
         userId: "user-1",
         ts: Date.now(),
       },
-      process.env.SUPABASE_SERVICE_ROLE_KEY as string
+      process.env.OAUTH_STATE_SECRET as string
     );
 
     vi.spyOn(global, "fetch").mockResolvedValue(
