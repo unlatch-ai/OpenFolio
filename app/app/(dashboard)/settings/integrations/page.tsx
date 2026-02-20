@@ -78,6 +78,10 @@ export default function IntegrationsPage() {
     }
   }
 
+  function canDirectlyConnect(connectorId: string): boolean {
+    return connectorId === "gmail" || connectorId === "microsoft-mail";
+  }
+
   async function handleDisconnect(integrationId: string) {
     if (!confirm("Are you sure you want to disconnect this integration?")) return;
     try {
@@ -224,7 +228,7 @@ export default function IntegrationsPage() {
                   ? savingAutoSyncIds.has(integration.integrationId)
                   : false
               }
-              onConnect={() => handleConnect(integration.id)}
+              onConnect={canDirectlyConnect(integration.id) ? () => handleConnect(integration.id) : undefined}
               onDisconnect={
                 integration.integrationId
                   ? () => handleDisconnect(integration.integrationId!)

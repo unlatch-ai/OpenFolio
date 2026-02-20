@@ -65,13 +65,14 @@ async function fetchMicrosoftProfile(accessToken: string) {
 }
 
 export async function GET(request: NextRequest) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
   const code = request.nextUrl.searchParams.get("code");
   const stateParam = request.nextUrl.searchParams.get("state");
   const error = request.nextUrl.searchParams.get("error");
 
   if (error) {
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/app/settings/integrations?error=${encodeURIComponent(
+      `${appUrl}/app/settings/integrations?error=${encodeURIComponent(
         `microsoft_${error}`
       )}`
     );
@@ -79,21 +80,21 @@ export async function GET(request: NextRequest) {
 
   if (!code || !stateParam) {
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/app/settings/integrations?error=missing_params`
+      `${appUrl}/app/settings/integrations?error=missing_params`
     );
   }
 
   const state = verifyState(stateParam);
   if (!state) {
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/app/settings/integrations?error=invalid_state`
+      `${appUrl}/app/settings/integrations?error=invalid_state`
     );
   }
 
   const connector = getConnector("microsoft-mail");
   if (!connector?.handleCallback) {
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/app/settings/integrations?error=connector_unavailable`
+      `${appUrl}/app/settings/integrations?error=connector_unavailable`
     );
   }
 
@@ -130,12 +131,12 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/app/settings/integrations?success=microsoft`
+      `${appUrl}/app/settings/integrations?success=microsoft`
     );
   } catch (err) {
     console.error("Microsoft OAuth callback error:", err);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/app/settings/integrations?error=token_exchange_failed`
+      `${appUrl}/app/settings/integrations?error=token_exchange_failed`
     );
   }
 }

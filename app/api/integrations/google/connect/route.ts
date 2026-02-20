@@ -25,7 +25,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/google/callback`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+  const redirectUri = `${appUrl}/api/integrations/google/callback`;
   const payload = JSON.stringify({
     workspaceId: ctx.workspaceId,
     userId: ctx.user.id,
