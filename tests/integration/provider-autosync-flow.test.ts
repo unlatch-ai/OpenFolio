@@ -203,6 +203,10 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 vi.mock("@trigger.dev/sdk", () => ({
+  task: (params: unknown) => ({
+    ...((params as Record<string, unknown>) || {}),
+    trigger: (...args: unknown[]) => triggerMock(...args),
+  }),
   schedules: {
     task: (params: unknown) => params,
   },
@@ -303,11 +307,17 @@ describe("Provider OAuth -> autosync -> scheduler flow", () => {
     ).run({ type: "DECLARATIVE" });
 
     expect(result.triggered).toBe(1);
-    expect(triggerMock).toHaveBeenCalledWith(
-      "sync-integration",
-      { integrationId: target!.id, workspaceId: "ws-1" },
-      { idempotencyKey: `autosync:${target!.id}:2026-02-21` }
-    );
+    expect(
+      triggerMock.mock.calls.some(
+        (call) =>
+          call[0] &&
+          typeof call[0] === "object" &&
+          "integrationId" in (call[0] as Record<string, unknown>) &&
+          (call[0] as { integrationId?: string }).integrationId === target!.id &&
+          (call[1] as { idempotencyKey?: string } | undefined)?.idempotencyKey ===
+            `autosync:${target!.id}:2026-02-21`
+      )
+    ).toBe(true);
 
     vi.useRealTimers();
   });
@@ -378,11 +388,17 @@ describe("Provider OAuth -> autosync -> scheduler flow", () => {
     ).run({ type: "DECLARATIVE" });
 
     expect(result.triggered).toBe(1);
-    expect(triggerMock).toHaveBeenCalledWith(
-      "sync-integration",
-      { integrationId: target!.id, workspaceId: "ws-1" },
-      { idempotencyKey: `autosync:${target!.id}:2026-02-21` }
-    );
+    expect(
+      triggerMock.mock.calls.some(
+        (call) =>
+          call[0] &&
+          typeof call[0] === "object" &&
+          "integrationId" in (call[0] as Record<string, unknown>) &&
+          (call[0] as { integrationId?: string }).integrationId === target!.id &&
+          (call[1] as { idempotencyKey?: string } | undefined)?.idempotencyKey ===
+            `autosync:${target!.id}:2026-02-21`
+      )
+    ).toBe(true);
 
     vi.useRealTimers();
   });

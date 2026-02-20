@@ -4,6 +4,10 @@ const mockTrigger = vi.fn();
 const mockFrom = vi.fn();
 
 vi.mock("@trigger.dev/sdk", () => ({
+  task: (params: unknown) => ({
+    ...((params as Record<string, unknown>) || {}),
+    trigger: (...args: unknown[]) => mockTrigger(...args),
+  }),
   schedules: {
     task: (params: unknown) => params,
   },
@@ -77,7 +81,6 @@ describe("scheduleIntegrationSyncs", () => {
     expect(result.triggered).toBe(1);
     expect(mockTrigger).toHaveBeenCalledTimes(1);
     expect(mockTrigger).toHaveBeenCalledWith(
-      "sync-integration",
       { integrationId: "int-match", workspaceId: "ws-1" },
       { idempotencyKey: "autosync:int-match:2026-02-20" }
     );
