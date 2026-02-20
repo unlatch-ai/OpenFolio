@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getConnector } from "@/lib/integrations/registry";
 import { encrypt } from "@/lib/integrations/encryption";
-import { tasks } from "@trigger.dev/sdk";
-import type { syncIntegration } from "@/src/trigger/sync-integration";
+import { syncIntegration } from "@/src/trigger/sync-integration";
 
 const STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -67,15 +66,17 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const redirectUri = `${appUrl}/api/integrations/google/callback`;
+
   try {
-    const tokens = await connector.handleCallback(code);
+    const tokens = await connector.handleCallback(code, redirectUri);
     const supabase = createAdminClient();
 
     // Store integration for each Google service (gmail, calendar, contacts)
     const providers = ["gmail", "google-calendar", "google-contacts"];
     const integrationIds: string[] = [];
     for (const provider of providers) {
-      const { data: integration } = await supabase
+      const { data: integration, error: upsertError } = await supabase
         .from("integrations")
         .upsert(
           {
@@ -94,9 +95,19 @@ export async function GET(request: NextRequest) {
         .select("id")
         .single();
 
+      if (upsertError) {
+        throw new Error(
+          `Failed to save ${provider} integration: ${upsertError.message}`
+        );
+      }
+
       if (integration?.id) {
         integrationIds.push(integration.id);
       }
+    }
+
+    if (integrationIds.length === 0) {
+      throw new Error("No integrations were created for Google provider");
     }
 
     for (const integrationId of integrationIds) {
@@ -106,8 +117,7 @@ export async function GET(request: NextRequest) {
           .update({ status: "syncing", last_sync_error: null })
           .eq("id", integrationId);
 
-        await tasks.trigger<typeof syncIntegration>(
-          "sync-integration",
+        await syncIntegration.trigger(
           {
             integrationId,
             workspaceId: state.workspaceId,

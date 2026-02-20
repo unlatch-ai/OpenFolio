@@ -50,7 +50,8 @@ export interface IntegrationConnector {
 
   getAuthUrl?(redirectUri: string, state: string): string;
   handleCallback?(
-    code: string
+    code: string,
+    redirectUri: string
   ): Promise<{
     accessToken: string;
     refreshToken?: string;

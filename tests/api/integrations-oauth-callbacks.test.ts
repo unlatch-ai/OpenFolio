@@ -32,7 +32,11 @@ vi.mock("@/lib/integrations/encryption", () => ({
 }));
 
 vi.mock("@trigger.dev/sdk", () => ({
-  tasks: {
+  task: vi.fn((config: unknown) => config),
+}));
+
+vi.mock("@/src/trigger/sync-integration", () => ({
+  syncIntegration: {
     trigger: (...args: unknown[]) => mockTrigger(...args),
   },
 }));
@@ -96,10 +100,15 @@ describe("Integration OAuth callbacks", () => {
     }
 
     expect(mockTrigger).toHaveBeenCalledTimes(3);
-    expect(mockTrigger.mock.calls.map((call) => call[0])).toEqual([
-      "sync-integration",
-      "sync-integration",
-      "sync-integration",
+    expect(mockTrigger.mock.calls.map(([payload]) => payload.workspaceId)).toEqual([
+      "ws-1",
+      "ws-1",
+      "ws-1",
+    ]);
+    expect(mockTrigger.mock.calls.map(([payload]) => payload.integrationId)).toEqual([
+      "int-1",
+      "int-2",
+      "int-3",
     ]);
   });
 
@@ -149,10 +158,15 @@ describe("Integration OAuth callbacks", () => {
     }
 
     expect(mockTrigger).toHaveBeenCalledTimes(3);
-    expect(mockTrigger.mock.calls.map((call) => call[0])).toEqual([
-      "sync-integration",
-      "sync-integration",
-      "sync-integration",
+    expect(mockTrigger.mock.calls.map(([payload]) => payload.workspaceId)).toEqual([
+      "ws-1",
+      "ws-1",
+      "ws-1",
+    ]);
+    expect(mockTrigger.mock.calls.map(([payload]) => payload.integrationId)).toEqual([
+      "int-1",
+      "int-2",
+      "int-3",
     ]);
   });
 });

@@ -531,7 +531,7 @@ describe("Microsoft Connectors", () => {
       )
     );
 
-    const result = await microsoftMailConnector.handleCallback!("auth-code");
+    const result = await microsoftMailConnector.handleCallback!("auth-code", "https://example.com/api/integrations/microsoft/callback");
     expect(result.accessToken).toBe("access-token");
     expect(result.refreshToken).toBe("refresh-token");
     expect(result.expiresAt).toBeInstanceOf(Date);

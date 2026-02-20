@@ -79,11 +79,8 @@ export const microsoftMailConnector: IntegrationConnector = {
     return getMicrosoftAuthUrl(redirectUri, state);
   },
 
-  async handleCallback(code: string) {
-    return exchangeMicrosoftCode(
-      code,
-      `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/microsoft/callback`
-    );
+  async handleCallback(code: string, redirectUri: string) {
+    return exchangeMicrosoftCode(code, redirectUri);
   },
 
   async sync(config) {
