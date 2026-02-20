@@ -10,7 +10,7 @@ import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { MobileNav } from "./mobile-nav";
 import { navItems } from "./nav-items";
 import ClaimInvitesOnAuth from "@/components/auth/ClaimInvitesOnAuth";
-import { getRuntimeMode } from "@/lib/runtime-mode";
+import { getRuntimeMode, isHostedInviteOnlySignup } from "@/lib/runtime-mode";
 import { ensureSelfHostedContext } from "@/lib/selfhost/bootstrap";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensurePersonalWorkspace, ensureProfile } from "@/lib/workspaces/provision";
@@ -51,6 +51,9 @@ export default async function DashboardLayout({
       .single();
 
     if (!membership) {
+      if (isHostedInviteOnlySignup()) {
+        redirect("/login?error=invite_required");
+      }
       const admin = createAdminClient();
       await ensureProfile(admin, {
         userId: user.id,

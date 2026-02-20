@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { hashInviteToken } from "@/lib/invites";
-import { getRuntimeMode } from "@/lib/runtime-mode";
+import { getRuntimeMode, isHostedInviteOnlySignup } from "@/lib/runtime-mode";
 import { ensurePersonalWorkspace, ensureProfile, createWorkspaceForOwner } from "@/lib/workspaces/provision";
 
 const signupSchema = z.object({
@@ -22,7 +22,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
     const body = await request.json();
     const parsed = signupSchema.safeParse(body);
 
@@ -34,6 +33,13 @@ export async function POST(request: NextRequest) {
     }
 
     const { fullName, email, password, organizationName, inviteToken } = parsed.data;
+
+    if (isHostedInviteOnlySignup() && !inviteToken) {
+      return NextResponse.json(
+        { error: "Signup requires a valid invite token" },
+        { status: 403 }
+      );
+    }
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

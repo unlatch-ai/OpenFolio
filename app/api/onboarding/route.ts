@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getRuntimeMode } from "@/lib/runtime-mode";
+import { getRuntimeMode, isHostedInviteOnlySignup } from "@/lib/runtime-mode";
 import { ensureProfile } from "@/lib/workspaces/provision";
 import { z } from "zod";
 
@@ -16,6 +16,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Onboarding is disabled in no-auth mode" },
         { status: 400 }
+      );
+    }
+    if (isHostedInviteOnlySignup()) {
+      return NextResponse.json(
+        { error: "Onboarding is disabled when hosted signup is invite-only" },
+        { status: 403 }
       );
     }
 

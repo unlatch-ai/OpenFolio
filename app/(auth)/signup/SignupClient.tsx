@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/lib/supabase/client";
 import GoogleOAuthButton from "@/components/auth/GoogleOAuthButton";
+import { getClientRuntimeMode } from "@/lib/runtime-mode";
 
 const signupSchema = z.object({
   fullName: z.string().min(2, "Full name must be at least 2 characters"),
@@ -31,6 +32,10 @@ type InviteInfo = {
 };
 
 const hasGoogleOAuth = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
+const clientMode = getClientRuntimeMode();
+const isHostedInviteOnly =
+  clientMode.deploymentMode === "hosted" &&
+  clientMode.hostedSignupMode === "invite-only";
 
 export default function SignupClient() {
   const router = useRouter();
@@ -140,6 +145,27 @@ export default function SignupClient() {
           onClick={() => router.push("/login")}
         >
           Log in
+        </Button>
+      </div>
+    );
+  }
+
+  if (isHostedInviteOnly && !inviteToken) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-serif font-medium tracking-tight text-foreground">
+            Invite required
+          </h1>
+          <p className="text-muted-foreground">
+            Hosted signup is currently invite-only. Use your invite link to create an account.
+          </p>
+        </div>
+        <Button
+          className="w-full h-11 font-medium"
+          onClick={() => router.push("/login")}
+        >
+          Go to login
         </Button>
       </div>
     );
