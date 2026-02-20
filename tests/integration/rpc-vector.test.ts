@@ -28,7 +28,7 @@ async function isSupabaseReachable(url: string, key: string) {
 }
 
 describe("Supabase RPC vector search", () => {
-  it("executes debug_vector_operator and match_events_text without errors", async () => {
+  it("executes current vector match RPCs without errors", async () => {
     loadEnv();
 
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -47,24 +47,26 @@ describe("Supabase RPC vector search", () => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const { data: vecCtx, error: vecErr } = await supabase.rpc(
-      "debug_vector_operator"
-    );
-
-    expect(vecErr).toBeNull();
-    expect(vecCtx).toBeTruthy();
-    if (vecCtx && typeof vecCtx === "object") {
-      expect((vecCtx as { operator_works?: boolean }).operator_works).toBe(true);
-    }
-
     const zeroVector = buildZeroVector(1536);
-    const { error: eventsErr } = await supabase.rpc("match_events_text", {
+    const { error: peopleErr } = await supabase.rpc("match_people_text", {
       query_embedding: zeroVector,
       match_threshold: 0.0,
       match_count: 1,
       p_workspace_id: "00000000-0000-0000-0000-000000000000",
     });
 
-    expect(eventsErr).toBeNull();
+    expect(peopleErr).toBeNull();
+
+    const { error: interactionsErr } = await supabase.rpc(
+      "match_interactions_text",
+      {
+        query_embedding: zeroVector,
+        match_threshold: 0.0,
+        match_count: 1,
+        p_workspace_id: "00000000-0000-0000-0000-000000000000",
+      }
+    );
+
+    expect(interactionsErr).toBeNull();
   });
 });
