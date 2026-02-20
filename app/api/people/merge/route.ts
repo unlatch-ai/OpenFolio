@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
   if (candidate_id) {
     const supabase = createAdminClient();
     await supabase
-      .from("duplicate_candidates")
-      .update({ status: "merged" })
+      .from("duplicate_candidates" as never)
+      .update({ status: "merged" } as never)
       .eq("id", candidate_id)
       .eq("workspace_id", ctx.workspaceId);
   }

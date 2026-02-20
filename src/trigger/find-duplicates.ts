@@ -44,12 +44,12 @@ export const findDuplicates = task({
 
       // Clear existing pending candidates for this workspace
       await supabase
-        .from("duplicate_candidates")
+        .from("duplicate_candidates" as never)
         .delete()
         .eq("workspace_id", payload.workspaceId)
         .eq("status", "pending");
 
-      await supabase.from("duplicate_candidates").insert(rows);
+      await supabase.from("duplicate_candidates" as never).insert(rows as never);
     }
 
     return {

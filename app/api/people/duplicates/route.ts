@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient();
 
   const { data: candidates, error } = await supabase
-    .from("duplicate_candidates")
+    .from("duplicate_candidates" as never)
     .select(
       `
       id,
