@@ -1,5 +1,6 @@
-import type { MDXComponents } from "mdx/types";
 import { useMDXComponents as getThemeMDXComponents } from "nextra-theme-docs";
+
+type MDXComponents = Record<string, unknown>;
 
 const themeComponents = getThemeMDXComponents();
 

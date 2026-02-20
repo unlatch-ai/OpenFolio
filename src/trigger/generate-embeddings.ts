@@ -6,6 +6,14 @@ import {
   generateInteractionEmbedding,
   generateNoteEmbedding,
 } from "@/lib/embeddings";
+import type { Json } from "@/lib/supabase/database.types";
+
+function toObject(value: Json | null): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
 
 export const generateEmbeddings = task({
   id: "generate-embeddings",
@@ -35,10 +43,20 @@ export const generateEmbeddings = task({
           .limit(5);
 
         const embedding = await generatePersonEmbedding(
-          person,
-          person.person_companies?.map((pc: { companies: unknown }) => pc.companies) || [],
-          person.person_tags?.map((pt: { tags: unknown }) => pt.tags) || [],
-          recentInteractions?.map((ip: { interactions: unknown }) => ip.interactions) || []
+          {
+            ...person,
+            custom_data: toObject(person.custom_data),
+          },
+          person.person_companies?.map((pc: { companies: unknown }) => pc.companies as {
+            name: string;
+            role?: string | null;
+          }) || [],
+          person.person_tags?.map((pt: { tags: unknown }) => pt.tags as { name: string }) || [],
+          recentInteractions?.map((ip: { interactions: unknown }) => ip.interactions as {
+            subject?: string | null;
+            interaction_type?: string;
+            occurred_at?: string;
+          }) || []
         );
 
         await supabase
@@ -58,8 +76,15 @@ export const generateEmbeddings = task({
         if (!company) return { skipped: true };
 
         const embedding = await generateCompanyEmbedding(
-          company,
-          company.person_companies?.map((pc: { people: unknown }) => pc.people) || []
+          {
+            ...company,
+            metadata: toObject(company.metadata),
+          },
+          company.person_companies?.map((pc: { people: unknown }) => pc.people as {
+            first_name?: string | null;
+            last_name?: string | null;
+            role?: string | null;
+          }) || []
         );
 
         await supabase
@@ -80,7 +105,11 @@ export const generateEmbeddings = task({
 
         const embedding = await generateInteractionEmbedding(
           interaction,
-          interaction.interaction_people?.map((ip: { people: unknown }) => ip.people) || []
+          interaction.interaction_people?.map((ip: { people: unknown }) => ip.people as {
+            first_name?: string | null;
+            last_name?: string | null;
+            role?: string | null;
+          }) || []
         );
 
         await supabase

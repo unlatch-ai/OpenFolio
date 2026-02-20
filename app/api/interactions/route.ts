@@ -5,6 +5,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { decodeCursor, encodeCursor, formatFilterValue } from "@/lib/pagination";
 import { tasks } from "@trigger.dev/sdk";
 import type { generateEmbeddings } from "@/src/trigger/generate-embeddings";
+import type { Json } from "@/lib/supabase/database.types";
 import { z } from "zod";
 
 const DEFAULT_LIMIT = 50;
@@ -192,6 +193,7 @@ export async function POST(request: NextRequest) {
       .from("interactions")
       .insert({
         ...interactionData,
+        metadata: (interactionData.metadata ?? null) as Json,
         workspace_id: ctx.workspaceId,
       })
       .select()

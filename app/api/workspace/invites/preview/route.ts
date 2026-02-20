@@ -43,11 +43,13 @@ export async function GET(request: NextRequest) {
       .eq("id", invite.workspace_id)
       .single();
 
-    const { data: inviter } = await supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", invite.invited_by)
-      .single();
+    const { data: inviter } = invite.invited_by
+      ? await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", invite.invited_by)
+          .single()
+      : { data: null };
 
     return NextResponse.json({
       workspace: {

@@ -22,9 +22,8 @@ const mockIsWorkspaceContextError = vi.fn(
 );
 
 vi.mock("@/lib/auth", () => ({
-  getWorkspaceContext: (...args: unknown[]) => mockGetWorkspaceContext(...args),
-  isWorkspaceContextError: (result: unknown) =>
-    mockIsWorkspaceContextError(result),
+  getWorkspaceContext: mockGetWorkspaceContext,
+  isWorkspaceContextError: mockIsWorkspaceContextError,
 }));
 
 const mockRateLimit = vi.fn(() => ({
@@ -35,12 +34,12 @@ const mockRateLimit = vi.fn(() => ({
 }));
 
 vi.mock("@/lib/rate-limit", () => ({
-  rateLimit: (...args: unknown[]) => mockRateLimit(...args),
+  rateLimit: mockRateLimit,
 }));
 
 const mockGenerateEmbedding = vi.fn();
 vi.mock("@/lib/openai", () => ({
-  generateEmbedding: (...args: unknown[]) => mockGenerateEmbedding(...args),
+  generateEmbedding: mockGenerateEmbedding,
 }));
 
 // RPC mock results keyed by function name

@@ -77,6 +77,8 @@ export async function POST(request: NextRequest) {
     if (isWorkspaceContextError(ctx)) {
       return NextResponse.json({ error: ctx.error }, { status: ctx.status });
     }
+    const workspaceId = ctx.workspaceId;
+    const userId = ctx.user.id;
 
     const limitResult = rateLimit(request, {
       key: "agent:chat",
@@ -113,9 +115,9 @@ export async function POST(request: NextRequest) {
       const { data: session, error: sessionError } = await supabase
         .from("chats")
         .insert({
-          workspace_id: ctx.workspaceId,
+          workspace_id: workspaceId,
           title,
-          user_id: ctx.user.id,
+          user_id: userId,
         })
         .select("id")
         .single();
@@ -133,7 +135,7 @@ export async function POST(request: NextRequest) {
         .from("chats")
         .select("id")
         .eq("id", sessionId)
-        .eq("workspace_id", ctx.workspaceId)
+        .eq("workspace_id", workspaceId)
         .single();
 
       if (!session) {
@@ -146,8 +148,8 @@ export async function POST(request: NextRequest) {
 
     const { error: messageError } = await supabase.from("chat_messages").insert({
       chat_id: sessionId,
-      user_id: ctx.user.id,
-      workspace_id: ctx.workspaceId,
+      user_id: userId,
+      workspace_id: workspaceId,
       role: "user",
       content: message,
     });
@@ -168,7 +170,7 @@ export async function POST(request: NextRequest) {
 
     const messages: ChatMessage[] = (history || []).map((m) => ({
       role: m.role as "user" | "assistant",
-      content: m.content,
+      content: m.content ?? "",
     }));
 
     messages.push({
@@ -179,7 +181,7 @@ export async function POST(request: NextRequest) {
     const { data: workspaceData } = await supabase
       .from("workspaces")
       .select("settings")
-      .eq("id", ctx.workspaceId)
+      .eq("id", workspaceId)
       .single();
 
     let customInstructions: string | null = null;
@@ -200,7 +202,11 @@ export async function POST(request: NextRequest) {
       : OPENFOLIO_SYSTEM_PROMPT;
 
     // Create tool context
-    const toolContext: ToolContext = { workspaceId: ctx.workspaceId, userId: ctx.user.id };
+    const toolContext: ToolContext = { workspaceId, userId };
+    if (!sessionId) {
+      return NextResponse.json({ error: "Failed to initialize chat session" }, { status: 500 });
+    }
+    const chatSessionId = sessionId;
 
     // Core agent logic
     async function runAgent(): Promise<Response> {
@@ -223,17 +229,17 @@ export async function POST(request: NextRequest) {
           isEnabled: true,
           functionId: "openfolio-agent",
           metadata: {
-            chatId: sessionId,
-            workspaceId: ctx.workspaceId,
-            userId: ctx.user.id,
+            chatId: chatSessionId,
+            workspaceId,
+            userId,
           },
         },
         onFinish: async ({ text, toolCalls }) => {
           try {
             await supabase.from("chat_messages").insert({
-              chat_id: sessionId,
-              user_id: ctx.user.id,
-              workspace_id: ctx.workspaceId,
+              chat_id: chatSessionId,
+              user_id: userId,
+              workspace_id: workspaceId,
               role: "assistant",
               content: text,
               tool_calls: toolCalls.length > 0 ? JSON.parse(JSON.stringify(toolCalls.map((tc) => ({
@@ -258,7 +264,7 @@ export async function POST(request: NextRequest) {
       });
 
       const response = result.toUIMessageStreamResponse();
-      response.headers.set("X-Chat-Id", sessionId!);
+      response.headers.set("X-Chat-Id", chatSessionId);
 
       if (isNewChat) {
         response.headers.set("X-New-Chat", "true");

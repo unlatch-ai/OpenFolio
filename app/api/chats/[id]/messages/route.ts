@@ -37,11 +37,13 @@ export async function GET(
       );
     }
 
-    // Get messages with user info
-    const { data: messages, error } = await supabase.rpc("get_chat_history", {
-      p_chat_id: id,
-      p_limit: 100,
-    });
+    const { data: messages, error } = await supabase
+      .from("chat_messages")
+      .select("id, role, content, tool_calls, created_at")
+      .eq("chat_id", id)
+      .eq("workspace_id", ctx.workspaceId)
+      .order("created_at", { ascending: true })
+      .limit(100);
 
     if (error) {
       console.error("Error fetching messages:", error);
@@ -52,7 +54,10 @@ export async function GET(
     }
 
     return NextResponse.json({
-      messages: messages || [],
+      messages: (messages || []).map((message) => ({
+        ...message,
+        content: message.content || "",
+      })),
       chat_updated_at: chat.updated_at,
     });
   } catch (error) {

@@ -58,11 +58,13 @@ export async function GET(request: NextRequest) {
       .eq("id", workspaceInvite.workspace_id)
       .single();
 
-    const { data: inviter } = await admin
-      .from("profiles")
-      .select("full_name")
-      .eq("id", workspaceInvite.invited_by)
-      .single();
+    const { data: inviter } = workspaceInvite.invited_by
+      ? await admin
+          .from("profiles")
+          .select("full_name")
+          .eq("id", workspaceInvite.invited_by)
+          .single()
+      : { data: null };
 
     return NextResponse.json({
       type: "workspace",

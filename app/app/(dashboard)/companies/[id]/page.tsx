@@ -119,7 +119,7 @@ export default function CompanyDetailPage({
   const tags = company.company_tags?.map((ct) => ct.tags) || [];
   const people = company.person_companies?.map((pc) => ({
     ...pc.people,
-    person_companies: [{ companies: { id: company.id, name: company.name }, role: pc.role }],
+    person_companies: [{ companies: { id: company.id, name: company.name }, role: pc.role ?? undefined }],
   })) || [];
 
   return (

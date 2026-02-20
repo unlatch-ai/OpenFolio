@@ -131,8 +131,8 @@ describe("useChat (unit)", () => {
     await act(async () => {
       await result.current.sendMessage("Plan with context", {
         selectedContext: [
-          { type: "event", id: "11111111-1111-1111-1111-111111111111" },
-          { type: "contact", id: "22222222-2222-2222-2222-222222222222" },
+          { type: "interaction", id: "11111111-1111-1111-1111-111111111111" },
+          { type: "person", id: "22222222-2222-2222-2222-222222222222" },
         ],
       });
     });
@@ -144,8 +144,8 @@ describe("useChat (unit)", () => {
     const init = agentCall?.[1] as RequestInit;
     const parsed = init?.body ? JSON.parse(init.body.toString()) : {};
     expect(parsed.selectedContext).toEqual([
-      { type: "event", id: "11111111-1111-1111-1111-111111111111" },
-      { type: "contact", id: "22222222-2222-2222-2222-222222222222" },
+      { type: "interaction", id: "11111111-1111-1111-1111-111111111111" },
+      { type: "person", id: "22222222-2222-2222-2222-222222222222" },
     ]);
   });
 });

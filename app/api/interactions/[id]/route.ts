@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext, isWorkspaceContextError } from "@/lib/auth";
 import { tasks } from "@trigger.dev/sdk";
 import type { generateEmbeddings } from "@/src/trigger/generate-embeddings";
+import type { Database, Json } from "@/lib/supabase/database.types";
 import { z } from "zod";
 
 const updateInteractionSchema = z.object({
@@ -73,9 +74,20 @@ export async function PATCH(
     }
 
     const supabase = await createClient();
+    const updates: Database["public"]["Tables"]["interactions"]["Update"] = {};
+    if (parsed.data.interaction_type !== undefined) updates.interaction_type = parsed.data.interaction_type;
+    if (parsed.data.occurred_at !== undefined) updates.occurred_at = parsed.data.occurred_at;
+    if (parsed.data.direction !== undefined) updates.direction = parsed.data.direction;
+    if (parsed.data.subject !== undefined) updates.subject = parsed.data.subject;
+    if (parsed.data.content !== undefined) updates.content = parsed.data.content;
+    if (parsed.data.summary !== undefined) updates.summary = parsed.data.summary;
+    if (parsed.data.duration_minutes !== undefined) updates.duration_minutes = parsed.data.duration_minutes;
+    if (parsed.data.metadata !== undefined) {
+      updates.metadata = (parsed.data.metadata ?? null) as unknown as Json;
+    }
     const { data, error } = await supabase
       .from("interactions")
-      .update(parsed.data)
+      .update(updates)
       .eq("id", id)
       .eq("workspace_id", ctx.workspaceId)
       .select()

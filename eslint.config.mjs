@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Nextra content (MDX + _meta.js)
     "content/**",
+    // Generated search index assets
+    "public/_pagefind/**",
   ]),
 ]);
 

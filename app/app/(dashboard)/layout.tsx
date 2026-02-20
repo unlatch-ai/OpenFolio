@@ -15,6 +15,8 @@ import { ensureSelfHostedContext } from "@/lib/selfhost/bootstrap";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensurePersonalWorkspace, ensureProfile } from "@/lib/workspaces/provision";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({
   children,
 }: {

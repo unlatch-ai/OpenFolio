@@ -42,7 +42,11 @@ export default function IntegrationsPage() {
   async function fetchIntegrations() {
     try {
       setLoading(true);
-      const data = await apiFetch("/api/integrations");
+      const response = await apiFetch("/api/integrations");
+      if (!response.ok) {
+        throw new Error("Failed to load integrations");
+      }
+      const data = (await response.json()) as IntegrationData[];
       setIntegrations(data);
     } catch {
       toast.error("Failed to load integrations");

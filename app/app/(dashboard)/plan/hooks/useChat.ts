@@ -7,7 +7,7 @@ export type Message = {
   role: "user" | "assistant";
   content: string;
   citations?: Array<{
-    type: "event" | "contact" | "partner";
+    type: "person" | "company" | "interaction";
     id: string;
     name: string;
   }>;
@@ -31,7 +31,7 @@ export type ChatSession = {
 };
 
 export type SelectedContextItem = {
-  type: "event" | "contact" | "partner";
+  type: "person" | "company" | "interaction";
   id: string;
 };
 

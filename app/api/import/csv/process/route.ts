@@ -195,7 +195,9 @@ export async function POST(request: NextRequest) {
 
     const existingPersonMap = new Map<string, Person>();
     for (const person of existingPeople || []) {
-      existingPersonMap.set(person.email, person as Person);
+      if (person.email) {
+        existingPersonMap.set(person.email, person as Person);
+      }
     }
 
     // Attach existing people

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/lib/supabase/database.types";
 import { tasks } from "@trigger.dev/sdk";
 import type { generateEmbeddings } from "@/src/trigger/generate-embeddings";
 import type {
@@ -269,7 +270,7 @@ async function createInteraction(
       source_url: interaction.source_url || null,
       source_integration: interaction.source || null,
       source_id: interaction.source_id || null,
-      metadata: interaction.metadata || {},
+      metadata: (interaction.metadata || {}) as Json,
     })
     .select("id")
     .single();

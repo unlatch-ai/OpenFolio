@@ -9,6 +9,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateEmbedding } from "@/lib/openai";
+import type { Database } from "@/lib/supabase/database.types";
 import {
   getSchemaColumns,
   groupSchemaByTable,
@@ -622,7 +623,7 @@ export const createNoteTool = tool({
     try {
       const supabase = createAdminClient();
 
-      const insertData: Record<string, unknown> = {
+      const insertData: Database["public"]["Tables"]["notes"]["Insert"] = {
         content: params.content,
         workspace_id: workspaceId,
       };
@@ -636,7 +637,7 @@ export const createNoteTool = tool({
 
       const { data, error } = await supabase
         .from("notes")
-        .insert(insertData)
+        .insert(insertData as never)
         .select()
         .single();
 

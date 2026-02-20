@@ -40,7 +40,7 @@ describe("Plan citation selection", () => {
           }),
         }),
       }),
-    } as ReturnType<typeof createClient>);
+    } as never);
   });
 
   it("shows selected citation details in the context panel", async () => {

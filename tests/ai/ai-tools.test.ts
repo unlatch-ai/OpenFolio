@@ -79,7 +79,7 @@ describe("searchPeopleTool", () => {
     mockRpc.mockResolvedValue({ data: mockResults, error: null });
 
     const { searchPeopleTool } = await import("@/lib/ai/tools");
-    const result = await searchPeopleTool.execute(
+    const result = await searchPeopleTool.execute!(
       { query: "Alice", limit: 10 },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -100,7 +100,7 @@ describe("searchPeopleTool", () => {
     mockRpc.mockResolvedValue({ data: mockResults, error: null });
 
     const { searchPeopleTool } = await import("@/lib/ai/tools");
-    const result = await searchPeopleTool.execute(
+    const result = await searchPeopleTool.execute!(
       { query: "test", relationship_type: "colleague", limit: 10 },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -114,7 +114,7 @@ describe("searchPeopleTool", () => {
     mockRpc.mockResolvedValue({ data: [], error: null });
 
     const { searchPeopleTool } = await import("@/lib/ai/tools");
-    await searchPeopleTool.execute(
+    await searchPeopleTool.execute!(
       { query: "test", limit: 10 },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -131,7 +131,7 @@ describe("searchPeopleTool", () => {
     mockRpc.mockResolvedValue({ data: null, error: { message: "DB error" } });
 
     const { searchPeopleTool } = await import("@/lib/ai/tools");
-    const result = await searchPeopleTool.execute(
+    const result = await searchPeopleTool.execute!(
       { query: "test", limit: 10 },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -161,7 +161,7 @@ describe("searchCompaniesTool", () => {
     mockRpc.mockResolvedValue({ data: mockResults, error: null });
 
     const { searchCompaniesTool } = await import("@/lib/ai/tools");
-    const result = await searchCompaniesTool.execute(
+    const result = await searchCompaniesTool.execute!(
       { query: "tech", limit: 10 },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -180,7 +180,7 @@ describe("searchCompaniesTool", () => {
     mockRpc.mockResolvedValue({ data: mockResults, error: null });
 
     const { searchCompaniesTool } = await import("@/lib/ai/tools");
-    const result = await searchCompaniesTool.execute(
+    const result = await searchCompaniesTool.execute!(
       { query: "company", industry: "tech", limit: 10 },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -196,7 +196,7 @@ describe("searchCompaniesTool", () => {
     mockRpc.mockResolvedValue({ data: mockResults, error: null });
 
     const { searchCompaniesTool } = await import("@/lib/ai/tools");
-    const result = await searchCompaniesTool.execute(
+    const result = await searchCompaniesTool.execute!(
       { query: "company", location: "francisco", limit: 10 },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -225,7 +225,7 @@ describe("searchInteractionsTool", () => {
     mockRpc.mockResolvedValue({ data: mockResults, error: null });
 
     const { searchInteractionsTool } = await import("@/lib/ai/tools");
-    const result = await searchInteractionsTool.execute(
+    const result = await searchInteractionsTool.execute!(
       { query: "meeting", limit: 10 },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -244,7 +244,7 @@ describe("searchInteractionsTool", () => {
     mockRpc.mockResolvedValue({ data: mockResults, error: null });
 
     const { searchInteractionsTool } = await import("@/lib/ai/tools");
-    const result = await searchInteractionsTool.execute(
+    const result = await searchInteractionsTool.execute!(
       { query: "test", interaction_type: "meeting", limit: 10 },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -260,7 +260,7 @@ describe("searchInteractionsTool", () => {
     mockRpc.mockResolvedValue({ data: mockResults, error: null });
 
     const { searchInteractionsTool } = await import("@/lib/ai/tools");
-    const result = await searchInteractionsTool.execute(
+    const result = await searchInteractionsTool.execute!(
       { query: "test", direction: "inbound", limit: 10 },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -303,7 +303,7 @@ describe("getPersonDetailsTool", () => {
     });
 
     const { getPersonDetailsTool } = await import("@/lib/ai/tools");
-    const result = await getPersonDetailsTool.execute(
+    const result = await getPersonDetailsTool.execute!(
       { person_id: VALID_UUID },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -318,7 +318,7 @@ describe("getPersonDetailsTool", () => {
     mockFrom.mockReturnValue(builder);
 
     const { getPersonDetailsTool } = await import("@/lib/ai/tools");
-    const result = await getPersonDetailsTool.execute(
+    const result = await getPersonDetailsTool.execute!(
       { person_id: VALID_UUID },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -335,7 +335,7 @@ describe("getPersonDetailsTool", () => {
     });
 
     const { getPersonDetailsTool } = await import("@/lib/ai/tools");
-    await getPersonDetailsTool.execute(
+    await getPersonDetailsTool.execute!(
       { person_id: VALID_UUID },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -376,7 +376,7 @@ describe("getRelationshipInsightsTool", () => {
     });
 
     const { getRelationshipInsightsTool } = await import("@/lib/ai/tools");
-    const result = await getRelationshipInsightsTool.execute(
+    const result = await getRelationshipInsightsTool.execute!(
       { person_id: VALID_UUID },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -405,7 +405,7 @@ describe("getRelationshipInsightsTool", () => {
     });
 
     const { getRelationshipInsightsTool } = await import("@/lib/ai/tools");
-    const result = await getRelationshipInsightsTool.execute(
+    const result = await getRelationshipInsightsTool.execute!(
       { company_name: "Acme" },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -416,7 +416,7 @@ describe("getRelationshipInsightsTool", () => {
 
   it("returns error when neither person_id nor company_name provided", async () => {
     const { getRelationshipInsightsTool } = await import("@/lib/ai/tools");
-    const result = await getRelationshipInsightsTool.execute(
+    const result = await getRelationshipInsightsTool.execute!(
       {},
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -437,7 +437,7 @@ describe("createNoteTool", () => {
     mockFrom.mockReturnValue(builder);
 
     const { createNoteTool } = await import("@/lib/ai/tools");
-    const result = await createNoteTool.execute(
+    const result = await createNoteTool.execute!(
       { person_id: VALID_UUID, content: "Important note" },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -458,7 +458,7 @@ describe("createNoteTool", () => {
     mockFrom.mockReturnValue(builder);
 
     const { createNoteTool } = await import("@/lib/ai/tools");
-    const result = await createNoteTool.execute(
+    const result = await createNoteTool.execute!(
       { company_id: VALID_UUID, content: "Company note" },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -476,7 +476,7 @@ describe("createNoteTool", () => {
     mockFrom.mockReturnValue(builder);
 
     const { createNoteTool } = await import("@/lib/ai/tools");
-    const result = await createNoteTool.execute(
+    const result = await createNoteTool.execute!(
       { content: "Test note" },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
@@ -490,7 +490,7 @@ describe("createNoteTool", () => {
     mockFrom.mockReturnValue(builder);
 
     const { createNoteTool } = await import("@/lib/ai/tools");
-    await createNoteTool.execute(
+    await createNoteTool.execute!(
       { content: "Test" },
       { toolCallId: "tc1", messages: [], experimental_context: toolContext() }
     );
