@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getConnector } from "@/lib/integrations/registry";
 import { encrypt } from "@/lib/integrations/encryption";
 import { syncIntegration } from "@/src/trigger/sync-integration";
+import { upsertIntegrationSchedule } from "@/lib/integrations/schedule";
 
 const STATE_MAX_AGE_MS = 10 * 60 * 1000;
 
@@ -152,6 +153,18 @@ export async function GET(request: NextRequest) {
     }
 
     for (const integrationId of integrationIds) {
+      // Create daily sync schedule (02:00 UTC default; user can change via autosync settings)
+      try {
+        const scheduleId = await upsertIntegrationSchedule(integrationId);
+        await supabase
+          .from("integrations")
+          .update({ metadata: { trigger_schedule_id: scheduleId } as never })
+          .eq("id", integrationId);
+      } catch (scheduleError) {
+        console.error("Failed to create sync schedule", { integrationId, scheduleError });
+      }
+
+      // Trigger immediate initial sync
       try {
         await supabase
           .from("integrations")
@@ -159,13 +172,8 @@ export async function GET(request: NextRequest) {
           .eq("id", integrationId);
 
         await syncIntegration.trigger(
-          {
-            integrationId,
-            workspaceId: state.workspaceId,
-          },
-          {
-            idempotencyKey: `initial-sync:${integrationId}`,
-          }
+          { integrationId, workspaceId: state.workspaceId },
+          { idempotencyKey: `initial-sync:${integrationId}` }
         );
       } catch (triggerError) {
         await supabase

@@ -4,6 +4,7 @@ import {
   isWorkspaceContextError,
 } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { deleteIntegrationSchedule } from "@/lib/integrations/schedule";
 
 export async function POST(
   request: NextRequest,
@@ -16,6 +17,22 @@ export async function POST(
 
   const { id } = await params;
   const supabase = createAdminClient();
+
+  // Delete the Trigger.dev schedule before disconnecting
+  const { data: integration } = await supabase
+    .from("integrations")
+    .select("metadata")
+    .eq("id", id)
+    .eq("workspace_id", ctx.workspaceId)
+    .single();
+
+  const meta = (integration?.metadata && typeof integration.metadata === "object" && !Array.isArray(integration.metadata))
+    ? integration.metadata as Record<string, unknown>
+    : {};
+  const scheduleId = typeof meta.trigger_schedule_id === "string" ? meta.trigger_schedule_id : null;
+  if (scheduleId) {
+    await deleteIntegrationSchedule(scheduleId);
+  }
 
   const { error } = await supabase
     .from("integrations")

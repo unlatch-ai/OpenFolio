@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getWorkspaceContext, isWorkspaceContextError } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { upsertIntegrationSchedule, deleteIntegrationSchedule } from "@/lib/integrations/schedule";
 
 const autosyncSchema = z.object({
   autoSyncEnabled: z.boolean(),
@@ -48,7 +49,7 @@ export async function PATCH(
 
   const { data: integration } = await supabase
     .from("integrations")
-    .select("id")
+    .select("id, metadata")
     .eq("id", id)
     .eq("workspace_id", ctx.workspaceId)
     .single();
@@ -78,6 +79,42 @@ export async function PATCH(
 
   if (error) {
     return NextResponse.json({ error: "Failed to update autosync" }, { status: 500 });
+  }
+
+  // Manage the Trigger.dev schedule
+  const existingMeta = (integration.metadata && typeof integration.metadata === "object" && !Array.isArray(integration.metadata))
+    ? integration.metadata as Record<string, unknown>
+    : {};
+  const existingScheduleId = typeof existingMeta.trigger_schedule_id === "string"
+    ? existingMeta.trigger_schedule_id
+    : null;
+
+  if (parsed.data.autoSyncEnabled) {
+    try {
+      const timeLocal = data.auto_sync_time_local
+        ? (typeof data.auto_sync_time_local === "string" ? data.auto_sync_time_local.slice(0, 5) : "02:00")
+        : "02:00";
+      const timezone = data.auto_sync_timezone ?? "UTC";
+      const scheduleId = await upsertIntegrationSchedule(id, timeLocal, timezone);
+      if (scheduleId !== existingScheduleId) {
+        await supabase
+          .from("integrations")
+          .update({ metadata: { ...existingMeta, trigger_schedule_id: scheduleId } as never })
+          .eq("id", id);
+      }
+    } catch (scheduleError) {
+      console.error("Failed to upsert sync schedule", { id, scheduleError });
+    }
+  } else if (existingScheduleId) {
+    try {
+      await deleteIntegrationSchedule(existingScheduleId);
+      await supabase
+        .from("integrations")
+        .update({ metadata: { ...existingMeta, trigger_schedule_id: null } as never })
+        .eq("id", id);
+    } catch (scheduleError) {
+      console.error("Failed to delete sync schedule", { id, scheduleError });
+    }
   }
 
   return NextResponse.json({
