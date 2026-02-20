@@ -161,28 +161,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: history } = await supabase
-      .from("chat_messages")
-      .select("role, content")
-      .eq("chat_id", sessionId)
-      .order("created_at", { ascending: true })
-      .limit(20);
+    const [{ data: history }, { data: workspaceData }] = await Promise.all([
+      supabase
+        .from("chat_messages")
+        .select("role, content")
+        .eq("chat_id", sessionId)
+        .order("created_at", { ascending: true })
+        .limit(20),
+      supabase
+        .from("workspaces")
+        .select("settings")
+        .eq("id", workspaceId)
+        .single(),
+    ]);
 
     const messages: ChatMessage[] = (history || []).map((m) => ({
       role: m.role as "user" | "assistant",
       content: m.content ?? "",
     }));
-
-    messages.push({
-      role: "user",
-      content: message,
-    });
-
-    const { data: workspaceData } = await supabase
-      .from("workspaces")
-      .select("settings")
-      .eq("id", workspaceId)
-      .single();
 
     let customInstructions: string | null = null;
     if (

@@ -637,7 +637,7 @@ export const createNoteTool = tool({
 
       const { data, error } = await supabase
         .from("notes")
-        .insert(insertData as never)
+        .insert(insertData)
         .select()
         .single();
 

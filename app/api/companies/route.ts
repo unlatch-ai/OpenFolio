@@ -93,13 +93,19 @@ export async function GET(request: NextRequest) {
 
     const searchConditions: string[] = [];
     if (search) {
-      const pattern = formatFilterValue(`%${search}%`);
+      const escapedSearch = search.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      const pattern = formatFilterValue(`%${escapedSearch}%`);
       searchConditions.push(
         `name.ilike.${pattern}`,
         `domain.ilike.${pattern}`,
         `industry.ilike.${pattern}`,
         `description.ilike.${pattern}`
       );
+    }
+
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (cursor?.id && !UUID_REGEX.test(cursor.id)) {
+      return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
     }
 
     const cursorConditions: string[] = [];

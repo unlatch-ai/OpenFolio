@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const supabase = createAdminClient();
 
   const { data: candidates, error } = await supabase
-    .from("duplicate_candidates" as never)
+    .from("duplicate_candidates")
     .select(
       `
       id,
@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
     .limit(50);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Error fetching duplicate candidates:", error);
+    return NextResponse.json({ error: "Failed to fetch duplicates" }, { status: 500 });
   }
 
   return NextResponse.json({ data: candidates || [] });

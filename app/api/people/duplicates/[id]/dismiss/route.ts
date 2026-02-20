@@ -18,8 +18,8 @@ export async function POST(
   const supabase = createAdminClient();
 
   const { error } = await supabase
-    .from("duplicate_candidates" as never)
-    .update({ status: "dismissed" } as never)
+    .from("duplicate_candidates")
+    .update({ status: "dismissed" })
     .eq("id", id)
     .eq("workspace_id", ctx.workspaceId);
 

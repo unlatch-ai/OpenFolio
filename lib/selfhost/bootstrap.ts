@@ -15,7 +15,7 @@ type BootstrapContext = {
 
 async function getSettings(admin: ReturnType<typeof createAdminClient>) {
   const { data } = await admin
-    .from("instance_settings" as never)
+    .from("instance_settings")
     .select("default_user_id, default_workspace_id")
     .limit(1)
     .maybeSingle();
@@ -28,13 +28,13 @@ async function persistSettings(
   payload: { userId: string; workspaceId: string }
 ) {
   await admin
-    .from("instance_settings" as never)
+    .from("instance_settings")
     .upsert(
       {
         id: true,
         default_user_id: payload.userId,
         default_workspace_id: payload.workspaceId,
-      } as never,
+      },
       { onConflict: "id" }
     );
 }

@@ -32,7 +32,7 @@ export async function GET(
     if (importError) {
       console.error("Error fetching import record:", importError);
       return NextResponse.json(
-        { error: "Failed to fetch import record", details: importError.message },
+        { error: "Failed to fetch import record" },
         { status: 500 }
       );
     }

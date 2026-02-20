@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getWorkspaceContext, isWorkspaceContextError } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { upsertIntegrationSchedule, deleteIntegrationSchedule } from "@/lib/integrations/schedule";
+import type { Json } from "@/lib/supabase/database.types";
 
 const autosyncSchema = z.object({
   autoSyncEnabled: z.boolean(),
@@ -99,7 +100,7 @@ export async function PATCH(
       if (scheduleId !== existingScheduleId) {
         await supabase
           .from("integrations")
-          .update({ metadata: { ...existingMeta, trigger_schedule_id: scheduleId } as never })
+          .update({ metadata: { ...existingMeta, trigger_schedule_id: scheduleId } as Json })
           .eq("id", id);
       }
     } catch (scheduleError) {
@@ -110,7 +111,7 @@ export async function PATCH(
       await deleteIntegrationSchedule(existingScheduleId);
       await supabase
         .from("integrations")
-        .update({ metadata: { ...existingMeta, trigger_schedule_id: null } as never })
+        .update({ metadata: { ...existingMeta, trigger_schedule_id: null } as Json })
         .eq("id", id);
     } catch (scheduleError) {
       console.error("Failed to delete sync schedule", { id, scheduleError });

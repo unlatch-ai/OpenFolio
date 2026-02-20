@@ -28,7 +28,8 @@ export async function GET(
       .select("*")
       .eq("person_id", id)
       .eq("workspace_id", ctx.workspaceId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
 
     if (error) {
       console.error("Error fetching notes:", error);

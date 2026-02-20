@@ -75,7 +75,19 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("interactions")
       .select(`
-        *,
+        id,
+        workspace_id,
+        interaction_type,
+        direction,
+        subject,
+        summary,
+        occurred_at,
+        duration_minutes,
+        source_integration,
+        source_id,
+        source_url,
+        created_at,
+        updated_at,
         interaction_people(*, people(id, first_name, last_name, email, avatar_url))
       `)
       .eq("workspace_id", ctx.workspaceId);
@@ -96,6 +108,11 @@ export async function GET(request: NextRequest) {
     query = query
       .order(sort, { ascending: dir === "asc" })
       .order("id", { ascending: dir === "asc" });
+
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (cursor?.id && !UUID_REGEX.test(cursor.id)) {
+      return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+    }
 
     const cursorConditions: string[] = [];
     if (cursor && cursor.sort === sort && cursor.dir === dir) {

@@ -6,6 +6,7 @@ import { decodeCursor, encodeCursor, formatFilterValue } from "@/lib/pagination"
 import { tasks } from "@trigger.dev/sdk";
 import type { generateEmbeddings } from "@/src/trigger/generate-embeddings";
 import { z } from "zod";
+import type { Json } from "@/lib/supabase/database.types";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -91,13 +92,19 @@ export async function GET(request: NextRequest) {
 
     const searchConditions: string[] = [];
     if (search) {
-      const pattern = formatFilterValue(`%${search}%`);
+      const escapedSearch = search.replace(/%/g, "\\%").replace(/_/g, "\\_");
+      const pattern = formatFilterValue(`%${escapedSearch}%`);
       searchConditions.push(
         `email.ilike.${pattern}`,
         `first_name.ilike.${pattern}`,
         `last_name.ilike.${pattern}`,
         `display_name.ilike.${pattern}`
       );
+    }
+
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (cursor?.id && !UUID_REGEX.test(cursor.id)) {
+      return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
     }
 
     const cursorConditions: string[] = [];
@@ -234,9 +241,10 @@ export async function POST(request: NextRequest) {
       .from("people")
       .insert({
         ...personData,
+        custom_data: (personData.custom_data ?? null) as Json,
         workspace_id: ctx.workspaceId,
         sources: ["manual"],
-      } as never)
+      })
       .select()
       .single();
 

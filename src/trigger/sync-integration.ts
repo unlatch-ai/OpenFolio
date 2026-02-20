@@ -3,6 +3,7 @@ import { getConnector } from "@/lib/integrations/registry";
 import { processSync } from "@/lib/integrations/gateway";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "@/lib/integrations/encryption";
+import type { Json } from "@/lib/supabase/database.types";
 
 export const syncIntegration = task({
   id: "sync-integration",
@@ -51,7 +52,7 @@ export const syncIntegration = task({
       await supabase
         .from("integrations")
         .update({
-          sync_cursor: result.cursor as never,
+          sync_cursor: (result.cursor ?? null) as Json,
           last_synced_at: new Date().toISOString(),
           status: "active",
           last_sync_error: null,
@@ -65,7 +66,7 @@ export const syncIntegration = task({
           .update({
             status: "completed",
             items_synced:
-              summary.peopleCreated + summary.interactionsCreated,
+              summary.peopleCreated + summary.peopleUpdated + summary.interactionsCreated,
             items_created:
               summary.peopleCreated + summary.interactionsCreated,
             items_updated: summary.peopleUpdated,

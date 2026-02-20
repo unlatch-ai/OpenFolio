@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Json } from "@/lib/supabase/database.types";
+import type { Json, Database } from "@/lib/supabase/database.types";
 import { tasks } from "@trigger.dev/sdk";
 import type { generateEmbeddings } from "@/src/trigger/generate-embeddings";
 import type {
@@ -33,6 +33,9 @@ export async function processSync(
   // Map email -> person ID for interaction linking
   const emailToPersonId = new Map<string, string>();
 
+  const personEmbeddingPayloads: { payload: { entityType: string; entityId: string; workspaceId: string } }[] = [];
+  const interactionEmbeddingPayloads: { payload: { entityType: string; entityId: string; workspaceId: string } }[] = [];
+
   // --- Process people ---
   for (const person of result.people) {
     const personResult = await upsertPerson(
@@ -58,6 +61,7 @@ export async function processSync(
           supabase,
           personResult.id,
           companyId.id,
+          workspaceId,
           person.job_title
         );
       }
@@ -81,15 +85,10 @@ export async function processSync(
       }
     }
 
-    // Trigger embedding
-    try {
-      await tasks.trigger<typeof generateEmbeddings>("generate-embeddings", {
-        entityType: "person",
-        entityId: personResult.id,
-        workspaceId,
+    if (personResult.id) {
+      personEmbeddingPayloads.push({
+        payload: { entityType: "person", entityId: personResult.id, workspaceId },
       });
-    } catch {
-      // Non-critical
     }
   }
 
@@ -103,16 +102,28 @@ export async function processSync(
     );
     if (interactionId) {
       summary.interactionsCreated++;
-      try {
-        await tasks.trigger<typeof generateEmbeddings>("generate-embeddings", {
-          entityType: "interaction",
-          entityId: interactionId,
-          workspaceId,
-        });
-      } catch {
-        // Non-critical
-      }
+      interactionEmbeddingPayloads.push({
+        payload: { entityType: "interaction", entityId: interactionId, workspaceId },
+      });
     }
+  }
+
+  // Batch trigger embeddings (one request per entity type instead of N requests)
+  try {
+    if (personEmbeddingPayloads.length > 0) {
+      await tasks.batchTrigger<typeof generateEmbeddings>(
+        "generate-embeddings",
+        personEmbeddingPayloads
+      );
+    }
+    if (interactionEmbeddingPayloads.length > 0) {
+      await tasks.batchTrigger<typeof generateEmbeddings>(
+        "generate-embeddings",
+        interactionEmbeddingPayloads
+      );
+    }
+  } catch {
+    // Non-critical: embeddings will be missing but data is saved
   }
 
   return summary;
@@ -147,7 +158,7 @@ async function upsertPerson(
       if (Object.keys(updateData).length > 0) {
         await supabase
           .from("people")
-          .update(updateData as never)
+          .update(updateData as Database["public"]["Tables"]["people"]["Update"])
           .eq("id", existing.id);
       }
 
@@ -176,7 +187,7 @@ async function upsertPerson(
 
   const { data: newPerson } = await supabase
     .from("people")
-    .insert(insertData as never)
+    .insert(insertData as Database["public"]["Tables"]["people"]["Insert"])
     .select("id")
     .single();
 
@@ -226,14 +237,16 @@ async function linkPersonCompany(
   supabase: ReturnType<typeof createAdminClient>,
   personId: string,
   companyId: string,
+  workspaceId: string,
   role?: string
 ) {
   await supabase.from("person_companies").upsert(
     {
       person_id: personId,
       company_id: companyId,
+      workspace_id: workspaceId,
       role: role || null,
-    } as never,
+    },
     { onConflict: "person_id,company_id" }
   );
 }
@@ -284,7 +297,8 @@ async function createInteraction(
       await supabase.from("interaction_people").insert({
         interaction_id: newInteraction.id,
         person_id: personId,
-      } as never);
+        workspace_id: workspaceId,
+      });
     }
   }
 

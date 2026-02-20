@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
           .select("chat_id, content, created_at")
           .in("chat_id", chatIds)
           .order("created_at", { ascending: false })
+          .limit(500)
       : { data: [] as Array<{ chat_id: string; content: string | null; created_at: string | null }> };
 
     const counts = new Map<string, number>();

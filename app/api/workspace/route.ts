@@ -47,6 +47,13 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const { name, description, website, logo_url, custom_instructions } = body;
 
+    if (typeof custom_instructions === "string" && custom_instructions.trim().length > 2000) {
+      return NextResponse.json(
+        { error: "custom_instructions must be 2000 characters or fewer" },
+        { status: 400 }
+      );
+    }
+
     const supabase = createAdminClient();
 
     const hasWorkspaceUpdates = [name, description, website, logo_url].some(
@@ -61,8 +68,8 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Only owners can update core workspace fields
-    if (hasWorkspaceUpdates && !requireOwner(ctx)) {
+    // Only owners can update workspace fields including custom_instructions
+    if ((hasWorkspaceUpdates || hasCustomInstructionsUpdate) && !requireOwner(ctx)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
         { status: 403 }

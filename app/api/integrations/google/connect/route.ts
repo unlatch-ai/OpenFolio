@@ -7,7 +7,8 @@ import {
 import { getConnector } from "@/lib/integrations/registry";
 
 function signState(payload: string): string {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const secret = process.env.OAUTH_STATE_SECRET;
+  if (!secret) throw new Error("OAUTH_STATE_SECRET environment variable is required");
   return crypto.createHmac("sha256", secret).update(payload).digest("hex");
 }
 

@@ -73,22 +73,39 @@ function emailDomain(email: string): string | null {
   return parts.length === 2 ? parts[1].toLowerCase() : null;
 }
 
-/**
- * Find deterministic duplicate matches (same email or phone) within a workspace
- */
-export async function findDeterministicMatches(
-  workspaceId: string
-): Promise<DuplicateCandidate[]> {
-  const supabase = createAdminClient();
-  const candidates: DuplicateCandidate[] = [];
+type WorkspacePerson = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+};
 
-  const { data: people } = await supabase
+export async function fetchWorkspacePeople(
+  workspaceId: string
+): Promise<WorkspacePerson[]> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
     .from("people")
     .select("id, first_name, last_name, email, phone, avatar_url")
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: true });
+  return data ?? [];
+}
 
-  if (!people || people.length < 2) return candidates;
+/**
+ * Find deterministic duplicate matches (same email or phone) within a workspace
+ */
+export async function findDeterministicMatches(
+  workspaceId: string,
+  prefetchedPeople?: WorkspacePerson[]
+): Promise<DuplicateCandidate[]> {
+  const candidates: DuplicateCandidate[] = [];
+
+  const people = prefetchedPeople ?? await fetchWorkspacePeople(workspaceId);
+
+  if (people.length < 2) return candidates;
 
   // Find duplicate emails
   const emailMap = new Map<string, typeof people>();
@@ -158,18 +175,14 @@ export async function findDeterministicMatches(
  * Find fuzzy duplicate matches using name similarity and email domain matching
  */
 export async function findFuzzyMatches(
-  workspaceId: string
+  workspaceId: string,
+  prefetchedPeople?: WorkspacePerson[]
 ): Promise<DuplicateCandidate[]> {
-  const supabase = createAdminClient();
   const candidates: DuplicateCandidate[] = [];
 
-  const { data: people } = await supabase
-    .from("people")
-    .select("id, first_name, last_name, email, phone, avatar_url")
-    .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: true });
+  const people = prefetchedPeople ?? await fetchWorkspacePeople(workspaceId);
 
-  if (!people || people.length < 2) return candidates;
+  if (people.length < 2) return candidates;
 
   // Compare all pairs for fuzzy matches
   for (let i = 0; i < people.length; i++) {

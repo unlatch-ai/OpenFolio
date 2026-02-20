@@ -158,24 +158,60 @@ export function CSVImport() {
     setCurrentStep(3);
 
     try {
+      // Queue the import job
       const response = await fetch("/api/import/csv/process", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ upload_id: uploadId, mappings }),
       });
 
-      const data: CSVProcessResponse = await response.json();
-
+      const queued = await response.json();
       if (!response.ok) {
-        throw new Error((data as { error?: string }).error || "Import failed");
+        throw new Error((queued as { error?: string }).error || "Import failed");
       }
 
-      setProcessResult(data);
-      setShowAllErrors(false);
-      setCurrentStep(4);
-      toast.success(
-        `Imported ${data.people_created} new people, updated ${data.people_updated}`
-      );
+      // Poll for completion
+      const POLL_INTERVAL_MS = 2500;
+      const MAX_POLLS = 240; // 10 minutes max
+      for (let i = 0; i < MAX_POLLS; i++) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+
+        const statusRes = await fetch(`/api/import/status/${uploadId}`);
+        const statusData = await statusRes.json();
+
+        if (!statusRes.ok) {
+          throw new Error(statusData.error || "Failed to check import status");
+        }
+
+        if (statusData.status === "completed") {
+          const result = (statusData.result ?? {}) as {
+            people_created?: number;
+            people_updated?: number;
+            errors?: string[];
+          };
+          const processResult: CSVProcessResponse = {
+            success: true,
+            people_created: result.people_created ?? 0,
+            people_updated: result.people_updated ?? 0,
+            errors: result.errors ?? [],
+          };
+          setProcessResult(processResult);
+          setShowAllErrors(false);
+          setCurrentStep(4);
+          toast.success(
+            `Imported ${processResult.people_created} new people, updated ${processResult.people_updated}`
+          );
+          return;
+        }
+
+        if (statusData.status === "failed") {
+          const errMsg =
+            (statusData.result as { error?: string })?.error ?? "Import failed";
+          throw new Error(errMsg);
+        }
+      }
+
+      throw new Error("Import timed out — check back later");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed");
       setCurrentStep(2);

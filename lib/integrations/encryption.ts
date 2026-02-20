@@ -2,8 +2,18 @@ import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
 
 const ALGORITHM = "aes-256-gcm";
 
+function getKey(): Buffer {
+  const keyHex = process.env.INTEGRATION_ENCRYPTION_KEY;
+  if (!keyHex || keyHex.length !== 64) {
+    throw new Error(
+      "INTEGRATION_ENCRYPTION_KEY must be a 64-character hex string (32 bytes for AES-256)"
+    );
+  }
+  return Buffer.from(keyHex, "hex");
+}
+
 export function encrypt(text: string): string {
-  const key = Buffer.from(process.env.INTEGRATION_ENCRYPTION_KEY!, "hex");
+  const key = getKey();
   const iv = randomBytes(16);
   const cipher = createCipheriv(ALGORITHM, key, iv);
   const encrypted = Buffer.concat([
@@ -15,8 +25,12 @@ export function encrypt(text: string): string {
 }
 
 export function decrypt(data: string): string {
-  const key = Buffer.from(process.env.INTEGRATION_ENCRYPTION_KEY!, "hex");
-  const [ivHex, tagHex, encryptedHex] = data.split(":");
+  const key = getKey();
+  const parts = data.split(":");
+  if (parts.length !== 3 || parts.some((p) => !p)) {
+    throw new Error("Invalid encrypted data format");
+  }
+  const [ivHex, tagHex, encryptedHex] = parts;
   const decipher = createDecipheriv(
     ALGORITHM,
     key,

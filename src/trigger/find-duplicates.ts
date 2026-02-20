@@ -1,5 +1,6 @@
 import { task } from "@trigger.dev/sdk";
 import {
+  fetchWorkspacePeople,
   findDeterministicMatches,
   findFuzzyMatches,
 } from "@/lib/dedup";
@@ -11,10 +12,13 @@ export const findDuplicates = task({
   run: async (payload: { workspaceId: string }) => {
     const supabase = createAdminClient();
 
+    // Fetch people once and share between both match functions
+    const people = await fetchWorkspacePeople(payload.workspaceId);
+
     // Find all candidate pairs
     const [deterministic, fuzzy] = await Promise.all([
-      findDeterministicMatches(payload.workspaceId),
-      findFuzzyMatches(payload.workspaceId),
+      findDeterministicMatches(payload.workspaceId, people),
+      findFuzzyMatches(payload.workspaceId, people),
     ]);
 
     const allCandidates = [...deterministic, ...fuzzy];
@@ -44,12 +48,12 @@ export const findDuplicates = task({
 
       // Clear existing pending candidates for this workspace
       await supabase
-        .from("duplicate_candidates" as never)
+        .from("duplicate_candidates")
         .delete()
         .eq("workspace_id", payload.workspaceId)
         .eq("status", "pending");
 
-      await supabase.from("duplicate_candidates" as never).insert(rows as never);
+      await supabase.from("duplicate_candidates").insert(rows);
     }
 
     return {

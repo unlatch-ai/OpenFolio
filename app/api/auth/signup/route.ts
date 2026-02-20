@@ -1,6 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { hashInviteToken } from "@/lib/invites";
 import { getRuntimeMode, isHostedInviteOnlySignup } from "@/lib/runtime-mode";
 import { ensurePersonalWorkspace, ensureProfile, createWorkspaceForOwner } from "@/lib/workspaces/provision";
@@ -41,16 +41,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    const supabaseAdmin = createAdminClient();
 
     const normalizedEmail = email.toLowerCase().trim();
     const tokenHash = inviteToken ? hashInviteToken(inviteToken) : null;

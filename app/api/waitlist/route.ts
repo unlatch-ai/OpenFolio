@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { rateLimit } from "@/lib/rate-limit";
 
 const waitlistSchema = z.object({
   name: z.string().min(2),
@@ -8,6 +9,11 @@ const waitlistSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  const rl = rateLimit(request, { key: "waitlist", limit: 5, windowMs: 60_000 });
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   try {
     const body = await request.json();
     const parsed = waitlistSchema.safeParse(body);

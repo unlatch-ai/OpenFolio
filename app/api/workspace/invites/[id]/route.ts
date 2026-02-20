@@ -135,7 +135,7 @@ export async function POST(
       );
     }
 
-    const appUrl = process.env.APP_URL || "http://localhost:3000";
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const inviteLink = `${appUrl}/invite?token=${token}`;
 
     const { data: workspace } = await supabase

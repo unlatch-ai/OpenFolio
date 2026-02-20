@@ -5,11 +5,13 @@ import { getConnector } from "@/lib/integrations/registry";
 import { encrypt } from "@/lib/integrations/encryption";
 import { syncIntegration } from "@/src/trigger/sync-integration";
 import { upsertIntegrationSchedule } from "@/lib/integrations/schedule";
+import type { Json } from "@/lib/supabase/database.types";
 
 const STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
 
 function verifyState(stateParam: string): { workspaceId: string; userId: string } | null {
-  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const secret = process.env.OAUTH_STATE_SECRET;
+  if (!secret) throw new Error("OAUTH_STATE_SECRET environment variable is required");
   const dotIndex = stateParam.lastIndexOf(".");
   if (dotIndex === -1) return null;
 
@@ -116,7 +118,7 @@ export async function GET(request: NextRequest) {
         const scheduleId = await upsertIntegrationSchedule(integrationId);
         await supabase
           .from("integrations")
-          .update({ metadata: { trigger_schedule_id: scheduleId } as never })
+          .update({ metadata: { trigger_schedule_id: scheduleId } as Json })
           .eq("id", integrationId);
       } catch (scheduleError) {
         console.error("Failed to create sync schedule", { integrationId, scheduleError });
