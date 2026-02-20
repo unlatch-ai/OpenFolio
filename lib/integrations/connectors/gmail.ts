@@ -7,6 +7,7 @@ import type {
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/contacts.readonly",
@@ -121,7 +122,7 @@ export const gmailConnector: IntegrationConnector = {
         client_secret: GOOGLE_CLIENT_SECRET,
         code,
         grant_type: "authorization_code",
-        redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/google/callback`,
+        redirect_uri: `${APP_URL}/api/integrations/google/callback`,
       }),
     });
     const data = await resp.json();

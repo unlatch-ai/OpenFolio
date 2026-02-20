@@ -34,33 +34,34 @@ function verifyState(stateParam: string): { workspaceId: string; userId: string 
 }
 
 export async function GET(request: NextRequest) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
   const code = request.nextUrl.searchParams.get("code");
   const stateParam = request.nextUrl.searchParams.get("state");
   const error = request.nextUrl.searchParams.get("error");
 
   if (error) {
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/app/settings/integrations?error=${encodeURIComponent(error)}`
+      `${appUrl}/app/settings/integrations?error=${encodeURIComponent(error)}`
     );
   }
 
   if (!code || !stateParam) {
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/app/settings/integrations?error=missing_params`
+      `${appUrl}/app/settings/integrations?error=missing_params`
     );
   }
 
   const state = verifyState(stateParam);
   if (!state) {
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/app/settings/integrations?error=invalid_state`
+      `${appUrl}/app/settings/integrations?error=invalid_state`
     );
   }
 
   const connector = getConnector("gmail");
   if (!connector?.handleCallback) {
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/app/settings/integrations?error=connector_unavailable`
+      `${appUrl}/app/settings/integrations?error=connector_unavailable`
     );
   }
 
@@ -88,12 +89,12 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/app/settings/integrations?success=google`
+      `${appUrl}/app/settings/integrations?success=google`
     );
   } catch (err) {
     console.error("Google OAuth callback error:", err);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/app/settings/integrations?error=token_exchange_failed`
+      `${appUrl}/app/settings/integrations?error=token_exchange_failed`
     );
   }
 }

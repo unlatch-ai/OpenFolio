@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building2 } from "lucide-react";
+import { Building2, Plug } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -99,6 +99,31 @@ export default function SettingsPage() {
       </header>
 
       {/* Workspace Info */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-md bg-secondary flex items-center justify-center">
+              <Plug className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">Integrations</CardTitle>
+              <CardDescription>Connect Google and Microsoft data sources</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button asChild>
+            <Link href="/app/settings/integrations">Manage integrations</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/api/integrations/google/connect">Connect Google</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/api/integrations/microsoft/connect">Connect Microsoft</Link>
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
