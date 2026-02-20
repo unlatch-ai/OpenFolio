@@ -301,8 +301,12 @@ export type Database = {
           access_token_encrypted: string | null
           account_email: string | null
           account_name: string | null
+          auto_sync_enabled: boolean
+          auto_sync_time_local: string
+          auto_sync_timezone: string | null
           created_at: string | null
           id: string
+          last_sync_error: string | null
           last_synced_at: string | null
           metadata: Json | null
           provider: string
@@ -318,8 +322,12 @@ export type Database = {
           access_token_encrypted?: string | null
           account_email?: string | null
           account_name?: string | null
+          auto_sync_enabled?: boolean
+          auto_sync_time_local?: string
+          auto_sync_timezone?: string | null
           created_at?: string | null
           id?: string
+          last_sync_error?: string | null
           last_synced_at?: string | null
           metadata?: Json | null
           provider: string
@@ -335,8 +343,12 @@ export type Database = {
           access_token_encrypted?: string | null
           account_email?: string | null
           account_name?: string | null
+          auto_sync_enabled?: boolean
+          auto_sync_time_local?: string
+          auto_sync_timezone?: string | null
           created_at?: string | null
           id?: string
+          last_sync_error?: string | null
           last_synced_at?: string | null
           metadata?: Json | null
           provider?: string
@@ -1765,4 +1777,3 @@ export const Constants = {
     },
   },
 } as const
-

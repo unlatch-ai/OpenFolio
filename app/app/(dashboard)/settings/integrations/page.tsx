@@ -16,6 +16,10 @@ interface IntegrationData {
   integrationId: string | null;
   status: string;
   lastSyncedAt: string | null;
+  autoSyncEnabled: boolean;
+  autoSyncTimeLocal: string;
+  autoSyncTimezone: string | null;
+  lastSyncError: string | null;
 }
 
 export default function IntegrationsPage() {
@@ -23,6 +27,7 @@ export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<IntegrationData[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
+  const [savingAutoSyncIds, setSavingAutoSyncIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchIntegrations();
@@ -33,6 +38,9 @@ export default function IntegrationsPage() {
     const error = searchParams.get("error");
     if (success === "google") {
       toast.success("Google account connected successfully");
+    }
+    if (success === "microsoft") {
+      toast.success("Microsoft account connected successfully");
     }
     if (error) {
       toast.error(`Connection failed: ${error}`);
@@ -58,6 +66,15 @@ export default function IntegrationsPage() {
   async function handleConnect(connectorId: string) {
     if (connectorId === "gmail" || connectorId === "google-calendar" || connectorId === "google-contacts") {
       window.location.href = "/api/integrations/google/connect";
+      return;
+    }
+
+    if (
+      connectorId === "microsoft-mail" ||
+      connectorId === "microsoft-calendar" ||
+      connectorId === "microsoft-contacts"
+    ) {
+      window.location.href = "/api/integrations/microsoft/connect";
     }
   }
 
@@ -88,6 +105,52 @@ export default function IntegrationsPage() {
         const next = new Set(prev);
         next.delete(integrationId);
         return next;
+      });
+    }
+  }
+
+  async function saveAutoSync(
+    integrationId: string,
+    patch: Partial<Pick<IntegrationData, "autoSyncEnabled" | "autoSyncTimeLocal" | "autoSyncTimezone">>
+  ) {
+    const current = integrations.find((i) => i.integrationId === integrationId);
+    if (!current) return;
+
+    const next = {
+      autoSyncEnabled: patch.autoSyncEnabled ?? current.autoSyncEnabled,
+      autoSyncTimeLocal: patch.autoSyncTimeLocal ?? current.autoSyncTimeLocal,
+      autoSyncTimezone:
+        patch.autoSyncTimezone === undefined
+          ? current.autoSyncTimezone
+          : patch.autoSyncTimezone,
+    };
+
+    try {
+      setSavingAutoSyncIds((prev) => new Set([...prev, integrationId]));
+      const response = await apiFetch(`/api/integrations/${integrationId}/autosync`, {
+        method: "PATCH",
+        body: JSON.stringify(next),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: "Failed to save auto-sync settings" }));
+        throw new Error(error.error || "Failed to save auto-sync settings");
+      }
+
+      setIntegrations((prev) =>
+        prev.map((integration) =>
+          integration.integrationId === integrationId
+            ? { ...integration, ...next }
+            : integration
+        )
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save auto-sync settings");
+      fetchIntegrations();
+    } finally {
+      setSavingAutoSyncIds((prev) => {
+        const nextIds = new Set(prev);
+        nextIds.delete(integrationId);
+        return nextIds;
       });
     }
   }
@@ -152,6 +215,15 @@ export default function IntegrationsPage() {
                   ? syncingIds.has(integration.integrationId)
                   : false
               }
+              autoSyncEnabled={integration.autoSyncEnabled}
+              autoSyncTimeLocal={integration.autoSyncTimeLocal}
+              autoSyncTimezone={integration.autoSyncTimezone}
+              lastSyncError={integration.lastSyncError}
+              savingAutoSync={
+                integration.integrationId
+                  ? savingAutoSyncIds.has(integration.integrationId)
+                  : false
+              }
               onConnect={() => handleConnect(integration.id)}
               onDisconnect={
                 integration.integrationId
@@ -161,6 +233,30 @@ export default function IntegrationsPage() {
               onSync={
                 integration.integrationId
                   ? () => handleSync(integration.integrationId!)
+                  : undefined
+              }
+              onAutoSyncToggle={
+                integration.integrationId
+                  ? (enabled) =>
+                      saveAutoSync(integration.integrationId!, {
+                        autoSyncEnabled: enabled,
+                      })
+                  : undefined
+              }
+              onAutoSyncTimeChange={
+                integration.integrationId
+                  ? (value) =>
+                      saveAutoSync(integration.integrationId!, {
+                        autoSyncTimeLocal: value,
+                      })
+                  : undefined
+              }
+              onAutoSyncTimezoneChange={
+                integration.integrationId
+                  ? (value) =>
+                      saveAutoSync(integration.integrationId!, {
+                        autoSyncTimezone: value,
+                      })
                   : undefined
               }
             />

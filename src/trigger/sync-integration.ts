@@ -41,6 +41,7 @@ export const syncIntegration = task({
           ? decrypt(integration.refresh_token_encrypted)
           : undefined,
         cursor: (integration.sync_cursor as Record<string, unknown>) || {},
+        metadata: (integration.metadata as Record<string, unknown>) || {},
         workspaceId: payload.workspaceId,
       });
 
@@ -52,6 +53,8 @@ export const syncIntegration = task({
         .update({
           sync_cursor: result.cursor as never,
           last_synced_at: new Date().toISOString(),
+          status: "active",
+          last_sync_error: null,
         })
         .eq("id", integration.id);
 
@@ -84,6 +87,15 @@ export const syncIntegration = task({
           })
           .eq("id", syncLog.id);
       }
+
+      await supabase
+        .from("integrations")
+        .update({
+          status: "error",
+          last_sync_error:
+            error instanceof Error ? error.message : "Unknown error",
+        })
+        .eq("id", integration.id);
 
       throw error;
     }

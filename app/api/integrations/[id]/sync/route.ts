@@ -43,7 +43,12 @@ export async function POST(
   } catch (error) {
     console.error("Failed to trigger sync:", error);
     return NextResponse.json(
-      { error: "Failed to trigger sync" },
+      {
+        error:
+          error instanceof Error
+            ? `Failed to trigger sync: ${error.message}`
+            : "Failed to trigger sync",
+      },
       { status: 500 }
     );
   }

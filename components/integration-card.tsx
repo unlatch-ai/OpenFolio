@@ -10,6 +10,7 @@ import {
   Power,
   PowerOff,
   Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,9 +39,17 @@ export interface IntegrationCardProps {
   status?: "active" | "paused" | "error" | "disconnected";
   lastSyncedAt?: string | null;
   syncing?: boolean;
+  autoSyncEnabled?: boolean;
+  autoSyncTimeLocal?: string;
+  autoSyncTimezone?: string | null;
+  lastSyncError?: string | null;
+  savingAutoSync?: boolean;
   onConnect?: () => void;
   onDisconnect?: () => void;
   onSync?: () => void;
+  onAutoSyncToggle?: (enabled: boolean) => void;
+  onAutoSyncTimeChange?: (value: string) => void;
+  onAutoSyncTimezoneChange?: (value: string | null) => void;
 }
 
 const STATUS_VARIANTS: Record<
@@ -72,9 +81,17 @@ export function IntegrationCard({
   status = "disconnected",
   lastSyncedAt,
   syncing,
+  autoSyncEnabled = false,
+  autoSyncTimeLocal = "02:00",
+  autoSyncTimezone = null,
+  lastSyncError = null,
+  savingAutoSync = false,
   onConnect,
   onDisconnect,
   onSync,
+  onAutoSyncToggle,
+  onAutoSyncTimeChange,
+  onAutoSyncTimezoneChange,
 }: IntegrationCardProps) {
   const Icon = ICON_MAP[icon] || Plug;
   const statusInfo = STATUS_VARIANTS[status] || STATUS_VARIANTS.disconnected;
@@ -95,7 +112,48 @@ export function IntegrationCard({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center justify-between">
+        <div className="space-y-4">
+          {lastSyncError && isConnected && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="mt-0.5 h-3 w-3" />
+                <span className="line-clamp-2">{lastSyncError}</span>
+              </div>
+            </div>
+          )}
+          {isConnected && (
+            <div className="grid gap-2 md:grid-cols-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={autoSyncEnabled}
+                  onChange={(e) => onAutoSyncToggle?.(e.target.checked)}
+                  disabled={savingAutoSync}
+                />
+                Auto-sync daily
+              </label>
+              <input
+                type="time"
+                value={autoSyncTimeLocal}
+                onChange={(e) => onAutoSyncTimeChange?.(e.target.value)}
+                className="h-8 rounded-md border bg-background px-2 text-sm"
+                disabled={savingAutoSync}
+              />
+              <input
+                type="text"
+                value={autoSyncTimezone || ""}
+                onChange={(e) =>
+                  onAutoSyncTimezoneChange?.(
+                    e.target.value.trim() ? e.target.value.trim() : null
+                  )
+                }
+                placeholder="Timezone (e.g. America/New_York)"
+                className="h-8 rounded-md border bg-background px-2 text-sm"
+                disabled={savingAutoSync}
+              />
+            </div>
+          )}
+          <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
             {lastSyncedAt && isConnected && (
               <span>Last synced: {timeAgo(lastSyncedAt)}</span>
@@ -133,6 +191,7 @@ export function IntegrationCard({
               </Button>
             )}
           </div>
+        </div>
         </div>
       </CardContent>
     </Card>

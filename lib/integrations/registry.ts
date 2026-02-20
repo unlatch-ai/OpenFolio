@@ -3,6 +3,9 @@ import { csvConnector } from "./connectors/csv";
 import { gmailConnector } from "./connectors/gmail";
 import { googleCalendarConnector } from "./connectors/google-calendar";
 import { googleContactsConnector } from "./connectors/google-contacts";
+import { microsoftMailConnector } from "./connectors/microsoft-mail";
+import { microsoftCalendarConnector } from "./connectors/microsoft-calendar";
+import { microsoftContactsConnector } from "./connectors/microsoft-contacts";
 
 const connectors = new Map<string, IntegrationConnector>();
 
@@ -23,3 +26,6 @@ registerConnector(csvConnector);
 registerConnector(gmailConnector);
 registerConnector(googleCalendarConnector);
 registerConnector(googleContactsConnector);
+registerConnector(microsoftMailConnector);
+registerConnector(microsoftCalendarConnector);
+registerConnector(microsoftContactsConnector);

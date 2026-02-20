@@ -74,6 +74,9 @@ describe("Integration Registry", () => {
     const list = listConnectors();
     // Includes built-in csv connector + a + b
     expect(list.map((c) => c.id)).toContain("csv");
+    expect(list.map((c) => c.id)).toContain("microsoft-mail");
+    expect(list.map((c) => c.id)).toContain("microsoft-calendar");
+    expect(list.map((c) => c.id)).toContain("microsoft-contacts");
     expect(list.map((c) => c.id)).toContain("a");
     expect(list.map((c) => c.id)).toContain("b");
   });
@@ -504,6 +507,72 @@ Bob,bob@example.com`;
     expect(result.people[0].first_name).toBe("Alice");
     expect(result.people[0].last_name).toBe("Smith");
     expect(result.people[1].first_name).toBe("Bob");
+  });
+});
+
+describe("Microsoft Connectors", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("microsoft callback stores encrypted tokens shape", async () => {
+    const { microsoftMailConnector } = await import(
+      "@/lib/integrations/connectors/microsoft-mail"
+    );
+
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          expires_in: 3600,
+        }),
+        { status: 200 }
+      )
+    );
+
+    const result = await microsoftMailConnector.handleCallback!("auth-code");
+    expect(result.accessToken).toBe("access-token");
+    expect(result.refreshToken).toBe("refresh-token");
+    expect(result.expiresAt).toBeInstanceOf(Date);
+  });
+
+  it("falls back to full sync when contacts delta token is invalid", async () => {
+    const { microsoftContactsConnector } = await import(
+      "@/lib/integrations/connectors/microsoft-contacts"
+    );
+
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: { code: "SyncStateNotFound", message: "Delta token expired" },
+          }),
+          { status: 410 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            value: [],
+            "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/contacts/delta?$deltatoken=abc",
+          }),
+          { status: 200 }
+        )
+      );
+
+    const result = await microsoftContactsConnector.sync({
+      accessToken: "token",
+      cursor: { contactsDeltaLink: "stale-link" },
+      workspaceId: "ws-1",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.cursor).toEqual({
+      contactsDeltaLink:
+        "https://graph.microsoft.com/v1.0/me/contacts/delta?$deltatoken=abc",
+    });
   });
 });
 

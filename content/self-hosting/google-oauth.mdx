@@ -2,6 +2,13 @@
 
 To enable Gmail, Google Calendar, and Google Contacts sync, you need to set up Google OAuth credentials.
 
+## Who Sets This Up?
+
+- **Self-hosting admin** configures the OAuth app once (client ID + secret).
+- **End users** only click connect and authorize access in Google.
+- OpenFolio exchanges the auth code for tokens and stores encrypted tokens automatically.
+- End users do **not** create or paste OAuth tokens manually.
+
 ## Steps
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)

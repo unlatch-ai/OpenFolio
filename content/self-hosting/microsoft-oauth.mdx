@@ -1,0 +1,55 @@
+# Microsoft OAuth Setup
+
+To enable Microsoft Mail, Microsoft Calendar, and Microsoft Contacts sync, you need to set up Microsoft OAuth credentials in Azure.
+
+## Who Sets This Up?
+
+- **Self-hosting admin** configures the OAuth app once (client ID + secret).
+- **End users** only click connect and authorize access in Microsoft.
+- OpenFolio exchanges the auth code for tokens and stores encrypted tokens automatically.
+- End users do **not** create or paste OAuth tokens manually.
+
+## Steps
+
+1. Go to [Azure Portal](https://portal.azure.com/)
+2. Open **Microsoft Entra ID** > **App registrations** > **New registration**
+3. Choose account type:
+   - Multi-tenant: use `MICROSOFT_TENANT_ID=common`
+   - Single-tenant: set `MICROSOFT_TENANT_ID=<your-tenant-id>`
+4. Add redirect URI (Web):
+   ```
+   http://localhost:3000/api/integrations/microsoft/callback
+   ```
+5. Under **API permissions**, add delegated permissions:
+   - `User.Read`
+   - `Contacts.Read`
+   - `Mail.Read`
+   - `Calendars.Read`
+   - `offline_access`
+6. Create a client secret under **Certificates & secrets**
+7. Copy the Application (client) ID and client secret value
+
+## Configuration
+
+Add credentials to your `.env` file:
+
+```env
+MICROSOFT_CLIENT_ID=your-client-id
+MICROSOFT_CLIENT_SECRET=your-client-secret
+# optional (defaults to common)
+MICROSOFT_TENANT_ID=common
+```
+
+Restart the app:
+
+```bash
+docker compose restart app
+```
+
+## Custom Domain
+
+If running on a custom domain, update redirect URI in Azure to:
+
+```
+https://your-domain.com/api/integrations/microsoft/callback
+```

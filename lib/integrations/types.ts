@@ -61,6 +61,7 @@ export interface IntegrationConnector {
     accessToken?: string;
     refreshToken?: string;
     cursor: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
     workspaceId: string;
   }): Promise<SyncResult>;
 

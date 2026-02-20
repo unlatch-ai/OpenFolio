@@ -6,7 +6,7 @@ Run OpenFolio on your own infrastructure using Docker Compose.
 
 - Docker and Docker Compose
 - An OpenAI API key (for embeddings and AI features)
-- (Optional) Google OAuth credentials for Gmail/Calendar sync
+- (Optional) Google and Microsoft OAuth credentials for contact source sync
 
 ## Quick Start
 
@@ -50,6 +50,18 @@ The setup script generates:
 2. OpenFolio auto-bootstraps a local singleton user + personal workspace on first app/API request
 3. You are routed straight into `/app` (no signup/login/onboarding screens)
 4. Start importing contacts or connecting integrations
+
+## OAuth Integrations
+
+For Google and Microsoft connectors in self-hosted mode:
+- The instance admin configures OAuth client credentials once.
+- Users connect via the UI and grant consent.
+- OpenFolio exchanges and stores encrypted tokens automatically.
+- Users do not manually create tokens.
+
+Setup guides:
+- [Google OAuth Setup](/docs/self-hosting/google-oauth)
+- [Microsoft OAuth Setup](/docs/self-hosting/microsoft-oauth)
 
 ## Self-Hosted Behavior
 
