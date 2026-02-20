@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext, isWorkspaceContextError, requireOwner } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // GET /api/workspace - Get current user's workspace
 export async function GET(request: NextRequest) {
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: ctx.error }, { status: ctx.status });
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // Get workspace details
     const { data: workspace, error: workspaceError } = await supabase
@@ -47,7 +47,7 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const { name, description, website, logo_url, custom_instructions } = body;
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const hasWorkspaceUpdates = [name, description, website, logo_url].some(
       (value) => value !== undefined
