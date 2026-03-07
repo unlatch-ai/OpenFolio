@@ -7,6 +7,7 @@ const withNextra = nextra({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  transpilePackages: ["@openfolio/hosted", "@openfolio/shared-types"],
 };
 
 export default withNextra(nextConfig);
