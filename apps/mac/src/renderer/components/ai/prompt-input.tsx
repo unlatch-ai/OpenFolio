@@ -14,7 +14,7 @@ export function PromptInput({
   disabled?: boolean;
 }) {
   return (
-    <div className="space-y-3 rounded-[24px] border border-[rgba(45,37,24,0.08)] bg-white/75 p-4">
+    <div className="space-y-3 rounded-lg border border-border bg-card p-4">
       <Textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -22,7 +22,7 @@ export function PromptInput({
         className="min-h-[112px] resize-none border-none bg-transparent px-0 py-0 focus:border-none"
       />
       <div className="flex items-center justify-between">
-        <p className="text-xs text-[#6f6557]">AI Elements-style surface, backed by the local OpenFolio runtime.</p>
+        <p className="text-xs text-muted-foreground">AI Elements-style surface, backed by the local OpenFolio runtime.</p>
         <Button onClick={onSubmit} disabled={disabled || value.trim().length === 0}>
           Ask
           <SendHorizonal size={15} />

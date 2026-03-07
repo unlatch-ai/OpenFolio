@@ -1,5 +1,11 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { Space_Grotesk } from "next/font/google";
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space-grotesk",
+});
 
 export const metadata: Metadata = {
   title: "OpenFolio",
@@ -9,7 +15,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className={`${spaceGrotesk.variable} font-[family-name:var(--font-space-grotesk)] bg-background text-foreground antialiased`}>
+        {children}
+      </body>
     </html>
   );
 }

@@ -2,7 +2,7 @@ import { app, dialog, type BrowserWindow, type MessageBoxOptions } from "electro
 import electronUpdater from "electron-updater";
 import type { AppUpdater, ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from "electron-updater";
 import type { UpdateState } from "@openfolio/shared-types";
-import { createInitialUpdateState, isAutoUpdateSupported } from "./updater-state";
+import { createInitialUpdateState, formatUpdateError, isAutoUpdateSupported, isMissingPublishedReleaseError } from "./updater-state";
 
 const { autoUpdater } = electronUpdater;
 
@@ -75,12 +75,7 @@ export class OpenFolioUpdater {
     });
 
     autoUpdater.on("error", (error) => {
-      this.log("error", error?.message || error);
-      this.setState({
-        status: "error",
-        checkedAt: Date.now(),
-        message: error?.message || "Failed to check for updates.",
-      });
+      this.handleError(error);
     });
 
     setTimeout(() => {
@@ -103,7 +98,11 @@ export class OpenFolioUpdater {
       return this.state;
     }
 
-    await autoUpdater.checkForUpdates();
+    try {
+      await autoUpdater.checkForUpdates();
+    } catch (error) {
+      this.handleError(error);
+    }
     return this.state;
   }
 
@@ -186,6 +185,27 @@ export class OpenFolioUpdater {
     if (result.response === 1) {
       this.installNow();
     }
+  }
+
+  private handleError(error: unknown) {
+    this.log("error", error);
+    if (isMissingPublishedReleaseError(error)) {
+      this.setState({
+        status: "not-available",
+        checkedAt: Date.now(),
+        availableVersion: null,
+        downloadedVersion: null,
+        progress: null,
+        message: "You are on the latest version of OpenFolio.",
+      });
+      return;
+    }
+
+    this.setState({
+      status: "error",
+      checkedAt: Date.now(),
+      message: formatUpdateError(error),
+    });
   }
 }
 
