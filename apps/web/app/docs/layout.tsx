@@ -23,7 +23,7 @@ export default async function DocsLayout({ children }: { children: ReactNode }) 
       footer={<Footer>AGPL-3.0 {new Date().getFullYear()} OpenFolio</Footer>}
       search={<Search />}
       pageMap={pageMap}
-      docsRepositoryBase="https://github.com/unlatch-ai/OpenFolio/tree/main/apps/web/content"
+      docsRepositoryBase="https://github.com/unlatch-ai/OpenFolio/tree/main/apps/web"
       editLink="Edit this page on GitHub"
       sidebar={{ defaultMenuCollapseLevel: 1 }}
       toc={{ backToTop: true }}
