@@ -18,7 +18,7 @@
     "test": "vitest run test"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.18.1",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@openfolio/core": "workspace:*",
     "@openfolio/shared-types": "workspace:*",
     "commander": "^14.0.1",
