@@ -18,6 +18,7 @@ OpenFolio is now a macOS-first monorepo.
 - Treat account creation as optional for local app entry and required only for hosted entitlements.
 - Do not add raw Messages backup or cloud sync by default.
 - Keep hosted code physically separated under `packages/hosted`.
+- When cutting a macOS release tag, keep `apps/mac/package.json` in sync with the `v*` tag or the signing workflow will publish to the wrong GitHub release.
 
 ## Commands
 
