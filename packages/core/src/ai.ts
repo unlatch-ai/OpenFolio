@@ -24,13 +24,18 @@ export class AIOrchestrator {
       return null;
     }
 
-    const client = new OpenAI({ apiKey: this.config.apiKey });
-    const response = await client.embeddings.create({
-      model: this.config.embeddingModel || process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small",
-      input
-    });
+    try {
+      const client = new OpenAI({ apiKey: this.config.apiKey });
+      const response = await client.embeddings.create({
+        model: this.config.embeddingModel || process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small",
+        input
+      });
 
-    return response.data[0]?.embedding ?? null;
+      return response.data[0]?.embedding ?? null;
+    } catch (error) {
+      console.error("[openfolio-ai] Embedding failed:", error instanceof Error ? error.message : error);
+      return null;
+    }
   }
 
   async embedDocuments(documents: SearchDocumentRecord[]) {
@@ -38,14 +43,19 @@ export class AIOrchestrator {
       return [];
     }
 
-    const client = new OpenAI({ apiKey: this.config.apiKey });
-    const model = this.getEmbeddingMetadata().model;
-    const response = await client.embeddings.create({
-      model,
-      input: documents.map((document) => normalizeDocumentForEmbedding(document)),
-    });
+    try {
+      const client = new OpenAI({ apiKey: this.config.apiKey });
+      const model = this.getEmbeddingMetadata().model;
+      const response = await client.embeddings.create({
+        model,
+        input: documents.map((document) => normalizeDocumentForEmbedding(document)),
+      });
 
-    return response.data.map((entry) => entry.embedding);
+      return response.data.map((entry) => entry.embedding);
+    } catch (error) {
+      console.error("[openfolio-ai] Batch embedding failed:", error instanceof Error ? error.message : error);
+      return [];
+    }
   }
 
   async answer(question: string, results: SearchResult[]): Promise<AskResponse> {
@@ -62,27 +72,36 @@ export class AIOrchestrator {
       };
     }
 
-    const client = new OpenAI({ apiKey: this.config.apiKey });
-    const prompt = [
-      "You are OpenFolio AI, a local-first relationship assistant.",
-      "Answer the question using only the provided context.",
-      "If the answer is uncertain, say so clearly.",
-      "",
-      `Question: ${question}`,
-      "",
-      "Context:",
-      formatContext(results),
-    ].join("\n");
+    try {
+      const client = new OpenAI({ apiKey: this.config.apiKey });
+      const prompt = [
+        "You are OpenFolio AI, a local-first relationship assistant.",
+        "Answer the question using only the provided context.",
+        "If the answer is uncertain, say so clearly.",
+        "",
+        `Question: ${question}`,
+        "",
+        "Context:",
+        formatContext(results),
+      ].join("\n");
 
-    const response = await client.responses.create({
-      model: this.config.model || process.env.OPENAI_MODEL || "gpt-5-mini",
-      input: prompt
-    });
+      const response = await client.responses.create({
+        model: this.config.model || process.env.OPENAI_MODEL || "gpt-5-mini",
+        input: prompt
+      });
 
-    return {
-      answer: response.output_text || "No answer returned.",
-      citations: results.slice(0, 5),
-      provider: "openai"
-    };
+      return {
+        answer: response.output_text || "No answer returned.",
+        citations: results.slice(0, 5),
+        provider: "openai"
+      };
+    } catch (error) {
+      console.error("[openfolio-ai] Answer generation failed:", error instanceof Error ? error.message : error);
+      return {
+        answer: `AI query failed: ${error instanceof Error ? error.message : "Unknown error"}. Showing local results instead.`,
+        citations: results.slice(0, 5),
+        provider: "local"
+      };
+    }
   }
 }

@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, safeStorage, shell } from "electron";
+import fs from "node:fs";
+import { app, BrowserWindow, ipcMain, nativeImage, safeStorage, shell } from "electron";
 import { createServer, type Server } from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -21,7 +22,7 @@ const updater = new OpenFolioUpdater(() => mainWindow, (...args) => {
   logAppDebug("updates", ...args);
 });
 const cloudConfig: CloudRuntimeConfig = {
-  convexUrl: process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || "https://blessed-pig-525.convex.cloud",
+  convexUrl: process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || null,
   hostedBaseUrl: process.env.SITE_URL || process.env.OPENFOLIO_SITE_URL || "http://localhost:3000",
   deviceName: os.hostname(),
   platform: process.platform,
@@ -58,7 +59,8 @@ function readConnectorAccounts(): ConnectorAccount[] {
   try {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed as ConnectorAccount[] : [];
-  } catch {
+  } catch (error) {
+    console.error("[openfolio] Failed to parse connector accounts:", error);
     return [];
   }
 }
@@ -89,6 +91,9 @@ async function saveConnectorCredential(input: ConnectorCredential) {
     scopes: input.scopes,
     label: input.label,
   });
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.warn("[openfolio] Keychain encryption unavailable — credentials will be stored in plaintext.");
+  }
   const storedValue = safeStorage.isEncryptionAvailable()
     ? safeStorage.encryptString(rawValue).toString("base64")
     : rawValue;
@@ -119,8 +124,35 @@ function focusWindow() {
   mainWindow.focus();
 }
 
+function setDockIcon() {
+  if (process.platform !== "darwin" || app.isPackaged) {
+    return;
+  }
+
+  const iconPath = path.join(app.getAppPath(), "build", "icon.png");
+  const icon = nativeImage.createFromPath(iconPath);
+  if (!icon.isEmpty()) {
+    app.dock?.setIcon(icon);
+  }
+}
+
+function isValidAuthCallbackUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "openfolio:" && parsed.pathname === "//auth/callback";
+  } catch {
+    return false;
+  }
+}
+
 function dispatchAuthCallback(url: string) {
   logAuthDebug("dispatchAuthCallback", url);
+
+  if (!isValidAuthCallbackUrl(url)) {
+    logAuthDebug("rejected invalid auth callback URL", url);
+    return;
+  }
+
   pendingAuthCallbackUrl = url;
   focusWindow();
 
@@ -131,15 +163,75 @@ function dispatchAuthCallback(url: string) {
   }
 }
 
-function withDevMessagesHint(status: MessagesAccessStatus): MessagesAccessStatus {
-  if (app.isPackaged || status.status !== "denied") {
+function findAppBundlePath(executablePath: string) {
+  let currentPath = executablePath;
+
+  for (let attempts = 0; attempts < 8; attempts += 1) {
+    if (currentPath.endsWith(".app")) {
+      return currentPath;
+    }
+
+    const parentPath = path.dirname(currentPath);
+    if (parentPath === currentPath) {
+      break;
+    }
+
+    currentPath = parentPath;
+  }
+
+  return null;
+}
+
+function getMessagesAccessTarget() {
+  const packagedAppBundlePath = findAppBundlePath(app.getPath("exe"));
+  if (packagedAppBundlePath && fs.existsSync(packagedAppBundlePath)) {
+    return {
+      label: path.basename(packagedAppBundlePath),
+      revealPath: packagedAppBundlePath,
+    };
+  }
+
+  return {
+    label: path.basename(process.execPath),
+    revealPath: process.execPath,
+  };
+}
+
+function withMessagesAccessGuidance(
+  status: MessagesAccessStatus,
+  options?: {
+    revealedInFinder?: boolean;
+  },
+): MessagesAccessStatus {
+  if (status.status !== "denied") {
     return status;
+  }
+
+  const target = getMessagesAccessTarget();
+  let details = `${status.details} macOS does not show a native Full Disk Access prompt for this database. Open System Settings > Privacy & Security > Full Disk Access, click +, add ${target.label}, and relaunch OpenFolio.`;
+
+  if (options?.revealedInFinder) {
+    details += ` ${target.label} has been revealed in Finder so you can pick it from the + dialog.`;
+  }
+
+  if (!app.isPackaged) {
+    details += ` In development, grant Full Disk Access to Electron at ${process.execPath}. If access is still denied, also grant Full Disk Access to your terminal app and relaunch both.`;
   }
 
   return {
     ...status,
-    details: `${status.details} In development, grant Full Disk Access to Electron at ${process.execPath}. If access is still denied, also grant Full Disk Access to your terminal app and relaunch both.`,
+    details,
   };
+}
+
+function revealMessagesAccessTargetInFinder() {
+  const target = getMessagesAccessTarget();
+  if (!fs.existsSync(target.revealPath)) {
+    return false;
+  }
+
+  shell.showItemInFolder(target.revealPath);
+  return true;
 }
 
 async function stopAuthCallbackServer() {
@@ -251,7 +343,7 @@ function createWindow() {
     titleBarStyle: "hiddenInset",
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.mjs"),
-      sandbox: false,
+      sandbox: true,
     },
   });
   mainWindow = browserWindow;
@@ -311,6 +403,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  setDockIcon();
   createWindow();
   updater.initialize();
 
@@ -329,34 +422,33 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   updater.dispose();
-  void stopAuthCallbackServer().catch(() => {});
+  void stopAuthCallbackServer().catch((error) => {
+    console.warn("[openfolio] Auth callback server cleanup failed:", error);
+  });
 });
 
 const api: OpenFolioBridge = {
-  db: {
-    query: async (sql: string) => {
-      logAppDebug("db", "query", sql);
-      const result = core.db.rawQuery(sql);
-      logAppDebug("db", "queryRows", result.length);
-      return result;
+  dashboard: {
+    getThreadSummaries: async (limit?: number) => {
+      logAppDebug("dashboard", "getThreadSummaries", { limit });
+      return core.getThreadSummaries(limit);
     },
-    mutate: async (sql: string) => {
-      logAppDebug("db", "mutate", sql);
-      const result = core.db.rawMutate(sql);
-      logAppDebug("db", "mutateResult", result);
-      return result;
+    getReminderSuggestions: async (limit?: number) => {
+      logAppDebug("dashboard", "getReminderSuggestions", { limit });
+      return core.getReminderSuggestions(limit);
     },
   },
   messages: {
     requestAccess: async () => {
       logAppDebug("messages", "requestAccess");
       await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles");
-      const status = withDevMessagesHint(core.getMessagesAccessStatus());
+      const revealedInFinder = revealMessagesAccessTargetInFinder();
+      const status = withMessagesAccessGuidance(core.getMessagesAccessStatus(), { revealedInFinder });
       logAppDebug("messages", "requestAccessResult", status);
       return status;
     },
     getAccessStatus: async () => {
-      const status = withDevMessagesHint(core.getMessagesAccessStatus());
+      const status = withMessagesAccessGuidance(core.getMessagesAccessStatus());
       logAppDebug("messages", "getAccessStatus", status);
       return status;
     },
@@ -393,6 +485,10 @@ const api: OpenFolioBridge = {
     beginAuthSession: async () => beginAuthSession(),
     openExternal: async (url: string) => {
       logAppDebug("cloud", "openExternal", url);
+      const parsed = new URL(url);
+      if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && parsed.hostname === "127.0.0.1")) {
+        throw new Error(`Refusing to open URL with disallowed scheme: ${parsed.protocol}`);
+      }
       await shell.openExternal(url);
     },
     onAuthCallback: () => () => {},
@@ -449,23 +545,36 @@ const api: OpenFolioBridge = {
   },
 };
 
-ipcMain.handle("openfolio:db:query", (_, sql: string) => api.db.query(sql));
-ipcMain.handle("openfolio:db:mutate", (_, sql: string) => api.db.mutate(sql));
-ipcMain.handle("openfolio:messages:requestAccess", async (): Promise<MessagesAccessStatus> => api.messages.requestAccess());
-ipcMain.handle("openfolio:messages:getAccessStatus", () => api.messages.getAccessStatus());
-ipcMain.handle("openfolio:messages:startImport", () => api.messages.startImport());
-ipcMain.handle("openfolio:messages:getImportStatus", (_, jobId: string) => api.messages.getImportStatus(jobId));
-ipcMain.handle("openfolio:search:query", (_, input: { text: string; limit?: number }) => api.search.query(input));
-ipcMain.handle("openfolio:ai:run", (_, input: { query: string; useHosted?: boolean }) => api.ai.run(input));
-ipcMain.handle("openfolio:cloud:getConfig", () => api.cloud.getConfig());
-ipcMain.handle("openfolio:cloud:beginAuthSession", () => api.cloud.beginAuthSession());
-ipcMain.handle("openfolio:cloud:openExternal", (_, url: string) => api.cloud.openExternal(url));
-ipcMain.handle("openfolio:connectors:listAccounts", () => api.connectorCredentials.listAccounts());
-ipcMain.handle("openfolio:connectors:saveCredential", (_, input: ConnectorCredential) => api.connectorCredentials.saveCredential(input));
-ipcMain.handle("openfolio:connectors:deleteCredential", (_, input: { provider: ConnectorCredential["provider"]; accountId: string }) => api.connectorCredentials.deleteCredential(input));
-ipcMain.handle("openfolio:updates:getState", () => api.updates.getState());
-ipcMain.handle("openfolio:updates:checkNow", () => api.updates.checkNow());
-ipcMain.handle("openfolio:updates:installNow", () => api.updates.installNow());
-ipcMain.handle("openfolio:mcp:getStatus", () => api.mcp.getStatus());
-ipcMain.handle("openfolio:mcp:start", () => api.mcp.start());
-ipcMain.handle("openfolio:mcp:stop", () => api.mcp.stop());
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function safeHandle(channel: string, handler: (...args: any[]) => unknown) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ipcMain.handle(channel, async (...args: any[]) => {
+    try {
+      return await handler(...args);
+    } catch (error) {
+      console.error(`[openfolio-ipc] ${channel} failed:`, error);
+      throw new Error(`${channel}: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  });
+}
+
+safeHandle("openfolio:dashboard:getThreadSummaries", (_, limit?: number) => api.dashboard.getThreadSummaries(limit));
+safeHandle("openfolio:dashboard:getReminderSuggestions", (_, limit?: number) => api.dashboard.getReminderSuggestions(limit));
+safeHandle("openfolio:messages:requestAccess", () => api.messages.requestAccess());
+safeHandle("openfolio:messages:getAccessStatus", () => api.messages.getAccessStatus());
+safeHandle("openfolio:messages:startImport", () => api.messages.startImport());
+safeHandle("openfolio:messages:getImportStatus", (_, jobId: string) => api.messages.getImportStatus(jobId));
+safeHandle("openfolio:search:query", (_, input: { text: string; limit?: number }) => api.search.query(input));
+safeHandle("openfolio:ai:run", (_, input: { query: string; useHosted?: boolean }) => api.ai.run(input));
+safeHandle("openfolio:cloud:getConfig", () => api.cloud.getConfig());
+safeHandle("openfolio:cloud:beginAuthSession", () => api.cloud.beginAuthSession());
+safeHandle("openfolio:cloud:openExternal", (_, url: string) => api.cloud.openExternal(url));
+safeHandle("openfolio:connectors:listAccounts", () => api.connectorCredentials.listAccounts());
+safeHandle("openfolio:connectors:saveCredential", (_, input: ConnectorCredential) => api.connectorCredentials.saveCredential(input));
+safeHandle("openfolio:connectors:deleteCredential", (_, input: { provider: ConnectorCredential["provider"]; accountId: string }) => api.connectorCredentials.deleteCredential(input));
+safeHandle("openfolio:updates:getState", () => api.updates.getState());
+safeHandle("openfolio:updates:checkNow", () => api.updates.checkNow());
+safeHandle("openfolio:updates:installNow", () => api.updates.installNow());
+safeHandle("openfolio:mcp:getStatus", () => api.mcp.getStatus());
+safeHandle("openfolio:mcp:start", () => api.mcp.start());
+safeHandle("openfolio:mcp:stop", () => api.mcp.stop());

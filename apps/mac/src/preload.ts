@@ -2,9 +2,9 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { OpenFolioBridge } from "@openfolio/shared-types";
 
 const bridge: OpenFolioBridge = {
-  db: {
-    query: (sql: string) => ipcRenderer.invoke("openfolio:db:query", sql),
-    mutate: (sql: string) => ipcRenderer.invoke("openfolio:db:mutate", sql),
+  dashboard: {
+    getThreadSummaries: (limit?: number) => ipcRenderer.invoke("openfolio:dashboard:getThreadSummaries", limit),
+    getReminderSuggestions: (limit?: number) => ipcRenderer.invoke("openfolio:dashboard:getReminderSuggestions", limit),
   },
   messages: {
     requestAccess: () => ipcRenderer.invoke("openfolio:messages:requestAccess"),

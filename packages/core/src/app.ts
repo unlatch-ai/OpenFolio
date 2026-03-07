@@ -65,7 +65,9 @@ export class OpenFolioCore {
   addNote(entityType: "person" | "thread" | "group", entityId: string, content: string) {
     const note = this.db.createNote(entityType, entityId, content);
     this.db.refreshSearchDocuments({ notes: [note.id] });
-    void this.syncDirtySearchDocuments();
+    void this.syncDirtySearchDocuments().catch((error) => {
+      console.error("[openfolio-core] Background embedding sync failed:", error);
+    });
     return note;
   }
 
@@ -75,13 +77,17 @@ export class OpenFolioCore {
       reminders: [reminder.id],
       people: personId ? [personId] : [],
     });
-    void this.syncDirtySearchDocuments();
+    void this.syncDirtySearchDocuments().catch((error) => {
+      console.error("[openfolio-core] Background embedding sync failed:", error);
+    });
     return reminder;
   }
 
   applyConnectorSync(result: ConnectorSyncResult) {
     const summary = this.db.applyConnectorSync(result);
-    void this.syncDirtySearchDocuments();
+    void this.syncDirtySearchDocuments().catch((error) => {
+      console.error("[openfolio-core] Background embedding sync failed:", error);
+    });
     return summary;
   }
 

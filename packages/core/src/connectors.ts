@@ -63,6 +63,7 @@ export const googleContactsConnector: LocalConnector = {
     const client = getFetch(fetchImpl);
     const people: NormalizedConnectorPerson[] = [];
     let pageToken: string | undefined;
+    let finalSyncToken: string | undefined;
     const syncToken = typeof cursor.syncToken === "string" ? cursor.syncToken : undefined;
 
     do {
@@ -101,6 +102,9 @@ export const googleContactsConnector: LocalConnector = {
       };
 
       pageToken = data.nextPageToken;
+      if (data.nextSyncToken) {
+        finalSyncToken = data.nextSyncToken;
+      }
 
       for (const contact of data.connections ?? []) {
         const name = contact.names?.[0];
@@ -126,21 +130,12 @@ export const googleContactsConnector: LocalConnector = {
           sourceId: contact.resourceName,
         });
       }
-
-      if (data.nextSyncToken) {
-        return {
-          people,
-          interactions: [],
-          cursor: { syncToken: data.nextSyncToken },
-          hasMore: false,
-        };
-      }
     } while (pageToken);
 
     return {
       people,
       interactions: [],
-      cursor,
+      cursor: finalSyncToken ? { syncToken: finalSyncToken } : cursor,
       hasMore: false,
     };
   },
@@ -158,6 +153,10 @@ async function fetchGmailMessage(accessToken: string, messageId: string, fetchIm
   );
 
   if (!response.ok) {
+    console.warn(`[openfolio-gmail] Failed to fetch message ${messageId}: HTTP ${response.status}`);
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`Gmail access denied (HTTP ${response.status}). Your access token may have expired.`);
+    }
     return null;
   }
 
@@ -238,8 +237,11 @@ export const gmailConnector: LocalConnector = {
     const people = new Map<string, NormalizedConnectorPerson>();
     const interactions: NormalizedConnectorInteraction[] = [];
 
-    for (const stub of listing.messages ?? []) {
-      const message = await fetchGmailMessage(accessToken, stub.id, fetchImpl);
+    const messages = await Promise.all(
+      (listing.messages ?? []).map((stub) => fetchGmailMessage(accessToken, stub.id, fetchImpl))
+    );
+
+    for (const message of messages) {
       if (!message) {
         continue;
       }

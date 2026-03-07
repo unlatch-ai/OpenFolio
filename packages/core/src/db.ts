@@ -43,7 +43,8 @@ function parseEmbedding(value: unknown): number[] | null {
     if (Array.isArray(parsed) && parsed.every((item) => typeof item === "number")) {
       return parsed;
     }
-  } catch {
+  } catch (error) {
+    console.warn("[openfolio-db] Failed to parse embedding:", error);
     return null;
   }
 
@@ -264,16 +265,6 @@ export class OpenFolioDatabase {
       notes: this.db.prepare("SELECT id FROM notes").all().map((row) => String((row as { id: string }).id)),
       reminders: this.db.prepare("SELECT id FROM reminders").all().map((row) => String((row as { id: string }).id)),
     } satisfies SearchTargets;
-  }
-
-  rawQuery(sql: string) {
-    const statement = this.db.prepare(sql);
-    return statement.all() as Record<string, unknown>[];
-  }
-
-  rawMutate(sql: string) {
-    const result = this.db.prepare(sql).run();
-    return { changes: Number(result.changes) };
   }
 
   getSetting(key: string) {
@@ -963,15 +954,16 @@ export class OpenFolioDatabase {
           .all(safeQuery, limit * 3) as Array<Record<string, unknown>>)
       : [];
 
+    const escapedQuery = query.replace(/[%_]/g, (char) => `\\${char}`);
     const fallbackRows = rows.length === 0
       ? (this.db
           .prepare(`
             SELECT id, kind, entity_id AS entityId, title, content, embedding, 0 AS textScore
             FROM search_documents
-            WHERE title LIKE ? OR content LIKE ?
+            WHERE title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'
             LIMIT ?
           `)
-          .all(`%${query}%`, `%${query}%`, limit * 3) as Array<Record<string, unknown>>)
+          .all(`%${escapedQuery}%`, `%${escapedQuery}%`, limit * 3) as Array<Record<string, unknown>>)
       : rows;
 
     const ranked = fallbackRows.map((row) => {

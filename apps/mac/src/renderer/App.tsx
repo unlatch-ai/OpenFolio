@@ -13,13 +13,23 @@ import type {
   SearchResult,
   UpdateState,
 } from "@openfolio/shared-types";
-import { Bot, Database, Download, KeyRound, LogOut, MessageSquare, RefreshCw, Search, ShieldCheck } from "lucide-react";
-import { Conversation, ConversationMessage } from "@/renderer/components/ai/conversation";
-import { PromptInput } from "@/renderer/components/ai/prompt-input";
-import { ResponsePanel } from "@/renderer/components/ai/response";
+import {
+  Bot,
+  Database,
+  Download,
+  KeyRound,
+  LogOut,
+  MessageSquare,
+  RefreshCw,
+  Search,
+  Shield,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/renderer/components/ui/card";
+import { Input } from "@/renderer/components/ui/input";
 
 declare global {
   interface Window {
@@ -71,6 +81,56 @@ function logStoredAuthKeys() {
         preview: value ? `${value.slice(0, 24)}...` : null,
       })),
     ),
+  );
+}
+
+/* ─── Sidebar section ─── */
+function SidebarSection({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: typeof Shield;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+        <Icon size={14} className="text-muted-foreground" />
+        {title}
+      </div>
+      <div className="space-y-2 text-sm">{children}</div>
+    </div>
+  );
+}
+
+/* ─── Conversation message ─── */
+function ConversationBubble({ role, children }: { role: "assistant" | "user"; children: React.ReactNode }) {
+  return (
+    <div
+      className={`max-w-[88%] rounded-lg px-4 py-3 text-sm leading-relaxed ${
+        role === "assistant"
+          ? "bg-muted text-foreground"
+          : "ml-auto bg-primary text-primary-foreground"
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* ─── Search result ─── */
+function SearchResultItem({ result }: { result: SearchResult }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/50 px-4 py-3 space-y-1">
+      <div className="flex items-center justify-between">
+        <Badge variant="secondary">{result.kind}</Badge>
+        <span className="text-[11px] text-muted-foreground tabular-nums">{result.score.toFixed(2)}</span>
+      </div>
+      <p className="text-sm font-medium text-foreground">{result.title}</p>
+      <p className="text-sm text-muted-foreground leading-relaxed">{result.snippet}</p>
+    </div>
   );
 }
 
@@ -141,29 +201,14 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
     const [nextMessages, nextMcp, nextThreads, nextSuggestions] = await Promise.all([
       window.openfolio.messages.getAccessStatus(),
       window.openfolio.mcp.getStatus(),
-      window.openfolio.db.query("SELECT id AS threadId, COALESCE(display_name, 'Message Thread') AS title, '' AS participantHandles, '' AS lastMessagePreview, last_message_at AS lastMessageAt FROM message_threads ORDER BY last_message_at DESC LIMIT 5"),
-      window.openfolio.db.query(`
-        SELECT personId, displayName, reason, suggestedDueAt
-        FROM (
-          SELECT
-            p.id AS personId,
-            p.display_name AS displayName,
-            'No recent follow-up detected.' AS reason,
-            COALESCE(MAX(mm.occurred_at), CAST(strftime('%s','now') AS INTEGER) * 1000) + 604800000 AS suggestedDueAt
-          FROM people p
-          LEFT JOIN message_participants mp ON mp.person_id = p.id
-          LEFT JOIN message_messages mm ON mm.thread_id = mp.thread_id
-          GROUP BY p.id
-          ORDER BY MAX(mm.occurred_at) ASC
-          LIMIT 5
-        )
-      `),
+      window.openfolio.dashboard.getThreadSummaries(5),
+      window.openfolio.dashboard.getReminderSuggestions(5),
     ]);
 
     setMessagesStatus(nextMessages);
     setMcpRunning(nextMcp.running);
-    setThreads(nextThreads as MessagesThreadSummary[]);
-    setSuggestions(nextSuggestions as ReminderSuggestion[]);
+    setThreads(nextThreads);
+    setSuggestions(nextSuggestions);
   }
 
   useEffect(() => {
@@ -225,6 +270,11 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
           content: `Imported ${job.importedMessages} messages across ${job.importedThreads} threads and ${job.importedPeople} people.`,
         },
       ]);
+    } catch (error) {
+      setConversation((current) => [
+        ...current,
+        { id: `error-${Date.now()}`, role: "assistant", content: `Import failed: ${error instanceof Error ? error.message : "Unknown error"}` },
+      ]);
     } finally {
       setBusy(false);
     }
@@ -248,16 +298,25 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
       setAnswer(askResponse);
       setConversation((current) => [...current, { id: `assistant-${Date.now()}`, role: "assistant", content: askResponse.answer }]);
       setQuery("");
+    } catch (error) {
+      setConversation((current) => [
+        ...current,
+        { id: `error-${Date.now()}`, role: "assistant", content: `Search failed: ${error instanceof Error ? error.message : "Unknown error"}` },
+      ]);
     } finally {
       setBusy(false);
     }
   }
 
   async function toggleMcp() {
-    const status = mcpRunning
-      ? await window.openfolio.mcp.stop()
-      : await window.openfolio.mcp.start();
-    setMcpRunning(status.running);
+    try {
+      const status = mcpRunning
+        ? await window.openfolio.mcp.stop()
+        : await window.openfolio.mcp.start();
+      setMcpRunning(status.running);
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : "Failed to toggle MCP.");
+    }
   }
 
   async function handleSignOut() {
@@ -271,12 +330,20 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
   }
 
   async function checkForUpdates() {
-    const nextState = await window.openfolio.updates.checkNow();
-    setUpdateState(nextState);
+    try {
+      const nextState = await window.openfolio.updates.checkNow();
+      setUpdateState(nextState);
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : "Failed to check for updates.");
+    }
   }
 
   async function installUpdate() {
-    await window.openfolio.updates.installNow();
+    try {
+      await window.openfolio.updates.installNow();
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : "Failed to install update.");
+    }
   }
 
   const capabilityBadges = (cloudStatus?.capabilities ?? []).map((capability) => (
@@ -285,205 +352,260 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
 
   return (
     <div className="shell">
+      {/* Drag bar */}
       <div className="window-dragbar">
         <div className="window-dragbar-title">OpenFolio</div>
       </div>
+
+      {/* ─── Sidebar ─── */}
       <aside className="sidebar">
-        <div>
-          <p className="eyebrow">OpenFolio</p>
-          <h1>Relationship memory for your Mac.</h1>
-          <p className="lede">
-            Local-first. Messages-first. BYOK-friendly. Optional account for hosted services.
+        <div className="space-y-1">
+          <h1 className="text-lg font-bold tracking-tight">OpenFolio</h1>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Relationship memory for your Mac.
           </p>
         </div>
 
-        <div className="stack">
-          <section className="card">
-            <div className="card-header">
-              <ShieldCheck size={18} />
-              <strong>Messages Access</strong>
-            </div>
-            <p className={`pill pill-${messagesStatus?.status || "unknown"}`}>{messagesStatus?.status || "unknown"}</p>
-            <p>{messagesStatus?.details || "Checking access..."}</p>
-            <button className="button subtle" onClick={() => window.openfolio.messages.requestAccess().then(setMessagesStatus)}>
-              Open Full Disk Access Settings
-            </button>
-          </section>
+        <div className="h-px bg-border" />
 
-          <section className="card">
-            <div className="card-header">
-              <KeyRound size={18} />
-              <strong>Hosted Account</strong>
-            </div>
-            {isLoading ? <p>Checking account state…</p> : null}
-            {!isLoading && !isAuthenticated ? (
-              <>
-                <p>Optional. Sign in only when you want billing, managed connectors, hosted AI, or future hosted MCP access.</p>
-                <button className="button subtle" onClick={() => void startGoogleSignIn()}>
-                  Continue with Google
-                </button>
-              </>
+        <SidebarSection icon={ShieldCheck} title="Messages Access">
+          <Badge variant={messagesStatus?.status === "granted" ? "success" : "default"}>
+            {messagesStatus?.status || "unknown"}
+          </Badge>
+          <p className="text-muted-foreground">{messagesStatus?.details || "Checking access..."}</p>
+          <Button variant="secondary" size="sm" onClick={() => window.openfolio.messages.requestAccess().then(setMessagesStatus)}>
+            Open Settings
+          </Button>
+        </SidebarSection>
+
+        <div className="h-px bg-border" />
+
+        <SidebarSection icon={KeyRound} title="Hosted Account">
+          {isLoading ? <p className="text-muted-foreground">Checking...</p> : null}
+          {!isLoading && !isAuthenticated ? (
+            <>
+              <p className="text-muted-foreground">Optional. Sign in for billing, hosted AI, or managed connectors.</p>
+              <Button variant="secondary" size="sm" onClick={() => void startGoogleSignIn()}>
+                Continue with Google
+              </Button>
+            </>
+          ) : null}
+          {isAuthenticated ? (
+            <>
+              <p className="text-foreground">{cloudStatus?.accountEmail || currentUser?.email || "Signed in"}</p>
+              <div className="flex flex-wrap gap-1.5">{capabilityBadges.length > 0 ? capabilityBadges : <Badge variant="secondary">local-only</Badge>}</div>
+              <Button variant="ghost" size="sm" onClick={() => void handleSignOut()}>
+                <LogOut size={14} />
+                Sign Out
+              </Button>
+            </>
+          ) : null}
+          {cloudError ? <p className="text-sm text-destructive">{cloudError}</p> : null}
+        </SidebarSection>
+
+        <div className="h-px bg-border" />
+
+        <SidebarSection icon={Database} title="Agent Access">
+          <div className="flex items-center gap-2">
+            <span className={`size-1.5 rounded-full ${mcpRunning ? "bg-accent" : "bg-border"}`} />
+            <span className="text-muted-foreground">{mcpRunning ? "MCP running" : "MCP stopped"}</span>
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => void toggleMcp()}>
+            {mcpRunning ? "Stop MCP" : "Start MCP"}
+          </Button>
+        </SidebarSection>
+
+        <div className="h-px bg-border" />
+
+        <SidebarSection icon={Download} title="App Updates">
+          <Badge variant={updateState?.status === "downloaded" ? "success" : "secondary"}>
+            {updateState?.status || "idle"}
+          </Badge>
+          <p className="text-muted-foreground">{updateState?.message || "Checks GitHub Releases for updates."}</p>
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => void checkForUpdates()}>
+              Check Now
+            </Button>
+            {updateState?.status === "downloaded" ? (
+              <Button size="sm" onClick={() => void installUpdate()}>
+                Install
+              </Button>
             ) : null}
-            {isAuthenticated ? (
-              <>
-                <p>{cloudStatus?.accountEmail || currentUser?.email || "Signed in"}</p>
-                <div className="inline-actions">{capabilityBadges.length > 0 ? capabilityBadges : <Badge>local-only</Badge>}</div>
-                <button className="button subtle" onClick={() => void handleSignOut()}>
-                  <LogOut size={16} />
-                  Sign Out
-                </button>
-              </>
-            ) : null}
-            {cloudError ? <p className="error-text">{cloudError}</p> : null}
-          </section>
-
-          <section className="card">
-            <div className="card-header">
-              <Database size={18} />
-              <strong>Local Agent Access</strong>
-            </div>
-            <p>{mcpRunning ? "MCP is marked as running." : "MCP is currently stopped."}</p>
-            <button className="button subtle" onClick={() => void toggleMcp()}>
-              {mcpRunning ? "Stop MCP" : "Start MCP"}
-            </button>
-          </section>
-
-          <section className="card">
-            <div className="card-header">
-              <Download size={18} />
-              <strong>App Updates</strong>
-            </div>
-            <p className={`pill pill-${updateState?.status || "unknown"}`}>{updateState?.status || "idle"}</p>
-            <p>{updateState?.message || "Checks GitHub Releases for signed OpenFolio updates."}</p>
-            <div className="inline-actions">
-              <button className="button subtle" onClick={() => void checkForUpdates()}>
-                Check Now
-              </button>
-              {updateState?.status === "downloaded" ? (
-                <button className="button primary" onClick={() => void installUpdate()}>
-                  Install Update
-                </button>
-              ) : null}
-            </div>
-          </section>
-        </div>
+          </div>
+        </SidebarSection>
       </aside>
 
+      {/* ─── Main ─── */}
       <main className="main">
-        <section className="hero-panel">
-          <div className="hero-header">
-            <div>
-              <p className="eyebrow">Messages-first dashboard</p>
-              <h2>Import your relationship history, then ask natural questions.</h2>
+        {/* Hero / Import */}
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+                Messages-first dashboard
+              </p>
+              <CardTitle>Import your relationship history</CardTitle>
             </div>
-            <button className="button primary" onClick={() => void runImport()} disabled={busy}>
-              <RefreshCw size={16} />
-              Import Messages
-            </button>
-          </div>
-
+            <Button size="sm" onClick={() => void runImport()} disabled={busy}>
+              <RefreshCw size={14} />
+              Import
+            </Button>
+          </CardHeader>
           {importJob ? (
-            <div className="import-summary">
-              <span>{importJob.status}</span>
-              <span>{importJob.importedMessages} messages</span>
-              <span>{importJob.importedPeople} people</span>
-              <span>{importJob.importedThreads} threads</span>
-            </div>
+            <CardContent>
+              <div className="flex gap-3 text-sm text-muted-foreground">
+                <Badge variant="secondary">{importJob.status}</Badge>
+                <span>{importJob.importedMessages} messages</span>
+                <span>{importJob.importedPeople} people</span>
+                <span>{importJob.importedThreads} threads</span>
+              </div>
+            </CardContent>
           ) : null}
-        </section>
+        </Card>
 
-        <section className="grid">
-          <Card className="large !p-5">
+        {/* AI workspace + Response */}
+        <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
+          <Card>
             <CardHeader>
-              <Bot size={18} />
-              <div>
-                <p className="eyebrow !mb-1">AI workspace</p>
-                <CardTitle>Ask through the local OpenFolio runtime.</CardTitle>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center size-6 rounded-md bg-primary">
+                  <Bot size={14} className="text-primary-foreground" />
+                </div>
+                <CardTitle>AI Workspace</CardTitle>
+              </div>
+              <p className="text-xs text-muted-foreground">Local OpenFolio runtime</p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Conversation */}
+              <div className="h-[280px] overflow-y-auto rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                {conversation.map((entry) => (
+                  <ConversationBubble key={entry.id} role={entry.role}>
+                    {entry.content}
+                  </ConversationBubble>
+                ))}
+              </div>
+              {/* Input */}
+              <div className="flex gap-2">
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Ask about your relationships..."
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void runSearch();
+                    }
+                  }}
+                />
+                <Button size="sm" onClick={() => void runSearch()} disabled={busy || !query.trim()}>
+                  <Sparkles size={14} />
+                  Ask
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* AI Answer */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Badge variant="info">{answer?.provider ?? "local"}</Badge>
+                <CardTitle>AI Answer</CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <Conversation>
-                {conversation.map((entry) => (
-                  <ConversationMessage key={entry.id} role={entry.role}>
-                    {entry.content}
-                  </ConversationMessage>
-                ))}
-              </Conversation>
-              <PromptInput value={query} onChange={setQuery} onSubmit={() => void runSearch()} disabled={busy} />
-            </CardContent>
-          </Card>
-
-          <ResponsePanel response={answer} />
-        </section>
-
-        <section className="grid">
-          <Card className="large">
-            <CardHeader>
-              <Search size={18} />
-              <CardTitle>Search Results</CardTitle>
-            </CardHeader>
-            <CardContent className="result-list">
-              {results.length === 0 ? <p>No results yet.</p> : results.map((result) => (
-                <article key={result.id} className="result">
-                  <div className="result-meta">
-                    <span>{result.kind}</span>
-                    <span>{result.score.toFixed(2)}</span>
-                  </div>
-                  <strong>{result.title}</strong>
-                  <p>{result.snippet}</p>
-                </article>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="large">
-            <CardHeader>
-              <ShieldCheck size={18} />
-              <CardTitle>Runtime Mode</CardTitle>
-            </CardHeader>
             <CardContent>
-              <p>The app is usable before sign-in. Hosted account features are layered on top, not required for local graph access.</p>
-              <div className="inline-actions">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {answer?.answer || "Ask a question to generate a grounded answer with citations from your local graph."}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Search results + Runtime */}
+        <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Search size={14} className="text-muted-foreground" />
+                <CardTitle>Search Results</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {results.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No results yet.</p>
+              ) : (
+                results.map((result) => <SearchResultItem key={result.id} result={result} />)
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Shield size={14} className="text-muted-foreground" />
+                <CardTitle>Runtime Mode</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Usable before sign-in. Hosted features are optional.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
                 <Badge variant="success">messages import</Badge>
                 <Badge variant="success">local search</Badge>
                 <Badge variant="success">local MCP</Badge>
-                <Badge variant={isAuthenticated ? "info" : "warning"}>{isAuthenticated ? "hosted enabled" : "hosted optional"}</Badge>
+                <Badge variant={isAuthenticated ? "info" : "warning"}>
+                  {isAuthenticated ? "hosted enabled" : "hosted optional"}
+                </Badge>
               </div>
             </CardContent>
           </Card>
-        </section>
+        </div>
 
-        <section className="grid">
-          <section className="card">
-            <div className="card-header">
-              <MessageSquare size={18} />
-              <strong>Recent Threads</strong>
-            </div>
-            <div className="result-list">
-              {threads.length === 0 ? <p>Import Messages to populate this panel.</p> : threads.map((thread) => (
-                <article key={thread.threadId} className="result">
-                  <strong>{thread.title}</strong>
-                  <p>{thread.lastMessagePreview || "No preview available yet."}</p>
-                </article>
-              ))}
-            </div>
-          </section>
+        {/* Recent threads + Follow-ups */}
+        <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <MessageSquare size={14} className="text-muted-foreground" />
+                <CardTitle>Recent Threads</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {threads.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Import Messages to populate.</p>
+              ) : (
+                threads.map((thread) => (
+                  <div key={thread.threadId} className="rounded-lg border border-border bg-muted/50 px-4 py-3">
+                    <p className="text-sm font-medium text-foreground">{thread.title}</p>
+                    <p className="text-sm text-muted-foreground">{thread.lastMessagePreview || "No preview."}</p>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
 
-          <section className="card">
-            <div className="card-header">
-              <RefreshCw size={18} />
-              <strong>Follow-up Suggestions</strong>
-            </div>
-            <div className="result-list">
-              {suggestions.length === 0 ? <p>Import Messages to generate follow-up suggestions.</p> : suggestions.map((suggestion) => (
-                <article key={suggestion.personId} className="result">
-                  <strong>{suggestion.displayName}</strong>
-                  <p>{suggestion.reason}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        </section>
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <RefreshCw size={14} className="text-muted-foreground" />
+                <CardTitle>Follow-up Suggestions</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {suggestions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Import Messages to generate suggestions.</p>
+              ) : (
+                suggestions.map((suggestion) => (
+                  <div key={suggestion.personId} className="rounded-lg border border-border bg-muted/50 px-4 py-3">
+                    <p className="text-sm font-medium text-foreground">{suggestion.displayName}</p>
+                    <p className="text-sm text-muted-foreground">{suggestion.reason}</p>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </div>
   );
@@ -513,9 +635,11 @@ export function App() {
     return (
       <div className="gate-shell">
         <div className="gate-card">
-          <p className="eyebrow">Hosted auth unavailable</p>
-          <h1>OpenFolio could not load the hosted auth configuration.</h1>
-          <p className="error-text">{configError}</p>
+          <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-3">
+            Hosted auth unavailable
+          </p>
+          <h1 className="text-xl font-bold tracking-tight">Could not load configuration.</h1>
+          <p className="mt-2 text-sm text-destructive">{configError}</p>
         </div>
       </div>
     );
@@ -525,9 +649,11 @@ export function App() {
     return (
       <div className="gate-shell">
         <div className="gate-card">
-          <p className="eyebrow">Preparing</p>
-          <h1>Loading OpenFolio.</h1>
-          <p className="lede">Preparing your local graph and optional hosted connection.</p>
+          <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-3">
+            Preparing
+          </p>
+          <h1 className="text-xl font-bold tracking-tight">Loading OpenFolio.</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Preparing your local graph and optional hosted connection.</p>
         </div>
       </div>
     );

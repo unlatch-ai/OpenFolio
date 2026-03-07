@@ -279,9 +279,9 @@ export interface ConnectorSyncResult {
 }
 
 export interface OpenFolioBridge {
-  db: {
-    query(sql: string): Promise<unknown[]>;
-    mutate(sql: string): Promise<{ changes: number }>;
+  dashboard: {
+    getThreadSummaries(limit?: number): Promise<MessagesThreadSummary[]>;
+    getReminderSuggestions(limit?: number): Promise<ReminderSuggestion[]>;
   };
   messages: {
     requestAccess(): Promise<MessagesAccessStatus>;

@@ -44,7 +44,7 @@ export function normalizeQueryForFts(query: string) {
 }
 
 export function appleTimestampToUnixMs(raw: number | bigint | string | null | undefined) {
-  if (raw === null || raw === undefined) return Date.now();
+  if (raw === null || raw === undefined) return 0;
   const numeric = typeof raw === "string" ? Number(raw) : typeof raw === "bigint" ? Number(raw) : raw;
   const appleEpochMs = Date.UTC(2001, 0, 1);
 
