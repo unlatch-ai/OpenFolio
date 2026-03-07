@@ -54,3 +54,26 @@ export function appleTimestampToUnixMs(raw: number | bigint | string | null | un
 
   return appleEpochMs + numeric * 1000;
 }
+
+export function normalizeHandle(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lower)) {
+    return lower;
+  }
+
+  const digits = trimmed.replace(/[^\d+]/g, "");
+  if (!digits) {
+    return trimmed;
+  }
+
+  if (digits.startsWith("+")) {
+    return `+${digits.slice(1).replace(/\D/g, "")}`;
+  }
+
+  return digits.replace(/\D/g, "");
+}

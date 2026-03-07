@@ -5,6 +5,11 @@
   "type": "module",
   "main": "out/main/main.js",
   "scripts": {
+    "build:contacts-helper": "mkdir -p bin && swiftc native/contacts-bridge.swift -framework Contacts -o bin/openfolio-contacts-bridge",
+    "predev": "pnpm run build:contacts-helper",
+    "prebuild": "pnpm run build:contacts-helper",
+    "predist:mac": "pnpm run build:contacts-helper",
+    "prerelease:mac": "pnpm run build:contacts-helper",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -52,6 +57,12 @@
       "out/**",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "bin/openfolio-contacts-bridge",
+        "to": "bin/openfolio-contacts-bridge"
+      }
+    ],
     "artifactName": "${productName}-${version}-${arch}.${ext}",
     "publish": [
       {
@@ -65,6 +76,9 @@
       "category": "public.app-category.productivity",
       "hardenedRuntime": true,
       "icon": "build/icon.icns",
+      "extendInfo": {
+        "NSContactsUsageDescription": "OpenFolio imports your contacts locally so phone numbers and email addresses resolve to real people on this Mac."
+      },
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "target": [

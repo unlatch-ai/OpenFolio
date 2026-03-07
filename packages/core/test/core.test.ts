@@ -104,6 +104,37 @@ describe("OpenFolioCore", () => {
     expect(core.db.listPeople()).toHaveLength(1);
   });
 
+  it("matches Apple Contacts onto an existing Messages person by normalized phone handle", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+
+    const summary = core.applyConnectorSync({
+      people: [
+        {
+          displayName: "Ada Lovelace",
+          primaryHandle: "ada@example.com",
+          email: "ada@example.com",
+          phone: "+1 (555) 555-0123",
+          sourceKind: "apple_contacts",
+          sourceId: "contact-ada",
+          metadata: {
+            handles: ["ada@example.com", "+1 (555) 555-0123"],
+          },
+        },
+      ],
+      interactions: [],
+      cursor: null,
+      hasMore: false,
+    });
+
+    const people = core.db.listPeople();
+
+    expect(summary.peopleImported).toBe(1);
+    expect(people).toHaveLength(1);
+    expect(people[0]?.displayName).toBe("Ada Lovelace");
+    expect(people[0]?.primaryHandle).toBe("+15555550123");
+  });
+
   it("finds duplicate local people by handle or name", () => {
     const core = new OpenFolioCore({ dbPath });
     const first = core.db.getOrCreatePerson("ada@example.com", "Ada Lovelace");

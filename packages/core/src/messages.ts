@@ -4,7 +4,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { MessagesAccessStatus, MessagesImportJob } from "@openfolio/shared-types";
 import { OpenFolioDatabase } from "./db.js";
-import { appleTimestampToUnixMs, createId, now } from "./utils.js";
+import { appleTimestampToUnixMs, createId, normalizeHandle, now } from "./utils.js";
 
 type RawMessageRow = {
   sourceMessageId: number;
@@ -134,14 +134,15 @@ export class MessagesImporter {
         }
 
         const isFromMe = Boolean(first.isFromMe);
-        const handle = isFromMe ? "me" : first.handleValue;
+        const rawHandle = isFromMe ? "me" : first.handleValue;
+        const handle = normalizeHandle(rawHandle);
         const person = this.database.getOrCreatePerson(handle, isFromMe ? "You" : first.handleValue ?? "Unknown");
         if (!seenPeople.has(person.id)) {
           seenPeople.add(person.id);
         }
 
-        if (handle) {
-          this.database.addParticipant(thread.id, person.id, handle, first.service ?? null);
+        if (rawHandle) {
+          this.database.addParticipant(thread.id, person.id, rawHandle, first.service ?? null);
         }
 
         const inserted = this.database.insertMessage({

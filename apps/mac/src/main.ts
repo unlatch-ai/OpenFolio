@@ -7,12 +7,15 @@ import { OpenFolioCore } from "@openfolio/core";
 import type {
   ConnectorAccount,
   ConnectorCredential,
+  ContactsSyncSummary,
   CloudRuntimeConfig,
+  ContactsAccessStatus,
   MessagesAccessStatus,
   OpenFolioBridge,
   SearchResult,
 } from "@openfolio/shared-types";
 import { LocalMcpController } from "@openfolio/mcp";
+import { exportAppleContacts, getContactsAccessStatus, requestContactsAccess } from "./contacts";
 import { OpenFolioUpdater } from "./updater";
 import { shouldOpenExternalUrl } from "./navigation";
 
@@ -110,6 +113,17 @@ async function deleteConnectorCredential(input: { provider: ConnectorCredential[
   const remaining = readConnectorAccounts().filter((account) => !(account.provider === input.provider && account.accountId === input.accountId));
   writeConnectorAccounts(remaining);
   return { ok: true };
+}
+
+function withContactsAccessGuidance(status: ContactsAccessStatus): ContactsAccessStatus {
+  if (status.status !== "denied") {
+    return status;
+  }
+
+  return {
+    ...status,
+    details: `${status.details} Open System Settings > Privacy & Security > Contacts and enable OpenFolio, then retry the sync.`,
+  };
 }
 
 function focusWindow() {
@@ -464,6 +478,63 @@ const api: OpenFolioBridge = {
       return job;
     },
   },
+  contacts: {
+    requestAccess: async () => {
+      logAppDebug("contacts", "requestAccess");
+      const status = await requestContactsAccess();
+      if (status.status === "denied") {
+        await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts");
+      }
+      const guided = withContactsAccessGuidance(status);
+      logAppDebug("contacts", "requestAccessResult", guided);
+      return guided;
+    },
+    getAccessStatus: async () => {
+      const status = withContactsAccessGuidance(await getContactsAccessStatus());
+      logAppDebug("contacts", "getAccessStatus", status);
+      return status;
+    },
+    sync: async (): Promise<ContactsSyncSummary> => {
+      logAppDebug("contacts", "sync");
+      const access = withContactsAccessGuidance(await getContactsAccessStatus());
+      if (access.status !== "granted") {
+        throw new Error(access.details);
+      }
+
+      const contacts = await exportAppleContacts();
+      const summary = core.applyConnectorSync({
+        people: contacts.map((contact) => {
+          const handles = [...contact.emails, ...contact.phones].filter(Boolean);
+          return {
+            displayName: contact.displayName,
+            primaryHandle: handles[0] ?? null,
+            email: contact.emails[0] ?? null,
+            phone: contact.phones[0] ?? null,
+            companyName: contact.organizationName ?? null,
+            jobTitle: contact.jobTitle ?? null,
+            sourceKind: "apple_contacts" as const,
+            sourceId: contact.identifier,
+            metadata: {
+              handles,
+              givenName: contact.givenName ?? null,
+              familyName: contact.familyName ?? null,
+            },
+          };
+        }),
+        interactions: [],
+        cursor: null,
+        hasMore: false,
+      });
+
+      const result = {
+        importedContacts: contacts.length,
+        peopleImported: summary.peopleImported,
+        interactionsImported: summary.interactionsImported,
+      };
+      logAppDebug("contacts", "syncResult", result);
+      return result;
+    },
+  },
   search: {
     query: async ({ text, limit }: { text: string; limit?: number }): Promise<SearchResult[]> => {
       logAppDebug("search", "query", { text, limit });
@@ -564,6 +635,9 @@ safeHandle("openfolio:messages:requestAccess", () => api.messages.requestAccess(
 safeHandle("openfolio:messages:getAccessStatus", () => api.messages.getAccessStatus());
 safeHandle("openfolio:messages:startImport", () => api.messages.startImport());
 safeHandle("openfolio:messages:getImportStatus", (_, jobId: string) => api.messages.getImportStatus(jobId));
+safeHandle("openfolio:contacts:requestAccess", () => api.contacts.requestAccess());
+safeHandle("openfolio:contacts:getAccessStatus", () => api.contacts.getAccessStatus());
+safeHandle("openfolio:contacts:sync", () => api.contacts.sync());
 safeHandle("openfolio:search:query", (_, input: { text: string; limit?: number }) => api.search.query(input));
 safeHandle("openfolio:ai:run", (_, input: { query: string; useHosted?: boolean }) => api.ai.run(input));
 safeHandle("openfolio:cloud:getConfig", () => api.cloud.getConfig());

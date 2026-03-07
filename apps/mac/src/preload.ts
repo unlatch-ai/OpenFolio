@@ -12,6 +12,11 @@ const bridge: OpenFolioBridge = {
     startImport: () => ipcRenderer.invoke("openfolio:messages:startImport"),
     getImportStatus: (jobId: string) => ipcRenderer.invoke("openfolio:messages:getImportStatus", jobId),
   },
+  contacts: {
+    requestAccess: () => ipcRenderer.invoke("openfolio:contacts:requestAccess"),
+    getAccessStatus: () => ipcRenderer.invoke("openfolio:contacts:getAccessStatus"),
+    sync: () => ipcRenderer.invoke("openfolio:contacts:sync"),
+  },
   search: {
     query: (input: { text: string; limit?: number }) => ipcRenderer.invoke("openfolio:search:query", input),
   },

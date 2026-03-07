@@ -25,7 +25,7 @@ import {
   buildReminderSearchContent,
   buildThreadSearchContent,
 } from "./embeddings.js";
-import { contentHash, cosineSimilarity, createId, normalizeQueryForFts, now } from "./utils.js";
+import { contentHash, cosineSimilarity, createId, normalizeHandle, normalizeQueryForFts, now } from "./utils.js";
 
 const DEFAULT_DB_DIR = path.join(os.homedir(), "Library", "Application Support", "OpenFolio");
 
@@ -318,17 +318,20 @@ export class OpenFolioDatabase {
   }
 
   getOrCreatePerson(handle: string | null, fallbackName: string) {
-    if (handle) {
+    const normalizedHandle = normalizeHandle(handle);
+
+    if (normalizedHandle) {
       const existing = this.db
         .prepare("SELECT id, display_name AS displayName, primary_handle AS primaryHandle, created_at AS createdAt, updated_at AS updatedAt FROM people WHERE primary_handle = ?")
-        .get(handle) as Person | undefined;
+        .get(normalizedHandle) as Person | undefined;
       if (existing) {
         if (existing.displayName !== fallbackName && fallbackName) {
+          const updatedAt = now();
           this.db
             .prepare("UPDATE people SET display_name = ?, updated_at = ? WHERE id = ?")
-            .run(fallbackName, now(), existing.id);
+            .run(fallbackName, updatedAt, existing.id);
           existing.displayName = fallbackName;
-          existing.updatedAt = now();
+          existing.updatedAt = updatedAt;
         }
         return existing;
       }
@@ -337,7 +340,7 @@ export class OpenFolioDatabase {
     const person: Person = {
       id: createId("person"),
       displayName: fallbackName,
-      primaryHandle: handle,
+      primaryHandle: normalizedHandle,
       createdAt: now(),
       updatedAt: now(),
     };
@@ -895,20 +898,52 @@ export class OpenFolioDatabase {
   }
 
   private upsertConnectorPerson(person: NormalizedConnectorPerson) {
+    const normalizedPrimaryHandle = normalizeHandle(person.primaryHandle);
+    const normalizedHandles = [
+      normalizedPrimaryHandle,
+      ...(Array.isArray(person.metadata?.handles) ? person.metadata.handles : [])
+        .map((value) => typeof value === "string" ? normalizeHandle(value) : null),
+    ].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
     const existingSource = this.getSourceRef(person.sourceKind, person.sourceId, "person");
     if (existingSource) {
       const existing = this.getPerson(existingSource.entityId);
       if (existing) {
+        const nextPrimaryHandle = existing.primaryHandle ?? normalizedPrimaryHandle;
+        const updatedAt = now();
         this.db
           .prepare("UPDATE people SET display_name = ?, primary_handle = COALESCE(?, primary_handle), updated_at = ? WHERE id = ?")
-          .run(person.displayName, person.primaryHandle, now(), existing.id);
-        return { ...existing, displayName: person.displayName, primaryHandle: person.primaryHandle ?? existing.primaryHandle };
+          .run(person.displayName, nextPrimaryHandle, updatedAt, existing.id);
+        return { ...existing, displayName: person.displayName, primaryHandle: nextPrimaryHandle, updatedAt };
       }
     }
 
-    const persisted = this.getOrCreatePerson(person.primaryHandle, person.displayName);
+    const matchedPerson = this.findPersonByHandles(normalizedHandles);
+    if (matchedPerson) {
+      const nextPrimaryHandle = matchedPerson.primaryHandle ?? normalizedPrimaryHandle;
+      const updatedAt = now();
+      this.db
+        .prepare("UPDATE people SET display_name = ?, primary_handle = COALESCE(?, primary_handle), updated_at = ? WHERE id = ?")
+        .run(person.displayName, nextPrimaryHandle, updatedAt, matchedPerson.id);
+      this.setSourceRef(person.sourceKind, person.sourceId, "person", matchedPerson.id);
+      return { ...matchedPerson, displayName: person.displayName, primaryHandle: nextPrimaryHandle, updatedAt };
+    }
+
+    const persisted = this.getOrCreatePerson(normalizedPrimaryHandle ?? normalizedHandles[0] ?? null, person.displayName);
     this.setSourceRef(person.sourceKind, person.sourceId, "person", persisted.id);
     return persisted;
+  }
+
+  private findPersonByHandles(handles: string[]) {
+    for (const handle of handles) {
+      const match = this.db
+        .prepare("SELECT id, display_name AS displayName, primary_handle AS primaryHandle, created_at AS createdAt, updated_at AS updatedAt FROM people WHERE primary_handle = ?")
+        .get(handle) as Person | undefined;
+      if (match) {
+        return match;
+      }
+    }
+
+    return null;
   }
 
   private upsertConnectorInteraction(interaction: NormalizedConnectorInteraction) {

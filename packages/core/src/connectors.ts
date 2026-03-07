@@ -4,6 +4,7 @@ import type {
   NormalizedConnectorInteraction,
   NormalizedConnectorPerson,
 } from "@openfolio/shared-types";
+import { normalizeHandle } from "./utils.js";
 
 export interface LocalConnector {
   id: ConnectorProvider;
@@ -40,7 +41,7 @@ function getFetch(fetchImpl?: typeof fetch) {
 }
 
 function lower(value?: string | null) {
-  return value?.trim().toLowerCase() ?? null;
+  return normalizeHandle(value);
 }
 
 function gmailHeader(message: GmailMessage, name: string) {
@@ -109,7 +110,7 @@ export const googleContactsConnector: LocalConnector = {
       for (const contact of data.connections ?? []) {
         const name = contact.names?.[0];
         const email = lower(contact.emailAddresses?.[0]?.value);
-        const phone = contact.phoneNumbers?.[0]?.value ?? null;
+        const phone = normalizeHandle(contact.phoneNumbers?.[0]?.value ?? null);
         const organization = contact.organizations?.[0];
 
         if (!name?.displayName && !email && !phone) {
@@ -128,6 +129,9 @@ export const googleContactsConnector: LocalConnector = {
           location: contact.addresses?.[0]?.formattedValue ?? null,
           sourceKind: "google_contacts",
           sourceId: contact.resourceName,
+          metadata: {
+            handles: [email, phone].filter(Boolean),
+          },
         });
       }
     } while (pageToken);

@@ -6,6 +6,8 @@ import type {
   AskResponse,
   CloudAccountStatus,
   CloudRuntimeConfig,
+  ContactsAccessStatus,
+  ContactsSyncSummary,
   MessagesAccessStatus,
   MessagesImportJob,
   MessagesThreadSummary,
@@ -25,6 +27,7 @@ import {
   Shield,
   ShieldCheck,
   Sparkles,
+  Users,
 } from "lucide-react";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
@@ -138,6 +141,8 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { signIn, signOut } = useAuthActions();
   const [messagesStatus, setMessagesStatus] = useState<MessagesAccessStatus | null>(null);
+  const [contactsStatus, setContactsStatus] = useState<ContactsAccessStatus | null>(null);
+  const [contactsSync, setContactsSync] = useState<ContactsSyncSummary | null>(null);
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
   const [mcpRunning, setMcpRunning] = useState(false);
@@ -198,14 +203,16 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
   }, [signIn]);
 
   async function refreshDashboard() {
-    const [nextMessages, nextMcp, nextThreads, nextSuggestions] = await Promise.all([
+    const [nextMessages, nextContacts, nextMcp, nextThreads, nextSuggestions] = await Promise.all([
       window.openfolio.messages.getAccessStatus(),
+      window.openfolio.contacts.getAccessStatus(),
       window.openfolio.mcp.getStatus(),
       window.openfolio.dashboard.getThreadSummaries(5),
       window.openfolio.dashboard.getReminderSuggestions(5),
     ]);
 
     setMessagesStatus(nextMessages);
+    setContactsStatus(nextContacts);
     setMcpRunning(nextMcp.running);
     setThreads(nextThreads);
     setSuggestions(nextSuggestions);
@@ -274,6 +281,34 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
       setConversation((current) => [
         ...current,
         { id: `error-${Date.now()}`, role: "assistant", content: `Import failed: ${error instanceof Error ? error.message : "Unknown error"}` },
+      ]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function syncContacts() {
+    setBusy(true);
+    try {
+      const summary = await window.openfolio.contacts.sync();
+      setContactsSync(summary);
+      await refreshDashboard();
+      setConversation((current) => [
+        ...current,
+        {
+          id: `contacts-${Date.now()}`,
+          role: "assistant",
+          content: `Synced ${summary.importedContacts} Apple Contacts into your local identity graph.`,
+        },
+      ]);
+    } catch (error) {
+      setConversation((current) => [
+        ...current,
+        {
+          id: `contacts-error-${Date.now()}`,
+          role: "assistant",
+          content: `Contacts sync failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+        },
       ]);
     } finally {
       setBusy(false);
@@ -380,6 +415,31 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
 
         <div className="h-px bg-border" />
 
+        <SidebarSection icon={Users} title="Contacts Access">
+          <Badge variant={contactsStatus?.status === "granted" ? "success" : "default"}>
+            {contactsStatus?.status || "unknown"}
+          </Badge>
+          <p className="text-muted-foreground">{contactsStatus?.details || "Checking access..."}</p>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => window.openfolio.contacts.requestAccess().then(setContactsStatus)}
+            >
+              Allow Contacts
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void syncContacts()}
+              disabled={busy || contactsStatus?.status !== "granted"}
+            >
+              Sync
+            </Button>
+          </div>
+        </SidebarSection>
+
+        <div className="h-px bg-border" />
+
         <SidebarSection icon={KeyRound} title="Hosted Account">
           {isLoading ? <p className="text-muted-foreground">Checking...</p> : null}
           {!isLoading && !isAuthenticated ? (
@@ -461,6 +521,34 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
               </div>
             </CardContent>
           ) : null}
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+                Local identity sync
+              </p>
+              <CardTitle>Resolve handles with Apple Contacts</CardTitle>
+            </div>
+            <Button size="sm" onClick={() => void syncContacts()} disabled={busy || contactsStatus?.status !== "granted"}>
+              <Users size={14} />
+              Sync Contacts
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Imports Contacts locally so phone numbers and email-only threads can resolve to real people.
+            </p>
+            <Badge variant={contactsStatus?.status === "granted" ? "success" : "secondary"}>
+              {contactsStatus?.status || "unknown"}
+            </Badge>
+            {contactsSync ? (
+              <p className="text-sm text-muted-foreground">
+                Last sync processed {contactsSync.importedContacts} contacts.
+              </p>
+            ) : null}
+          </CardContent>
         </Card>
 
         {/* AI workspace + Response */}

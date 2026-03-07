@@ -4,6 +4,7 @@ export type SourceKind =
   | "messages"
   | "manual"
   | "csv"
+  | "apple_contacts"
   | "google_contacts"
   | "gmail"
   | "hosted_google"
@@ -220,6 +221,12 @@ export interface MessagesAccessStatus {
   details: string;
 }
 
+export interface ContactsAccessStatus {
+  status: "granted" | "denied" | "restricted" | "not-determined" | "unsupported";
+  details: string;
+  canPrompt: boolean;
+}
+
 export interface AskResponse {
   answer: string;
   citations: SearchResult[];
@@ -278,6 +285,12 @@ export interface ConnectorSyncResult {
   hasMore: boolean;
 }
 
+export interface ContactsSyncSummary {
+  importedContacts: number;
+  peopleImported: number;
+  interactionsImported: number;
+}
+
 export interface OpenFolioBridge {
   dashboard: {
     getThreadSummaries(limit?: number): Promise<MessagesThreadSummary[]>;
@@ -288,6 +301,11 @@ export interface OpenFolioBridge {
     getAccessStatus(): Promise<MessagesAccessStatus>;
     startImport(): Promise<MessagesImportJob>;
     getImportStatus(jobId: string): Promise<MessagesImportJob | null>;
+  };
+  contacts: {
+    requestAccess(): Promise<ContactsAccessStatus>;
+    getAccessStatus(): Promise<ContactsAccessStatus>;
+    sync(): Promise<ContactsSyncSummary>;
   };
   search: {
     query(input: { text: string; limit?: number }): Promise<SearchResult[]>;
