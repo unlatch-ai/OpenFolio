@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConvexReactClient, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { ConvexAuthProvider, useAuthActions } from "@convex-dev/auth/react";
 import { api } from "@openfolio/hosted";
@@ -16,23 +16,45 @@ import type {
   UpdateState,
 } from "@openfolio/shared-types";
 import {
-  Bot,
-  Database,
+  ChevronDown,
+  ChevronRight,
   Download,
-  KeyRound,
   LogOut,
   MessageSquare,
   RefreshCw,
-  Search,
-  Shield,
-  ShieldCheck,
+  Settings,
   Sparkles,
   Users,
+  Zap,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/renderer/components/ui/badge";
 import { Button } from "@/renderer/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/renderer/components/ui/card";
-import { Input } from "@/renderer/components/ui/input";
+import { Separator } from "@/renderer/components/ui/separator";
+import { Switch } from "@/renderer/components/ui/switch";
+import { Toaster } from "@/renderer/components/ui/sonner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/renderer/components/ui/tooltip";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarInset,
+  SidebarSeparator,
+} from "@/renderer/components/ui/sidebar";
+import { useTheme, type Theme } from "@/lib/use-theme";
 
 declare global {
   interface Window {
@@ -45,10 +67,13 @@ type OAuthActionResult = {
   signingIn: boolean;
 };
 
+type View = "conversations" | "activity" | "settings";
+
 type ConversationEntry = {
   id: string;
   role: "assistant" | "user";
   content: string;
+  sources?: SearchResult[];
 };
 
 const debugAuthFlow =
@@ -87,59 +112,423 @@ function logStoredAuthKeys() {
   );
 }
 
-/* ─── Sidebar section ─── */
-function SidebarSection({
-  icon: Icon,
-  title,
-  children,
+/* ─── Collapsible sources under AI responses ─── */
+function Sources({ results }: { results: SearchResult[] }) {
+  const [open, setOpen] = useState(false);
+  if (results.length === 0) return null;
+  return (
+    <div className="message-sources">
+      <button className="sources-toggle" onClick={() => setOpen(!open)}>
+        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        {results.length} source{results.length !== 1 ? "s" : ""}
+      </button>
+      {open && (
+        <div className="sources-list">
+          {results.map((r) => (
+            <div key={r.id} className="source-item">
+              <span className="source-item-title">{r.title}</span>
+              <span className="source-item-meta">{r.kind} &middot; {r.score.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Conversations view ─── */
+function ConversationsView({
+  conversation,
+  query,
+  setQuery,
+  onSend,
+  busy,
+  hasData,
+  onImport,
+  messagesStatus,
+  onRequestAccess,
 }: {
-  icon: typeof Shield;
-  title: string;
-  children: React.ReactNode;
+  conversation: ConversationEntry[];
+  query: string;
+  setQuery: (q: string) => void;
+  onSend: () => void;
+  busy: boolean;
+  hasData: boolean;
+  onImport: () => void;
+  messagesStatus: MessagesAccessStatus | null;
+  onRequestAccess: () => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [conversation.length]);
+
+  return (
+    <div className="conversations-view">
+      <div className="conversations-header">
+        <h2>OpenFolio AI</h2>
+        <div className="conversations-header-meta">
+          <span className="status-dot on" />
+          Local
+        </div>
+      </div>
+
+      <div className="conversation-scroll" ref={scrollRef}>
+        <div className="conversation-messages">
+          {conversation.map((entry) => (
+            <div key={entry.id} className={`message ${entry.role}`}>
+              <span className="message-label">
+                {entry.role === "assistant" ? "OpenFolio" : "You"}
+              </span>
+              <div className="message-bubble">{entry.content}</div>
+              {entry.sources && entry.sources.length > 0 && (
+                <Sources results={entry.sources} />
+              )}
+            </div>
+          ))}
+
+          {!hasData && (
+            <div className="onboarding-card">
+              <h3>Get started</h3>
+              <p>
+                Import your iMessage history to build your local relationship graph. Everything stays on this Mac.
+              </p>
+              <div className="onboarding-actions">
+                {messagesStatus?.status !== "granted" ? (
+                  <Button variant="secondary" size="sm" onClick={onRequestAccess}>
+                    Grant Messages Access
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={onImport} disabled={busy}>
+                    <RefreshCw size={14} />
+                    Import Messages
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="input-bar">
+        <div className="input-bar-inner">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Ask about your relationships..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                onSend();
+              }
+            }}
+          />
+          <span className="input-shortcut">Enter</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Activity view ─── */
+function ActivityView({
+  threads,
+  suggestions,
+}: {
+  threads: MessagesThreadSummary[];
+  suggestions: ReminderSuggestion[];
 }) {
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-        <Icon size={14} className="text-muted-foreground" />
-        {title}
+    <div className="activity-view">
+      <div className="activity-inner">
+        {suggestions.length > 0 && (
+          <div className="activity-section">
+            <h3 className="activity-section-title">Follow up</h3>
+            {suggestions.map((s) => (
+              <div key={s.personId} className="activity-item">
+                <p className="activity-item-name">{s.displayName}</p>
+                <p className="activity-item-detail">{s.reason}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="activity-section">
+          <h3 className="activity-section-title">Recent threads</h3>
+          {threads.length === 0 ? (
+            <p className="activity-empty">Import messages to see recent threads.</p>
+          ) : (
+            threads.map((t) => (
+              <div key={t.threadId} className="activity-item">
+                <p className="activity-item-name">{t.title}</p>
+                <p className="activity-item-detail">{t.lastMessagePreview || "No preview."}</p>
+              </div>
+            ))
+          )}
+        </div>
       </div>
-      <div className="space-y-2 text-sm">{children}</div>
     </div>
   );
 }
 
-/* ─── Conversation message ─── */
-function ConversationBubble({ role, children }: { role: "assistant" | "user"; children: React.ReactNode }) {
-  return (
-    <div
-      className={`max-w-[88%] rounded-lg px-4 py-3 text-sm leading-relaxed ${
-        role === "assistant"
-          ? "bg-muted text-foreground"
-          : "ml-auto bg-primary text-primary-foreground"
-      }`}
-    >
-      {children}
-    </div>
-  );
-}
+/* ─── Settings view ─── */
+function SettingsView({
+  messagesStatus,
+  contactsStatus,
+  contactsSync,
+  isAuthenticated,
+  isLoading,
+  cloudStatus,
+  currentUserEmail,
+  mcpRunning,
+  updateState,
+  importJob,
+  busy,
+  cloudError,
+  theme,
+  onRequestMessages,
+  onRequestContacts,
+  onSyncContacts,
+  onImport,
+  onSignIn,
+  onSignOut,
+  onToggleMcp,
+  onCheckUpdates,
+  onInstallUpdate,
+  onSetTheme,
+}: {
+  messagesStatus: MessagesAccessStatus | null;
+  contactsStatus: ContactsAccessStatus | null;
+  contactsSync: ContactsSyncSummary | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  cloudStatus: CloudAccountStatus | undefined;
+  currentUserEmail: string | undefined;
+  mcpRunning: boolean;
+  updateState: UpdateState | null;
+  importJob: MessagesImportJob | null;
+  busy: boolean;
+  cloudError: string | null;
+  theme: Theme;
+  onRequestMessages: () => void;
+  onRequestContacts: () => void;
+  onSyncContacts: () => void;
+  onImport: () => void;
+  onSignIn: () => void;
+  onSignOut: () => void;
+  onToggleMcp: () => void;
+  onCheckUpdates: () => void;
+  onInstallUpdate: () => void;
+  onSetTheme: (theme: Theme) => void;
+}) {
+  const capabilityBadges = (cloudStatus?.capabilities ?? []).map((c) => (
+    <Badge key={c} variant="info">{c}</Badge>
+  ));
 
-/* ─── Search result ─── */
-function SearchResultItem({ result }: { result: SearchResult }) {
   return (
-    <div className="rounded-lg border border-border bg-muted/50 px-4 py-3 space-y-1">
-      <div className="flex items-center justify-between">
-        <Badge variant="secondary">{result.kind}</Badge>
-        <span className="text-[11px] text-muted-foreground tabular-nums">{result.score.toFixed(2)}</span>
+    <div className="settings-view">
+      <div className="settings-inner">
+        {/* Appearance */}
+        <div className="settings-group">
+          <h3 className="settings-group-title">Appearance</h3>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Theme</p>
+              <p className="settings-row-detail">Choose light, dark, or match your system setting.</p>
+            </div>
+            <div className="settings-row-actions">
+              <div className="theme-toggle">
+                {(["light", "dark", "system"] as const).map((option) => (
+                  <button
+                    key={option}
+                    className={`theme-toggle-option ${theme === option ? "active" : ""}`}
+                    onClick={() => onSetTheme(option)}
+                  >
+                    {option.charAt(0).toUpperCase() + option.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Data Sources */}
+        <div className="settings-group">
+          <h3 className="settings-group-title">Data Sources</h3>
+
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Messages</p>
+              <p className="settings-row-detail">
+                {messagesStatus?.details || "Checking access..."}
+              </p>
+            </div>
+            <div className="settings-row-actions">
+              <Badge variant={messagesStatus?.status === "granted" ? "success" : "default"}>
+                {messagesStatus?.status || "unknown"}
+              </Badge>
+              <Button variant="secondary" size="xs" onClick={onRequestMessages}>
+                Open Settings
+              </Button>
+            </div>
+          </div>
+
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Import</p>
+              <p className="settings-row-detail">
+                {importJob
+                  ? `Last import: ${importJob.importedMessages} messages, ${importJob.importedPeople} people, ${importJob.importedThreads} threads`
+                  : "Import your iMessage history into the local graph."}
+              </p>
+            </div>
+            <div className="settings-row-actions">
+              <Button size="xs" onClick={onImport} disabled={busy}>
+                <RefreshCw size={12} />
+                Import
+              </Button>
+            </div>
+          </div>
+
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Contacts</p>
+              <p className="settings-row-detail">
+                {contactsSync
+                  ? `Last sync: ${contactsSync.importedContacts} contacts`
+                  : "Resolve phone numbers and emails to real names."}
+              </p>
+            </div>
+            <div className="settings-row-actions">
+              <Badge variant={contactsStatus?.status === "granted" ? "success" : "default"}>
+                {contactsStatus?.status || "unknown"}
+              </Badge>
+              {contactsStatus?.status !== "granted" ? (
+                <Button variant="secondary" size="xs" onClick={onRequestContacts}>
+                  Allow
+                </Button>
+              ) : (
+                <Button size="xs" onClick={onSyncContacts} disabled={busy}>
+                  Sync
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Account */}
+        <div className="settings-group">
+          <h3 className="settings-group-title">Account</h3>
+
+          {isLoading ? (
+            <p className="settings-row-detail">Checking...</p>
+          ) : !isAuthenticated ? (
+            <div className="settings-row">
+              <div className="settings-row-info">
+                <p className="settings-row-label">Hosted account</p>
+                <p className="settings-row-detail">
+                  Optional. Sign in for billing, hosted AI, or managed connectors.
+                </p>
+              </div>
+              <div className="settings-row-actions">
+                <Button variant="secondary" size="xs" onClick={onSignIn}>
+                  Continue with Google
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="settings-row">
+              <div className="settings-row-info">
+                <p className="settings-row-label">
+                  {cloudStatus?.accountEmail || currentUserEmail || "Signed in"}
+                </p>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {capabilityBadges.length > 0 ? capabilityBadges : <Badge variant="secondary">local-only</Badge>}
+                </div>
+              </div>
+              <div className="settings-row-actions">
+                <Button variant="ghost" size="xs" onClick={onSignOut}>
+                  <LogOut size={12} />
+                  Sign Out
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {cloudError && (
+            <p className="text-sm text-destructive mt-2">{cloudError}</p>
+          )}
+        </div>
+
+        {/* Integrations */}
+        <div className="settings-group">
+          <h3 className="settings-group-title">Integrations</h3>
+
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">MCP Server</p>
+              <p className="settings-row-detail">
+                Expose your relationship graph to AI agents via the Model Context Protocol.
+              </p>
+            </div>
+            <div className="settings-row-actions">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <Switch
+                      checked={mcpRunning}
+                      onCheckedChange={() => onToggleMcp()}
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  {mcpRunning ? "Stop MCP server" : "Start MCP server"}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+        </div>
+
+        {/* About */}
+        <div className="settings-group">
+          <h3 className="settings-group-title">About</h3>
+
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">App Updates</p>
+              <p className="settings-row-detail">
+                {updateState?.message || "Checks GitHub Releases for updates."}
+              </p>
+            </div>
+            <div className="settings-row-actions">
+              <Badge variant={updateState?.status === "downloaded" ? "success" : "secondary"}>
+                {updateState?.status || "idle"}
+              </Badge>
+              <Button variant="secondary" size="xs" onClick={onCheckUpdates}>
+                Check
+              </Button>
+              {updateState?.status === "downloaded" && (
+                <Button size="xs" onClick={onInstallUpdate}>
+                  Install
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
-      <p className="text-sm font-medium text-foreground">{result.title}</p>
-      <p className="text-sm text-muted-foreground leading-relaxed">{result.snippet}</p>
     </div>
   );
 }
 
+/* ─── Dashboard (main authenticated shell) ─── */
 function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { signIn, signOut } = useAuthActions();
+  const { theme, setTheme } = useTheme();
+  const [view, setView] = useState<View>("conversations");
   const [messagesStatus, setMessagesStatus] = useState<MessagesAccessStatus | null>(null);
   const [contactsStatus, setContactsStatus] = useState<ContactsAccessStatus | null>(null);
   const [contactsSync, setContactsSync] = useState<ContactsSyncSummary | null>(null);
@@ -147,8 +536,6 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
   const [mcpRunning, setMcpRunning] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [answer, setAnswer] = useState<AskResponse | null>(null);
   const [importJob, setImportJob] = useState<MessagesImportJob | null>(null);
   const [threads, setThreads] = useState<MessagesThreadSummary[]>([]);
   const [suggestions, setSuggestions] = useState<ReminderSuggestion[]>([]);
@@ -158,7 +545,7 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
     {
       id: "intro",
       role: "assistant",
-      content: "OpenFolio is ready in local-first mode. Import Messages or sign in to unlock hosted capabilities.",
+      content: "Hi! I can help you search your message history and understand your relationships. Ask me anything.",
     },
   ]);
 
@@ -166,6 +553,7 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
   const cloudStatus = useQuery(api.accounts.getCloudStatus, isAuthenticated ? {} : "skip") as CloudAccountStatus | undefined;
   const registerCurrentDevice = useMutation(api.accounts.registerCurrentDevice);
 
+  // Auth callback handler
   useEffect(() => {
     return window.openfolio.cloud.onAuthCallback((url) => {
       logAuthDebug("received auth callback", url);
@@ -191,7 +579,6 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
             setCloudError("Google sign-in unexpectedly requested another redirect.");
             return;
           }
-
           if (result.signingIn) {
             window.location.reload();
           }
@@ -247,6 +634,7 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
       });
   }, [currentUser?.id, isAuthenticated, registerCurrentDevice, registeredUserId, runtimeConfig.deviceName, runtimeConfig.platform]);
 
+  // Actions
   async function startGoogleSignIn() {
     setCloudError(null);
     try {
@@ -269,19 +657,9 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
       const job = await window.openfolio.messages.startImport();
       setImportJob(job);
       await refreshDashboard();
-      setConversation((current) => [
-        ...current,
-        {
-          id: `import-${job.id}`,
-          role: "assistant",
-          content: `Imported ${job.importedMessages} messages across ${job.importedThreads} threads and ${job.importedPeople} people.`,
-        },
-      ]);
+      toast.success(`Imported ${job.importedMessages} messages across ${job.importedThreads} threads`);
     } catch (error) {
-      setConversation((current) => [
-        ...current,
-        { id: `error-${Date.now()}`, role: "assistant", content: `Import failed: ${error instanceof Error ? error.message : "Unknown error"}` },
-      ]);
+      toast.error(`Import failed: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setBusy(false);
     }
@@ -293,32 +671,16 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
       const summary = await window.openfolio.contacts.sync();
       setContactsSync(summary);
       await refreshDashboard();
-      setConversation((current) => [
-        ...current,
-        {
-          id: `contacts-${Date.now()}`,
-          role: "assistant",
-          content: `Synced ${summary.importedContacts} Apple Contacts into your local identity graph.`,
-        },
-      ]);
+      toast.success(`Synced ${summary.importedContacts} contacts`);
     } catch (error) {
-      setConversation((current) => [
-        ...current,
-        {
-          id: `contacts-error-${Date.now()}`,
-          role: "assistant",
-          content: `Contacts sync failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-        },
-      ]);
+      toast.error(`Contacts sync failed: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setBusy(false);
     }
   }
 
   async function runSearch() {
-    if (!query.trim()) {
-      return;
-    }
+    if (!query.trim()) return;
 
     const nextQuestion = query;
     setBusy(true);
@@ -329,9 +691,15 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
         window.openfolio.search.query({ text: nextQuestion, limit: 8 }),
         window.openfolio.ai.run({ query: nextQuestion }),
       ]);
-      setResults(searchResults);
-      setAnswer(askResponse);
-      setConversation((current) => [...current, { id: `assistant-${Date.now()}`, role: "assistant", content: askResponse.answer }]);
+      setConversation((current) => [
+        ...current,
+        {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: askResponse.answer,
+          sources: searchResults,
+        },
+      ]);
       setQuery("");
     } catch (error) {
       setConversation((current) => [
@@ -349,8 +717,9 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
         ? await window.openfolio.mcp.stop()
         : await window.openfolio.mcp.start();
       setMcpRunning(status.running);
+      toast(status.running ? "MCP server started" : "MCP server stopped");
     } catch (error) {
-      setCloudError(error instanceof Error ? error.message : "Failed to toggle MCP.");
+      toast.error(error instanceof Error ? error.message : "Failed to toggle MCP.");
     }
   }
 
@@ -369,7 +738,7 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
       const nextState = await window.openfolio.updates.checkNow();
       setUpdateState(nextState);
     } catch (error) {
-      setCloudError(error instanceof Error ? error.message : "Failed to check for updates.");
+      toast.error(error instanceof Error ? error.message : "Failed to check for updates.");
     }
   }
 
@@ -377,331 +746,179 @@ function Dashboard({ runtimeConfig }: { runtimeConfig: CloudRuntimeConfig }) {
     try {
       await window.openfolio.updates.installNow();
     } catch (error) {
-      setCloudError(error instanceof Error ? error.message : "Failed to install update.");
+      toast.error(error instanceof Error ? error.message : "Failed to install update.");
     }
   }
 
-  const capabilityBadges = (cloudStatus?.capabilities ?? []).map((capability) => (
-    <Badge key={capability} variant="info">{capability}</Badge>
-  ));
+  const hasData = threads.length > 0;
+
+  const navItems: Array<{ id: View; icon: typeof Sparkles; label: string }> = [
+    { id: "conversations", icon: Sparkles, label: "Conversations" },
+    { id: "activity", icon: Zap, label: "Activity" },
+  ];
 
   return (
-    <div className="shell">
-      {/* Drag bar */}
-      <div className="window-dragbar">
-        <div className="window-dragbar-title">OpenFolio</div>
-      </div>
+    <TooltipProvider delayDuration={300}>
+      <div className="app-shell">
+        <div className="window-drag-region" />
 
-      {/* ─── Sidebar ─── */}
-      <aside className="sidebar">
-        <div className="space-y-1">
-          <h1 className="text-lg font-bold tracking-tight">OpenFolio</h1>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Relationship memory for your Mac.
-          </p>
-        </div>
-
-        <div className="h-px bg-border" />
-
-        <SidebarSection icon={ShieldCheck} title="Messages Access">
-          <Badge variant={messagesStatus?.status === "granted" ? "success" : "default"}>
-            {messagesStatus?.status || "unknown"}
-          </Badge>
-          <p className="text-muted-foreground">{messagesStatus?.details || "Checking access..."}</p>
-          <Button variant="secondary" size="sm" onClick={() => window.openfolio.messages.requestAccess().then(setMessagesStatus)}>
-            Open Settings
-          </Button>
-        </SidebarSection>
-
-        <div className="h-px bg-border" />
-
-        <SidebarSection icon={Users} title="Contacts Access">
-          <Badge variant={contactsStatus?.status === "granted" ? "success" : "default"}>
-            {contactsStatus?.status || "unknown"}
-          </Badge>
-          <p className="text-muted-foreground">{contactsStatus?.details || "Checking access..."}</p>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => window.openfolio.contacts.requestAccess().then(setContactsStatus)}
-            >
-              Allow Contacts
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => void syncContacts()}
-              disabled={busy || contactsStatus?.status !== "granted"}
-            >
-              Sync
-            </Button>
-          </div>
-        </SidebarSection>
-
-        <div className="h-px bg-border" />
-
-        <SidebarSection icon={KeyRound} title="Hosted Account">
-          {isLoading ? <p className="text-muted-foreground">Checking...</p> : null}
-          {!isLoading && !isAuthenticated ? (
-            <>
-              <p className="text-muted-foreground">Optional. Sign in for billing, hosted AI, or managed connectors.</p>
-              <Button variant="secondary" size="sm" onClick={() => void startGoogleSignIn()}>
-                Continue with Google
-              </Button>
-            </>
-          ) : null}
-          {isAuthenticated ? (
-            <>
-              <p className="text-foreground">{cloudStatus?.accountEmail || currentUser?.email || "Signed in"}</p>
-              <div className="flex flex-wrap gap-1.5">{capabilityBadges.length > 0 ? capabilityBadges : <Badge variant="secondary">local-only</Badge>}</div>
-              <Button variant="ghost" size="sm" onClick={() => void handleSignOut()}>
-                <LogOut size={14} />
-                Sign Out
-              </Button>
-            </>
-          ) : null}
-          {cloudError ? <p className="text-sm text-destructive">{cloudError}</p> : null}
-        </SidebarSection>
-
-        <div className="h-px bg-border" />
-
-        <SidebarSection icon={Database} title="Agent Access">
-          <div className="flex items-center gap-2">
-            <span className={`size-1.5 rounded-full ${mcpRunning ? "bg-accent" : "bg-border"}`} />
-            <span className="text-muted-foreground">{mcpRunning ? "MCP running" : "MCP stopped"}</span>
-          </div>
-          <Button variant="secondary" size="sm" onClick={() => void toggleMcp()}>
-            {mcpRunning ? "Stop MCP" : "Start MCP"}
-          </Button>
-        </SidebarSection>
-
-        <div className="h-px bg-border" />
-
-        <SidebarSection icon={Download} title="App Updates">
-          <Badge variant={updateState?.status === "downloaded" ? "success" : "secondary"}>
-            {updateState?.status || "idle"}
-          </Badge>
-          <p className="text-muted-foreground">{updateState?.message || "Checks GitHub Releases for updates."}</p>
-          <div className="flex gap-2">
-            <Button variant="secondary" size="sm" onClick={() => void checkForUpdates()}>
-              Check Now
-            </Button>
-            {updateState?.status === "downloaded" ? (
-              <Button size="sm" onClick={() => void installUpdate()}>
-                Install
-              </Button>
-            ) : null}
-          </div>
-        </SidebarSection>
-      </aside>
-
-      {/* ─── Main ─── */}
-      <main className="main">
-        {/* Hero / Import */}
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-                Messages-first dashboard
-              </p>
-              <CardTitle>Import your relationship history</CardTitle>
-            </div>
-            <Button size="sm" onClick={() => void runImport()} disabled={busy}>
-              <RefreshCw size={14} />
-              Import
-            </Button>
-          </CardHeader>
-          {importJob ? (
-            <CardContent>
-              <div className="flex gap-3 text-sm text-muted-foreground">
-                <Badge variant="secondary">{importJob.status}</Badge>
-                <span>{importJob.importedMessages} messages</span>
-                <span>{importJob.importedPeople} people</span>
-                <span>{importJob.importedThreads} threads</span>
-              </div>
-            </CardContent>
-          ) : null}
-        </Card>
-
-        <Card>
-          <CardHeader className="flex-row items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-                Local identity sync
-              </p>
-              <CardTitle>Resolve handles with Apple Contacts</CardTitle>
-            </div>
-            <Button size="sm" onClick={() => void syncContacts()} disabled={busy || contactsStatus?.status !== "granted"}>
-              <Users size={14} />
-              Sync Contacts
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Imports Contacts locally so phone numbers and email-only threads can resolve to real people.
-            </p>
-            <Badge variant={contactsStatus?.status === "granted" ? "success" : "secondary"}>
-              {contactsStatus?.status || "unknown"}
-            </Badge>
-            {contactsSync ? (
-              <p className="text-sm text-muted-foreground">
-                Last sync processed {contactsSync.importedContacts} contacts.
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        {/* AI workspace + Response */}
-        <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center size-6 rounded-md bg-primary">
-                  <Bot size={14} className="text-primary-foreground" />
+        <SidebarProvider defaultOpen={true} style={{ height: "100vh" }}>
+          <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+            <SidebarHeader className="px-3 pb-2 pt-8">
+              <div className="flex items-center gap-2 px-1 group-data-[collapsible=icon]:justify-center">
+                <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold shrink-0">
+                  O
                 </div>
-                <CardTitle>AI Workspace</CardTitle>
+                <span className="text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+                  OpenFolio
+                </span>
               </div>
-              <p className="text-xs text-muted-foreground">Local OpenFolio runtime</p>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {/* Conversation */}
-              <div className="h-[280px] overflow-y-auto rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-                {conversation.map((entry) => (
-                  <ConversationBubble key={entry.id} role={entry.role}>
-                    {entry.content}
-                  </ConversationBubble>
-                ))}
-              </div>
-              {/* Input */}
-              <div className="flex gap-2">
-                <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Ask about your relationships..."
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void runSearch();
-                    }
-                  }}
-                />
-                <Button size="sm" onClick={() => void runSearch()} disabled={busy || !query.trim()}>
-                  <Sparkles size={14} />
-                  Ask
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+            </SidebarHeader>
 
-          {/* AI Answer */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Badge variant="info">{answer?.provider ?? "local"}</Badge>
-                <CardTitle>AI Answer</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {answer?.answer || "Ask a question to generate a grounded answer with citations from your local graph."}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+            <SidebarSeparator />
 
-        {/* Search results + Runtime */}
-        <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Search size={14} className="text-muted-foreground" />
-                <CardTitle>Search Results</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {results.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No results yet.</p>
-              ) : (
-                results.map((result) => <SearchResultItem key={result.id} result={result} />)
-              )}
-            </CardContent>
-          </Card>
+            <SidebarContent>
+              <SidebarGroup>
+                <SidebarGroupLabel>Navigate</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {navItems.map((item) => (
+                      <SidebarMenuItem key={item.id}>
+                        <SidebarMenuButton
+                          isActive={view === item.id}
+                          onClick={() => setView(item.id)}
+                          tooltip={item.label}
+                        >
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Shield size={14} className="text-muted-foreground" />
-                <CardTitle>Runtime Mode</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Usable before sign-in. Hosted features are optional.
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                <Badge variant="success">messages import</Badge>
-                <Badge variant="success">local search</Badge>
-                <Badge variant="success">local MCP</Badge>
-                <Badge variant={isAuthenticated ? "info" : "warning"}>
-                  {isAuthenticated ? "hosted enabled" : "hosted optional"}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent threads + Follow-ups */}
-        <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <MessageSquare size={14} className="text-muted-foreground" />
-                <CardTitle>Recent Threads</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {threads.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Import Messages to populate.</p>
-              ) : (
-                threads.map((thread) => (
-                  <div key={thread.threadId} className="rounded-lg border border-border bg-muted/50 px-4 py-3">
-                    <p className="text-sm font-medium text-foreground">{thread.title}</p>
-                    <p className="text-sm text-muted-foreground">{thread.lastMessagePreview || "No preview."}</p>
+              <SidebarGroup>
+                <SidebarGroupLabel>Status</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <div className="flex flex-col gap-2 px-2 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:items-center">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-2">
+                          <span className={`status-dot ${messagesStatus?.status === "granted" ? "on" : "off"}`} />
+                          <span className="group-data-[collapsible=icon]:hidden">
+                            Messages {messagesStatus?.status === "granted" ? "connected" : "not connected"}
+                          </span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        Messages {messagesStatus?.status === "granted" ? "connected" : "not connected"}
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-2">
+                          <span className={`status-dot ${mcpRunning ? "on" : "off"}`} />
+                          <span className="group-data-[collapsible=icon]:hidden">
+                            MCP {mcpRunning ? "running" : "stopped"}
+                          </span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        MCP {mcpRunning ? "running" : "stopped"}
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </SidebarContent>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <RefreshCw size={14} className="text-muted-foreground" />
-                <CardTitle>Follow-up Suggestions</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {suggestions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Import Messages to generate suggestions.</p>
-              ) : (
-                suggestions.map((suggestion) => (
-                  <div key={suggestion.personId} className="rounded-lg border border-border bg-muted/50 px-4 py-3">
-                    <p className="text-sm font-medium text-foreground">{suggestion.displayName}</p>
-                    <p className="text-sm text-muted-foreground">{suggestion.reason}</p>
-                  </div>
-                ))
+            <SidebarFooter>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={view === "settings"}
+                    onClick={() => setView("settings")}
+                    tooltip="Settings"
+                  >
+                    <Settings />
+                    <span>Settings</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+              {isAuthenticated && (
+                <div className="px-3 pb-1 text-[11px] text-sidebar-foreground/50 truncate group-data-[collapsible=icon]:hidden">
+                  {cloudStatus?.accountEmail || currentUser?.email || "Signed in"}
+                </div>
               )}
-            </CardContent>
-          </Card>
-        </div>
-      </main>
-    </div>
+            </SidebarFooter>
+          </Sidebar>
+
+          <SidebarInset className="overflow-hidden">
+            {view === "conversations" && (
+              <ConversationsView
+                conversation={conversation}
+                query={query}
+                setQuery={setQuery}
+                onSend={() => void runSearch()}
+                busy={busy}
+                hasData={hasData}
+                onImport={() => void runImport()}
+                messagesStatus={messagesStatus}
+                onRequestAccess={() => {
+                  window.openfolio.messages.requestAccess().then(setMessagesStatus);
+                }}
+              />
+            )}
+            {view === "activity" && (
+              <ActivityView threads={threads} suggestions={suggestions} />
+            )}
+            {view === "settings" && (
+              <SettingsView
+                messagesStatus={messagesStatus}
+                contactsStatus={contactsStatus}
+                contactsSync={contactsSync}
+                isAuthenticated={isAuthenticated}
+                isLoading={isLoading}
+                cloudStatus={cloudStatus}
+                currentUserEmail={currentUser?.email ?? undefined}
+                mcpRunning={mcpRunning}
+                updateState={updateState}
+                importJob={importJob}
+                busy={busy}
+                cloudError={cloudError}
+                theme={theme}
+                onRequestMessages={() => {
+                  window.openfolio.messages.requestAccess().then(setMessagesStatus);
+                }}
+                onRequestContacts={() => {
+                  window.openfolio.contacts.requestAccess().then(setContactsStatus);
+                }}
+                onSyncContacts={() => void syncContacts()}
+                onImport={() => void runImport()}
+                onSignIn={() => void startGoogleSignIn()}
+                onSignOut={() => void handleSignOut()}
+                onToggleMcp={() => void toggleMcp()}
+                onCheckUpdates={() => void checkForUpdates()}
+                onInstallUpdate={() => void installUpdate()}
+                onSetTheme={setTheme}
+              />
+            )}
+          </SidebarInset>
+        </SidebarProvider>
+
+        <Toaster position="bottom-right" />
+      </div>
+    </TooltipProvider>
   );
 }
 
 export function App() {
   const [runtimeConfig, setRuntimeConfig] = useState<CloudRuntimeConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+
+  // Apply theme on initial load (before Convex is ready)
+  useTheme();
 
   useEffect(() => {
     window.openfolio.cloud.getConfig()

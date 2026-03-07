@@ -1,3 +1,4 @@
+/* ─── Light (default) ─── */
 :root {
   --background: #ffffff;
   --foreground: #09090b;
@@ -17,8 +18,29 @@
   --radius: 0.5rem;
 }
 
+/* ─── Dark (explicit) ─── */
+[data-theme="dark"] {
+  --background: #09090b;
+  --foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --border: #27272a;
+  --card: #0a0a0b;
+  --card-foreground: #fafafa;
+  --primary: #fafafa;
+  --primary-foreground: #09090b;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --accent: #10b981;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --ring: #52525b;
+  --radius: 0.5rem;
+}
+
+/* ─── System preference fallback (when no explicit theme or system chosen) ─── */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
     --background: #09090b;
     --foreground: #fafafa;
     --muted: #27272a;
