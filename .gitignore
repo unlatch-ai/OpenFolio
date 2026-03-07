@@ -19,6 +19,7 @@ out/
 
 # production
 build
+!apps/mac/build/
 dist
 
 # misc
