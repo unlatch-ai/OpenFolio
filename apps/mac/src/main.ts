@@ -24,9 +24,11 @@ const mcpController = new LocalMcpController();
 const updater = new OpenFolioUpdater(() => mainWindow, (...args) => {
   logAppDebug("updates", ...args);
 });
+const DEFAULT_CONVEX_URL = "https://blessed-pig-525.convex.cloud";
+const DEFAULT_SITE_URL = "https://openfolio.ai";
 const cloudConfig: CloudRuntimeConfig = {
-  convexUrl: process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || null,
-  hostedBaseUrl: process.env.SITE_URL || process.env.OPENFOLIO_SITE_URL || "http://localhost:3000",
+  convexUrl: process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || DEFAULT_CONVEX_URL,
+  hostedBaseUrl: process.env.SITE_URL || process.env.OPENFOLIO_SITE_URL || DEFAULT_SITE_URL,
   deviceName: os.hostname(),
   platform: process.platform,
 };
@@ -356,7 +358,7 @@ function createWindow() {
     minHeight: 720,
     titleBarStyle: "hiddenInset",
     webPreferences: {
-      preload: path.join(__dirname, "../preload/preload.mjs"),
+      preload: path.join(__dirname, "../preload/preload.cjs"),
       sandbox: true,
     },
   });
@@ -552,7 +554,10 @@ const api: OpenFolioBridge = {
     },
   },
   cloud: {
-    getConfig: async () => cloudConfig,
+    getConfig: async () => {
+      logAppDebug("cloud", "getConfig", cloudConfig);
+      return cloudConfig;
+    },
     beginAuthSession: async () => beginAuthSession(),
     openExternal: async (url: string) => {
       logAppDebug("cloud", "openExternal", url);
