@@ -14,26 +14,21 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10.6.4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm lint
-
-      - name: Build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key-for-build
-          SUPABASE_SERVICE_ROLE_KEY: dummy-service-role-key-for-build
-          SUPABASE_URL: http://localhost:54321
-        run: pnpm build
+      - name: Typecheck
+        run: pnpm typecheck
 
       - name: Test
         run: pnpm test
+
+      - name: Build
+        run: pnpm build
