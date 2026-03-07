@@ -5,7 +5,7 @@
   "type": "module",
   "main": "out/main/main.js",
   "scripts": {
-    "build:contacts-helper": "mkdir -p bin && swiftc native/contacts-bridge.swift -framework Contacts -o bin/openfolio-contacts-bridge",
+    "build:contacts-helper": "if [ \"$(uname)\" = Darwin ]; then mkdir -p bin && swiftc native/contacts-bridge.swift -framework Contacts -o bin/openfolio-contacts-bridge; else echo 'Skipping contacts-helper (not macOS)'; fi",
     "predev": "pnpm run build:contacts-helper",
     "prebuild": "pnpm run build:contacts-helper",
     "predist:mac": "pnpm run build:contacts-helper",
