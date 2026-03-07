@@ -1,58 +1,97 @@
-# OpenFolio
+<p align="center">
+  <img src="apps/mac/build/icon.png" width="80" height="80" alt="OpenFolio icon">
+</p>
 
-OpenFolio is an Electron-first, local-first relationship memory app for macOS.
+<h1 align="center">OpenFolio</h1>
 
-## Active architecture
+<p align="center">
+  <strong>Open-source, local-first relationship memory for macOS</strong>
+</p>
 
-- `apps/mac`: Electron shell and renderer
-- `apps/web`: public landing page, docs, and hosted account page
-- `packages/core`: local SQLite graph, Messages import, local search, embeddings, AI orchestration, and local connectors
-- `packages/mcp`: local CLI and MCP server
-- `packages/hosted`: Convex-hosted identity, billing, entitlements, and future hosted MCP boundaries
-- `packages/shared-types`: shared contracts
+<p align="center">
+  <a href="https://github.com/unlatch-ai/OpenFolio/releases/latest"><img src="https://img.shields.io/github/v/release/unlatch-ai/OpenFolio?style=flat-square&label=Latest" alt="Latest Release"></a>
+  &nbsp;
+  <img src="https://img.shields.io/badge/Platform-macOS-blue?style=flat-square" alt="Platform">
+  &nbsp;
+  <a href="https://github.com/unlatch-ai/OpenFolio/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-green?style=flat-square" alt="License"></a>
+</p>
 
-## Product boundaries
+<p align="center">
+  <a href="https://openfolio.ai">Website</a> &middot;
+  <a href="https://openfolio.ai/docs">Documentation</a> &middot;
+  <a href="https://github.com/unlatch-ai/OpenFolio/releases/latest">Download</a> &middot;
+  <a href="https://github.com/unlatch-ai/OpenFolio/issues">Report an Issue</a>
+</p>
 
-- Local SQLite is the source of truth.
-- Raw Messages history stays on-device by default.
-- Account creation is optional for local use.
-- Hosted services exist for identity, billing, hosted AI, managed connectors, and future hosted MCP / remote access.
-- Future hosted MCP may use an optional derived hosted graph, but raw Messages are not mirrored by default.
+---
 
-## Commands
+OpenFolio is a native macOS app that builds a personal knowledge graph from your relationships — who you know, how you met, what you talked about, what matters. Your data lives in a local SQLite database on your Mac. No cloud required.
+
+An optional hosted account unlocks identity, billing, AI entitlements, and managed connectors — but the local graph is always yours.
+
+## Highlights
+
+- **Local-first** — SQLite on your machine is the source of truth. Works offline, no account needed.
+- **AI-powered** — Surface context, draft messages, and find patterns across your relationship history.
+- **Messages import** — Pull in your macOS Messages history to enrich the graph automatically.
+- **MCP server** — Expose your relationship graph to AI assistants via the Model Context Protocol.
+- **Open source** — AGPL-3.0. Read the code, fork it, contribute back.
+
+## Getting Started
+
+1. Download the latest `.dmg` from the [releases page](https://github.com/unlatch-ai/OpenFolio/releases/latest)
+2. Open the DMG and drag **OpenFolio.app** to your Applications folder
+3. Launch OpenFolio and start building your graph
+
+## Building from Source
+
+**Requirements:** Node.js 22+, [pnpm](https://pnpm.io/) 10+
 
 ```bash
-pnpm dev
-pnpm dev:web
-pnpm dev:hosted
-pnpm typecheck
-pnpm test
-pnpm build
+git clone https://github.com/unlatch-ai/OpenFolio.git
+cd OpenFolio
+pnpm install
+pnpm dev        # Run the Electron app in dev mode
 ```
 
-## Environment
+<details>
+<summary><strong>All commands</strong></summary>
 
-See [`.env.example`](/Users/kevinfang/Documents/GitHub/OpenFolio/.env.example) for the current variables.
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Run the Mac app in development mode |
+| `pnpm dev:web` | Run the website locally |
+| `pnpm dev:hosted` | Run the Convex backend locally |
+| `pnpm typecheck` | Type-check all packages |
+| `pnpm test` | Run all tests |
+| `pnpm build` | Build all packages |
 
-Important values:
+</details>
 
-- `CONVEX_URL`
-- `NEXT_PUBLIC_CONVEX_URL`
-- `SITE_URL`
-- `OPENFOLIO_SITE_URL`
-- `OPENAI_API_KEY`
-- `OPENFOLIO_LOCAL_DB_PATH`
-- `OPENFOLIO_MESSAGES_DB_PATH`
-- `OPENFOLIO_DEBUG`
-- `OPENFOLIO_DEBUG_AUTH`
-- `OPENFOLIO_OPEN_DEVTOOLS`
+## Architecture
 
-## Auth flow
+```
+apps/
+  mac/          Electron app — shell, renderer, auto-updater
+  web/          Public site, docs, and hosted account page (Next.js)
 
-The packaged Mac app registers the `openfolio://` protocol, but the primary browser completion path is a localhost loopback callback that returns the user to the app.
+packages/
+  core/         Local SQLite graph, Messages import, search, embeddings, AI
+  mcp/          CLI and MCP server for the local graph
+  hosted/       Convex backend — identity, billing, entitlements
+  shared-types/ Shared type contracts
+```
 
-## Deployment
+## Contributing
 
-- `apps/web` deploys to Vercel
-- `packages/hosted` deploys to Convex
-- `apps/mac` ships signed `.dmg` and `.zip` artifacts through GitHub Releases
+Contributions are welcome. If you find a bug or have an idea, please [open an issue](https://github.com/unlatch-ai/OpenFolio/issues/new). Pull requests are appreciated — just make sure `pnpm typecheck` and `pnpm test` pass before submitting.
+
+## License
+
+[AGPL-3.0](LICENSE)
+
+---
+
+<p align="center">
+  Built by <a href="https://github.com/TheSnakeFang">Kevin Fang</a>
+</p>
