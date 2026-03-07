@@ -1,0 +1,33 @@
+---
+title: Architecture
+---
+
+# Architecture
+
+## Active packages
+
+- `apps/mac`: Electron shell and renderer
+- `apps/web`: landing page, docs, and hosted account page
+- `packages/core`: local SQLite graph, Messages import, local search, embeddings, AI orchestration, and local connectors
+- `packages/mcp`: local CLI and MCP server
+- `packages/hosted`: Convex-hosted identity, billing, entitlements, and future hosted MCP boundaries
+- `packages/shared-types`: shared contracts
+
+## Local-first boundary
+
+The local graph lives in SQLite on the user’s Mac.
+
+OpenFolio imports Messages into that local graph, builds search documents locally, and stores any local embedding cache locally as well.
+
+## Hosted boundary
+
+Hosted services exist for:
+
+- account identity
+- device registration
+- billing and entitlements
+- hosted AI
+- managed connectors
+- future hosted MCP / remote access
+
+Future hosted MCP may rely on an optional derived hosted graph, but raw Messages remain local by default.

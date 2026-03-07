@@ -1,0 +1,24 @@
+{
+  "name": "openfolio",
+  "version": "0.2.0",
+  "private": true,
+  "packageManager": "pnpm@10.6.4",
+  "scripts": {
+    "dev": "pnpm --filter @openfolio/mac dev",
+    "dev:web": "pnpm --filter @openfolio/web dev",
+    "dev:hosted": "pnpm --filter @openfolio/hosted dev",
+    "hosted:env": "bash scripts/sync-hosted-env.sh",
+    "hosted:jwt": "node scripts/generate-hosted-jwt.mjs",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "eslint": "^9.36.0",
+    "eslint-config-next": "^15.5.12",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

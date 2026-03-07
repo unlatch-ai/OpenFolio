@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "declaration": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@openfolio/shared-types": ["packages/shared-types/src/index.ts"],
+      "@openfolio/core": ["packages/core/src/index.ts"],
+      "@openfolio/mcp": ["packages/mcp/src/index.ts"],
+      "@openfolio/hosted": ["packages/hosted/src/index.ts"]
+    }
+  }
+}
