@@ -15,7 +15,9 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@openfolio/hosted": ["../../packages/hosted/src/index.ts"],
+      "@openfolio/shared-types": ["../../packages/shared-types/src/index.ts"]
     },
     "plugins": [
       {
