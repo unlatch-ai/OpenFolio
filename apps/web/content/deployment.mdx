@@ -1,0 +1,27 @@
+---
+title: Deployment
+---
+
+# Deployment
+
+## Mac app
+
+- Build with `pnpm --filter @openfolio/mac build`
+- Package with `pnpm --filter @openfolio/mac dist:mac`
+- Release signed artifacts with `pnpm --filter @openfolio/mac release:mac`
+- Ship both `.dmg` and `.zip` so GitHub Releases exposes `latest-mac.yml` for auto-updates
+
+## Website and docs
+
+- Deploy `apps/web` on Vercel
+- Keep `apps/web` as the only public web surface
+
+## Hosted services
+
+- Deploy `packages/hosted` with Convex
+- Configure Google auth and Convex env through the hosted package
+- Use the hosted account page for sign-in, billing, and future entitlement management
+
+## Auth redirect
+
+The packaged Mac app still registers the `openfolio://` protocol, but the primary browser completion path is a localhost loopback callback that returns the user to the app.

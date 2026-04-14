@@ -1,0 +1,117 @@
+/* ─── OpenFolio – Warm, social-forward palette ─── */
+/* Inspired by Partiful / Apple Photos / Notion */
+
+:root {
+  /* Warm cream base */
+  --background: #faf8f5;
+  --foreground: #1c1917;
+
+  /* Warm stone muted */
+  --muted: #f5f0eb;
+  --muted-foreground: #78716c;
+
+  /* Subtle warm border */
+  --border: #e7e0d9;
+
+  /* Cards: slightly warmer than bg */
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+
+  /* Primary: warm coral-orange */
+  --primary: #e85d3a;
+  --primary-foreground: #ffffff;
+
+  /* Secondary: warm sand */
+  --secondary: #f5f0eb;
+  --secondary-foreground: #1c1917;
+
+  /* Accent: warm amber for highlights */
+  --accent: #f59e0b;
+  --accent-foreground: #ffffff;
+
+  /* Destructive */
+  --destructive: #dc2626;
+
+  /* Ring: warm stone */
+  --ring: #d6cdc5;
+
+  --radius: 0.625rem;
+
+  /* Gradient tokens for Wrapped cards */
+  --gradient-warm: linear-gradient(135deg, #fbbf24, #f97316, #ef4444);
+  --gradient-cool: linear-gradient(135deg, #8b5cf6, #ec4899, #f97316);
+  --gradient-sunset: linear-gradient(135deg, #f97316, #e85d3a, #dc2626);
+  --gradient-ocean: linear-gradient(135deg, #06b6d4, #3b82f6, #8b5cf6);
+
+  /* Elevation shadows */
+  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.04);
+  --shadow-md: 0 4px 12px rgba(28, 25, 23, 0.06);
+  --shadow-lg: 0 12px 32px rgba(28, 25, 23, 0.08);
+  --shadow-card: 0 1px 3px rgba(28, 25, 23, 0.04), 0 0 0 1px rgba(28, 25, 23, 0.03);
+}
+
+/* ─── Dark (explicit) ─── */
+[data-theme="dark"] {
+  --background: #0c0a09;
+  --foreground: #fafaf9;
+
+  --muted: #1c1917;
+  --muted-foreground: #a8a29e;
+
+  --border: #292524;
+
+  --card: #1c1917;
+  --card-foreground: #fafaf9;
+
+  --primary: #f97316;
+  --primary-foreground: #ffffff;
+
+  --secondary: #292524;
+  --secondary-foreground: #fafaf9;
+
+  --accent: #f59e0b;
+  --accent-foreground: #ffffff;
+
+  --destructive: #ef4444;
+
+  --ring: #44403c;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* ─── System preference fallback ─── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --background: #0c0a09;
+    --foreground: #fafaf9;
+
+    --muted: #1c1917;
+    --muted-foreground: #a8a29e;
+
+    --border: #292524;
+
+    --card: #1c1917;
+    --card-foreground: #fafaf9;
+
+    --primary: #f97316;
+    --primary-foreground: #ffffff;
+
+    --secondary: #292524;
+    --secondary-foreground: #fafaf9;
+
+    --accent: #f59e0b;
+    --accent-foreground: #ffffff;
+
+    --destructive: #ef4444;
+
+    --ring: #44403c;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  }
+}

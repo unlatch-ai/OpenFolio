@@ -1,0 +1,98 @@
+{
+  "name": "@openfolio/mac",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "main": "out/main/main.js",
+  "scripts": {
+    "build:contacts-helper": "if [ \"$(uname)\" = Darwin ]; then mkdir -p bin && swiftc native/contacts-bridge.swift -framework Contacts -o bin/openfolio-contacts-bridge; else echo 'Skipping contacts-helper (not macOS)'; fi",
+    "predev": "pnpm run build:contacts-helper",
+    "prebuild": "pnpm run build:contacts-helper",
+    "predist:mac": "pnpm run build:contacts-helper",
+    "prerelease:mac": "pnpm run build:contacts-helper",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run test",
+    "dist:mac": "electron-builder --mac dmg zip --publish never",
+    "release:mac": "electron-builder --mac dmg zip --publish always"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "^1.2.12",
+    "@convex-dev/auth": "^0.0.91",
+    "@openfolio/core": "workspace:*",
+    "@openfolio/hosted": "workspace:*",
+    "@openfolio/mcp": "workspace:*",
+    "@openfolio/shared-tokens": "workspace:^",
+    "@openfolio/shared-types": "workspace:*",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@tanstack/react-virtual": "^3.13.23",
+    "ai": "^4.3.19",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "convex": "^1.35.1",
+    "electron-updater": "^6.8.3",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^0.542.0",
+    "next-themes": "^0.4.6",
+    "radix-ui": "^1.4.3",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "recharts": "^3.8.1",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.5.0",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^38.8.6",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^4.0.1",
+    "tailwindcss": "^4.2.2",
+    "vite": "^7.3.2"
+  },
+  "build": {
+    "appId": "ai.openfolio.mac",
+    "productName": "OpenFolio",
+    "icon": "build/icon.icns",
+    "files": [
+      "out/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/openfolio-contacts-bridge",
+        "to": "bin/openfolio-contacts-bridge"
+      }
+    ],
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "unlatch-ai",
+        "repo": "OpenFolio"
+      }
+    ],
+    "electronUpdaterCompatibility": ">=2.16",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "icon": "build/icon.icns",
+      "extendInfo": {
+        "NSContactsUsageDescription": "OpenFolio imports your contacts locally so phone numbers and email addresses resolve to real people on this Mac."
+      },
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
+  }
+}

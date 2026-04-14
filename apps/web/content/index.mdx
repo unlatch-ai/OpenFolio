@@ -1,0 +1,28 @@
+---
+title: OpenFolio Docs
+---
+
+# OpenFolio Docs
+
+OpenFolio is an Electron-first personal relationship memory app for macOS.
+
+## Product shape
+
+- `apps/mac` is the real product.
+- `packages/core` is the canonical local-first behavior layer.
+- `apps/web` is the public landing page, docs, and hosted account surface.
+- `packages/hosted` handles account identity, billing, entitlements, and future hosted MCP or managed-service boundaries.
+
+## Principles
+
+- Local SQLite is the source of truth.
+- Raw Messages history stays on-device by default.
+- Account creation is optional for local use.
+- Hosted services are layered on top for identity, billing, hosted AI, managed connectors, and future remote access.
+
+## Next pages
+
+- [Getting Started](/docs/getting-started)
+- [Architecture](/docs/architecture)
+- [Privacy](/docs/privacy)
+- [Deployment](/docs/deployment)
