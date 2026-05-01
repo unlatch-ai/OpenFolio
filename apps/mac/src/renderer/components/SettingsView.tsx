@@ -2,14 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "@openfolio/hosted";
-import type { CloudAccountStatus } from "@openfolio/shared-types";
-import { Download, LogOut, RefreshCw } from "lucide-react";
+import type { AiSettingsStatus, CloudAccountStatus, EmbeddingSyncStatus, McpSetupStatus } from "@openfolio/shared-types";
+import { Copy, Download, KeyRound, LogOut, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import { useTheme, type Theme } from "@/lib/use-theme";
+import { useTheme } from "@/lib/use-theme";
 import { useAppStore } from "../store";
 
 type OAuthActionResult = { redirect?: URL; signingIn: boolean };
@@ -23,7 +22,6 @@ export function SettingsView() {
     messagesStatus,
     contactsStatus,
     contactsSync,
-    mcpRunning,
     updateState,
     importJob,
     busy,
@@ -32,7 +30,6 @@ export function SettingsView() {
     setMessagesStatus,
     setContactsStatus,
     setContactsSync,
-    setMcpRunning,
     setImportJob,
     setBusy,
     setCloudError,
@@ -43,6 +40,20 @@ export function SettingsView() {
   const currentUser = useQuery(api.accounts.getCurrentUser, isAuthenticated ? {} : "skip");
   const cloudStatus = useQuery(api.accounts.getCloudStatus, isAuthenticated ? {} : "skip") as CloudAccountStatus | undefined;
   const registerCurrentDevice = useMutation(api.accounts.registerCurrentDevice);
+  const [aiSettings, setAiSettings] = useState<AiSettingsStatus | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [useOpenAIEmbeddings, setUseOpenAIEmbeddings] = useState(false);
+  const [mcpSetup, setMcpSetup] = useState<McpSetupStatus | null>(null);
+  const [embeddingSync, setEmbeddingSync] = useState<EmbeddingSyncStatus | null>(null);
+
+  useEffect(() => {
+    void window.openfolio.ai.getSettings().then((settings) => {
+      setAiSettings(settings);
+      setUseOpenAIEmbeddings(settings.useOpenAIEmbeddings);
+    });
+    void window.openfolio.mcp.getSetup().then(setMcpSetup);
+    void window.openfolio.embeddings.getSyncStatus().then(setEmbeddingSync);
+  }, []);
 
   // Register device on sign-in
   const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
@@ -117,15 +128,23 @@ export function SettingsView() {
     }
   }, [setBusy, setContactsSync]);
 
-  const toggleMcp = useCallback(async () => {
-    try {
-      const status = mcpRunning ? await window.openfolio.mcp.stop() : await window.openfolio.mcp.start();
-      setMcpRunning(status.running);
-      toast(status.running ? "MCP server started" : "MCP server stopped");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to toggle MCP.");
+  const saveAiKey = useCallback(async () => {
+    if (!apiKey.trim()) {
+      toast.error("Enter an OpenAI API key first.");
+      return;
     }
-  }, [mcpRunning, setMcpRunning]);
+    try {
+      const settings = await window.openfolio.ai.saveOpenAIKey({
+        apiKey: apiKey.trim(),
+        useOpenAIEmbeddings,
+      });
+      setAiSettings(settings);
+      setApiKey("");
+      toast.success("OpenAI key saved locally");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save key.");
+    }
+  }, [apiKey, useOpenAIEmbeddings]);
 
   return (
     <div className="settings-view">
@@ -278,25 +297,108 @@ export function SettingsView() {
           {cloudError && <p className="text-sm text-destructive mt-2">{cloudError}</p>}
         </div>
 
+        {/* AI */}
+        <div className="settings-group">
+          <h3 className="settings-group-title">AI</h3>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Bring your own OpenAI key</p>
+              <p className="settings-row-detail">
+                {aiSettings?.hasOpenAIKey
+                  ? "OpenAI answers are enabled. Your key is stored locally on this Mac."
+                  : "Optional. Enables Ask mode without an OpenFolio hosted plan."}
+              </p>
+            </div>
+            <div className="settings-row-actions settings-key-actions">
+              <input
+                className="settings-key-input"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder="sk-..."
+                type="password"
+              />
+              <Button size="xs" onClick={saveAiKey}>
+                <KeyRound size={12} />
+                Save
+              </Button>
+              {aiSettings?.hasOpenAIKey && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={async () => {
+                    const settings = await window.openfolio.ai.deleteOpenAIKey();
+                    setAiSettings(settings);
+                    toast("OpenAI key removed");
+                  }}
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Use OpenAI embeddings</p>
+              <p className="settings-row-detail">Off keeps semantic indexing local with Transformers.js. On uses your OpenAI key for embeddings.</p>
+            </div>
+            <div className="settings-row-actions">
+              <Switch checked={useOpenAIEmbeddings} onCheckedChange={setUseOpenAIEmbeddings} />
+            </div>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Embedding index</p>
+              <p className="settings-row-detail">
+                {embeddingSync
+                  ? `${embeddingSync.embeddedDocuments}/${embeddingSync.totalDocuments} documents embedded, ${embeddingSync.dirtyDocuments} pending`
+                  : "Checking local search index..."}
+              </p>
+            </div>
+            <div className="settings-row-actions">
+              <Button
+                variant="secondary"
+                size="xs"
+                onClick={() => void window.openfolio.embeddings.getSyncStatus().then(setEmbeddingSync)}
+              >
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </div>
+
         {/* Integrations */}
         <div className="settings-group">
           <h3 className="settings-group-title">Integrations</h3>
           <div className="settings-row">
             <div className="settings-row-info">
-              <p className="settings-row-label">MCP Server</p>
-              <p className="settings-row-detail">Expose your graph to AI agents via Model Context Protocol.</p>
+              <p className="settings-row-label">MCP setup</p>
+              <p className="settings-row-detail">{mcpSetup?.details || "Loading local MCP setup..."}</p>
             </div>
             <div className="settings-row-actions">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div><Switch checked={mcpRunning} onCheckedChange={toggleMcp} /></div>
-                </TooltipTrigger>
-                <TooltipContent side="left">
-                  {mcpRunning ? "Stop MCP server" : "Start MCP server"}
-                </TooltipContent>
-              </Tooltip>
+              <Badge variant={mcpSetup?.available ? "success" : "default"}>{mcpSetup?.available ? "available" : "checking"}</Badge>
             </div>
           </div>
+          {mcpSetup?.clients.map((client) => (
+            <div className="settings-row settings-code-row" key={client.id}>
+              <div className="settings-row-info">
+                <p className="settings-row-label">{client.name}</p>
+                <pre className="settings-code-block">{client.config}</pre>
+              </div>
+              <div className="settings-row-actions">
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(client.config);
+                    toast("Copied MCP config");
+                  }}
+                >
+                  <Copy size={12} />
+                  Copy
+                </Button>
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Updates */}

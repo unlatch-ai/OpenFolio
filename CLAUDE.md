@@ -64,5 +64,7 @@ pnpm install && pnpm build && pnpm dev
 
 - **Read-only**: OpenFolio never sends messages. It only reads `chat.db`.
 - **Local-first**: Everything works without an internet connection or account.
+- **TDD expectation**: Add behavior tests before or alongside changes. Avoid tests that only assert implementation details.
+- **AI privacy**: BYOK OpenAI is explicit opt-in. Hosted AI, billing, and managed connectors are future layers, not default product behavior.
 - **macOS only**: Requires Full Disk Access for `chat.db` and Contacts framework access.
 - When editing `packages/core`, you must rebuild before the Electron app picks up changes.

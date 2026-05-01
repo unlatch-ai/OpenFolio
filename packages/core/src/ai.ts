@@ -17,7 +17,10 @@ export class AIOrchestrator {
   ) {}
 
   getEmbeddingMetadata() {
-    if (this.localEmbeddings && (!this.config || this.config.provider === "local")) {
+    if (
+      this.localEmbeddings
+      && (!this.config || this.config.provider === "local" || (this.config.provider === "openai" && this.config.useOpenAIEmbeddings === false))
+    ) {
       return {
         provider: "local" as EmbeddingProvider,
         model: "all-MiniLM-L6-v2",
@@ -31,11 +34,14 @@ export class AIOrchestrator {
 
   async embed(input: string) {
     // Try local embeddings first (default, zero-friction)
-    if (this.localEmbeddings && (!this.config || this.config.provider === "local")) {
+    if (
+      this.localEmbeddings
+      && (!this.config || this.config.provider === "local" || (this.config.provider === "openai" && this.config.useOpenAIEmbeddings === false))
+    ) {
       return this.localEmbeddings.embed(input);
     }
 
-    if (!this.config || this.config.provider !== "openai" || !this.config.apiKey) {
+    if (!this.config || this.config.provider !== "openai" || !this.config.apiKey || this.config.useOpenAIEmbeddings === false) {
       // Fall back to local if available, even when no config
       if (this.localEmbeddings) {
         return this.localEmbeddings.embed(input);
@@ -61,13 +67,16 @@ export class AIOrchestrator {
     if (documents.length === 0) return [];
 
     // Try local embeddings first
-    if (this.localEmbeddings && (!this.config || this.config.provider === "local")) {
+    if (
+      this.localEmbeddings
+      && (!this.config || this.config.provider === "local" || (this.config.provider === "openai" && this.config.useOpenAIEmbeddings === false))
+    ) {
       const texts = documents.map((doc) => normalizeDocumentForEmbedding(doc));
       return this.localEmbeddings.embedBatch(texts);
     }
 
     // Fall back to local if OpenAI is not configured
-    if (!this.config || this.config.provider !== "openai" || !this.config.apiKey) {
+    if (!this.config || this.config.provider !== "openai" || !this.config.apiKey || this.config.useOpenAIEmbeddings === false) {
       if (this.localEmbeddings) {
         const texts = documents.map((doc) => normalizeDocumentForEmbedding(doc));
         return this.localEmbeddings.embedBatch(texts);

@@ -34,6 +34,17 @@ function appendMessage(chatDbPath: string) {
   db.close();
 }
 
+function appendManyMessages(chatDbPath: string, count: number) {
+  const db = new DatabaseSync(chatDbPath);
+  const insertMessage = db.prepare("INSERT INTO message(ROWID, text, handle_id, is_from_me, date, service) VALUES (?, ?, 1, 0, ?, 'iMessage')");
+  const insertJoin = db.prepare("INSERT INTO chat_message_join(chat_id, message_id) VALUES (1, ?)");
+  for (let index = 2; index < count + 2; index += 1) {
+    insertMessage.run(index, `bulk message ${index}`, index * 1000);
+    insertJoin.run(index);
+  }
+  db.close();
+}
+
 describe("OpenFolioCore", () => {
   let dbPath: string;
   let chatDbPath: string;
@@ -44,6 +55,7 @@ describe("OpenFolioCore", () => {
     seedMessagesDb(chatDbPath);
     process.env.OPENFOLIO_MESSAGES_DB_PATH = chatDbPath;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENFOLIO_IMPORT_BATCH_SIZE;
   });
 
   it("imports Messages rows, builds dirty documents, and keeps search working without embeddings", async () => {
@@ -59,6 +71,9 @@ describe("OpenFolioCore", () => {
     const results = await core.search("ada");
     expect(results.length).toBeGreaterThan(0);
     expect(results.some((result) => result.snippet.includes("hello ada") || result.title.includes("Ada"))).toBe(true);
+    const messageHit = results.find((result) => result.kind === "message");
+    expect(messageHit?.threadId).toBeTruthy();
+    expect(messageHit?.messageId).toBeTruthy();
   });
 
   it("imports only the delta on the next Messages sync", async () => {
@@ -70,6 +85,32 @@ describe("OpenFolioCore", () => {
     expect(firstJob.importedMessages).toBe(1);
     expect(secondJob.importedMessages).toBe(1);
     expect(secondJob.lastCursor).toBe(2);
+  });
+
+  it("imports more than one Messages page in a single sync", async () => {
+    process.env.OPENFOLIO_IMPORT_BATCH_SIZE = "2";
+    appendManyMessages(chatDbPath, 4);
+    const core = new OpenFolioCore({ dbPath });
+    const job = await core.startMessagesImport();
+
+    expect(job.status).toBe("completed");
+    expect(job.importedMessages).toBe(5);
+    expect(job.lastCursor).toBe(5);
+    delete process.env.OPENFOLIO_IMPORT_BATCH_SIZE;
+  });
+
+  it("finds semantic-only matches from embedded documents without keyword hits", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const dirtyDocs = core.db.getDirtySearchDocuments();
+    for (const doc of dirtyDocs) {
+      core.db.markSearchDocumentEmbedded(doc.id, doc.kind === "message" ? [1, 0, 0] : [0, 1, 0], "local", "test");
+    }
+
+    const results = core.db.search("unrelated words", 5, [1, 0, 0]);
+
+    expect(results[0]?.kind).toBe("message");
+    expect(results[0]?.snippet).toContain("hello ada");
   });
 
   it("fails gracefully when the Messages database is unavailable", async () => {
@@ -142,6 +183,62 @@ describe("OpenFolioCore", () => {
     expect(people).toHaveLength(1);
     expect(people[0]?.displayName).toBe("Ada Lovelace");
     expect(people[0]?.primaryHandle).toBe("+15555550123");
+  });
+
+  it("builds a person profile from messages, contacts, notes, and reminders", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const person = core.db.listPeople().find((item) => item.primaryHandle === "+15555550123");
+    expect(person).toBeTruthy();
+
+    core.applyConnectorSync({
+      people: [{
+        displayName: "Ada Lovelace",
+        primaryHandle: "+1 (555) 555-0123",
+        email: "ada@example.com",
+        companyName: "Analytical Engines",
+        jobTitle: "Mathematician",
+        sourceKind: "apple_contacts",
+        sourceId: "ada",
+      }],
+      interactions: [],
+      cursor: null,
+      hasMore: false,
+    });
+    const updated = core.db.listPeople()[0];
+    core.addNote("person", updated.id, "Met at the math salon.");
+    core.addReminder("Follow up with Ada", updated.id, null);
+
+    const profile = core.getPersonProfile(updated.id);
+
+    expect(profile?.person.email).toBe("ada@example.com");
+    expect(profile?.person.companyName).toBe("Analytical Engines");
+    expect(profile?.threads.length).toBeGreaterThan(0);
+    expect(profile?.recentMessages.length).toBeGreaterThan(0);
+    expect(profile?.notes[0]?.content).toContain("math salon");
+    expect(profile?.reminders[0]?.title).toBe("Follow up with Ada");
+  });
+
+  it("does not inflate top contacts with me or unrelated group participants", async () => {
+    const db = new DatabaseSync(chatDbPath);
+    db.prepare("INSERT INTO handle(ROWID, id) VALUES (2, '+15555550124')").run();
+    db.prepare("INSERT INTO chat(ROWID, chat_identifier, service_name) VALUES (2, 'Group', 'iMessage')").run();
+    db.prepare("INSERT INTO message(ROWID, text, handle_id, is_from_me, date, service) VALUES (2, 'ada in the group', 1, 0, 2000, 'iMessage')").run();
+    db.prepare("INSERT INTO message(ROWID, text, handle_id, is_from_me, date, service) VALUES (3, 'hello from bob', 2, 0, 3000, 'iMessage')").run();
+    db.prepare("INSERT INTO message(ROWID, text, handle_id, is_from_me, date, service) VALUES (4, 'my group reply', NULL, 1, 4000, 'iMessage')").run();
+    db.prepare("INSERT INTO chat_message_join(chat_id, message_id) VALUES (2, 2)").run();
+    db.prepare("INSERT INTO chat_message_join(chat_id, message_id) VALUES (2, 3)").run();
+    db.prepare("INSERT INTO chat_message_join(chat_id, message_id) VALUES (2, 4)").run();
+    db.close();
+
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const ada = core.db.listPeople().find((item) => item.primaryHandle === "+15555550123");
+    const bob = core.db.listPeople().find((item) => item.primaryHandle === "+15555550124");
+
+    expect(core.analytics.getRelationshipStats(ada!.id)?.totalMessages).toBe(2);
+    expect(core.analytics.getRelationshipStats(bob!.id)?.totalMessages).toBe(1);
+    expect(core.analytics.getTopContacts(5).some((contact) => contact.displayName === "You")).toBe(false);
   });
 
   it("finds duplicate local people by handle or name", () => {

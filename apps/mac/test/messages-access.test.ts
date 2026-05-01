@@ -39,6 +39,6 @@ describe("messages access guidance", () => {
     expect(status.revealedInFinder).toBe(true);
     expect(status.accessTargetLabel).toBe("OpenFolio.app");
     expect(status.details).toContain("Full Disk Access");
-    expect(status.details).toContain("relaunch OpenFolio");
+    expect(status.details).toMatch(/relaunch OpenFolio/i);
   });
 });

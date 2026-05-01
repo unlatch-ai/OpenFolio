@@ -23,6 +23,9 @@ const bridge: OpenFolioBridge = {
   },
   ai: {
     run: (input: { query: string; useHosted?: boolean }) => ipcRenderer.invoke("openfolio:ai:run", input),
+    getSettings: () => ipcRenderer.invoke("openfolio:ai:getSettings"),
+    saveOpenAIKey: (input) => ipcRenderer.invoke("openfolio:ai:saveOpenAIKey", input),
+    deleteOpenAIKey: () => ipcRenderer.invoke("openfolio:ai:deleteOpenAIKey"),
   },
   cloud: {
     getConfig: () => ipcRenderer.invoke("openfolio:cloud:getConfig"),
@@ -53,6 +56,11 @@ const bridge: OpenFolioBridge = {
     getStatus: () => ipcRenderer.invoke("openfolio:mcp:getStatus"),
     start: () => ipcRenderer.invoke("openfolio:mcp:start"),
     stop: () => ipcRenderer.invoke("openfolio:mcp:stop"),
+    getSetup: () => ipcRenderer.invoke("openfolio:mcp:getSetup"),
+  },
+  people: {
+    list: (input?: { limit?: number; query?: string }) => ipcRenderer.invoke("openfolio:people:list", input),
+    getProfile: (personId: string) => ipcRenderer.invoke("openfolio:people:getProfile", personId),
   },
   threads: {
     list: (input: { limit?: number; offset?: number }) => ipcRenderer.invoke("openfolio:threads:list", input),
@@ -72,6 +80,7 @@ const bridge: OpenFolioBridge = {
   },
   embeddings: {
     getStatus: () => ipcRenderer.invoke("openfolio:embeddings:getStatus"),
+    getSyncStatus: () => ipcRenderer.invoke("openfolio:embeddings:getSyncStatus"),
   },
   insights: {
     getWrappedSummary: (year?: number) => ipcRenderer.invoke("openfolio:insights:getWrappedSummary", year),

@@ -46,7 +46,7 @@ function ThreadRow({
 }
 
 /* ─── Thread detail panel ─── */
-function ThreadPanel({ threadId }: { threadId: string }) {
+function ThreadPanel({ threadId, selectedMessageId }: { threadId: string; selectedMessageId: string | null }) {
   const [detail, setDetail] = useState<ThreadDetail | null>(null);
   const [messages, setMessages] = useState<MessageDetail[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +103,7 @@ function ThreadPanel({ threadId }: { threadId: string }) {
         {messages.map((msg) => (
           <div
             key={msg.id}
-            className={`thread-msg ${msg.isFromMe ? "from-me" : "from-them"}`}
+            className={`thread-msg ${msg.isFromMe ? "from-me" : "from-them"} ${selectedMessageId === msg.id ? "highlight" : ""}`}
           >
             {!msg.isFromMe && (
               <ContactAvatar
@@ -194,7 +194,7 @@ function EmptyInbox() {
 
 /* ─── Main inbox view ─── */
 export function InboxView() {
-  const { threads, selectedThreadId, selectThread } = useAppStore();
+  const { threads, selectedThreadId, selectedMessageId, selectThread } = useAppStore();
   const listRef = useRef<HTMLDivElement>(null);
 
   // Keyboard navigation: arrow keys to move, Escape to deselect
@@ -270,7 +270,7 @@ export function InboxView() {
               transition={{ duration: 0.15, ease: "easeOut" }}
               className="inbox-detail-inner"
             >
-              <ThreadPanel threadId={selectedThreadId} />
+              <ThreadPanel threadId={selectedThreadId} selectedMessageId={selectedMessageId} />
             </motion.div>
           ) : (
             <motion.div

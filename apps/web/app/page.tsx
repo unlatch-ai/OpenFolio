@@ -38,7 +38,7 @@ const features = [
     icon: Search,
     title: "Semantic search",
     description:
-      "Cmd+K to search your entire message history using local AI embeddings. No API keys, no cloud, instant results.",
+      "Cmd+K searches your message history with local embeddings, keyword fallback, and optional BYOK Ask mode.",
     badge: "Search",
   },
   {
@@ -56,7 +56,7 @@ const capabilities = [
   { label: "Semantic search", status: "local" },
   { label: "Activity heatmap", status: "local" },
   { label: "MCP server", status: "local" },
-  { label: "Identity & billing", status: "hosted" },
+  { label: "Identity & billing", status: "future" },
 ];
 
 export default function HomePage() {
@@ -265,9 +265,9 @@ export default function HomePage() {
                 Built for agents.
               </h2>
               <p className="mt-3 text-muted-foreground leading-relaxed">
-                OpenFolio exposes your relationship graph through MCP and CLI.
-                Your agents can query contacts, search messages, and access
-                follow-up suggestions — all scoped to explicit local permissions.
+                OpenFolio exposes your relationship graph through a local stdio
+                MCP server and CLI. Your agents can search messages, inspect
+                people, and access follow-up suggestions from your local graph.
               </p>
               <div className="mt-6 flex gap-2">
                 <Badge variant="secondary">MCP Server</Badge>
@@ -287,8 +287,8 @@ export default function HomePage() {
                 </span>
               </div>
               <pre className="p-4 text-sm font-mono text-foreground/80 leading-relaxed overflow-x-auto">
-                <code>{`$ openfolio mcp start
-  MCP server listening on stdio
+                <code>{`$ openfolio mcp serve
+  local stdio MCP server ready
 
 $ openfolio search "last conversation with Sarah"
   3 results from local graph

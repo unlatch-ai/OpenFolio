@@ -84,94 +84,103 @@ export class MessagesImporter {
 
     const source = new DatabaseSync(chatDbPath, { open: true, readOnly: true });
     const cursor = this.database.getCursor("messages") ?? 0;
+    let batchCursor = cursor;
+    const importLimit = Number(process.env.OPENFOLIO_IMPORT_BATCH_SIZE ?? 10_000);
 
     try {
-      const rows = source
-        .prepare(`
-          SELECT
-            m.ROWID AS sourceMessageId,
-            c.ROWID AS chatId,
-            COALESCE(c.chat_identifier, CAST(c.ROWID AS TEXT)) AS chatIdentifier,
-            m.text AS body,
-            COALESCE(m.service, c.service_name) AS service,
-            h.id AS handleValue,
-            m.is_from_me AS isFromMe,
-            CAST(m.date AS TEXT) AS appleDate,
-            a.filename AS attachmentPath,
-            a.mime_type AS attachmentMimeType,
-            a.transfer_name AS attachmentTransferName
-          FROM message m
-          LEFT JOIN handle h ON h.ROWID = m.handle_id
-          LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
-          LEFT JOIN chat c ON c.ROWID = cmj.chat_id
-          LEFT JOIN message_attachment_join maj ON maj.message_id = m.ROWID
-          LEFT JOIN attachment a ON a.ROWID = maj.attachment_id
-          WHERE m.ROWID > ?
-          ORDER BY m.ROWID ASC
-          LIMIT 10000
-        `)
-        .all(cursor) as RawMessageRow[];
-
-      const grouped = new Map<number, RawMessageRow[]>();
-
-      for (const row of rows) {
-        const bucket = grouped.get(row.sourceMessageId) ?? [];
-        bucket.push(row);
-        grouped.set(row.sourceMessageId, bucket);
-      }
-
       const seenThreads = new Set<string>();
       const seenPeople = new Set<string>();
       const importedMessageIds = new Set<string>();
       let maxCursor = cursor;
 
-      for (const [, bucket] of grouped) {
-        const first = bucket[0];
-        const sourceChatId = String(first.chatId ?? `orphan_${first.sourceMessageId}`);
-        const thread = this.database.upsertThread(sourceChatId, first.chatIdentifier ?? null);
-        if (!seenThreads.has(thread.id)) {
+      while (true) {
+        const rows = source
+          .prepare(`
+            SELECT
+              m.ROWID AS sourceMessageId,
+              c.ROWID AS chatId,
+              COALESCE(c.chat_identifier, CAST(c.ROWID AS TEXT)) AS chatIdentifier,
+              m.text AS body,
+              COALESCE(m.service, c.service_name) AS service,
+              h.id AS handleValue,
+              m.is_from_me AS isFromMe,
+              CAST(m.date AS TEXT) AS appleDate,
+              a.filename AS attachmentPath,
+              a.mime_type AS attachmentMimeType,
+              a.transfer_name AS attachmentTransferName
+            FROM message m
+            LEFT JOIN handle h ON h.ROWID = m.handle_id
+            LEFT JOIN chat_message_join cmj ON cmj.message_id = m.ROWID
+            LEFT JOIN chat c ON c.ROWID = cmj.chat_id
+            LEFT JOIN message_attachment_join maj ON maj.message_id = m.ROWID
+            LEFT JOIN attachment a ON a.ROWID = maj.attachment_id
+            WHERE m.ROWID > ?
+            ORDER BY m.ROWID ASC
+            LIMIT ?
+          `)
+          .all(batchCursor, importLimit) as RawMessageRow[];
+
+        if (rows.length === 0) {
+          break;
+        }
+
+        const grouped = new Map<number, RawMessageRow[]>();
+
+        for (const row of rows) {
+          const bucket = grouped.get(row.sourceMessageId) ?? [];
+          bucket.push(row);
+          grouped.set(row.sourceMessageId, bucket);
+        }
+
+        for (const [, bucket] of grouped) {
+          const first = bucket[0];
+          const sourceChatId = String(first.chatId ?? `orphan_${first.sourceMessageId}`);
+          const thread = this.database.upsertThread(sourceChatId, first.chatIdentifier ?? null);
           seenThreads.add(thread.id);
-        }
 
-        const isFromMe = Boolean(first.isFromMe);
-        const rawHandle = isFromMe ? "me" : first.handleValue;
-        const handle = normalizeHandle(rawHandle);
-        const person = this.database.getOrCreatePerson(handle, isFromMe ? "You" : first.handleValue ?? "Unknown");
-        if (!seenPeople.has(person.id)) {
+          const isFromMe = Boolean(first.isFromMe);
+          const rawHandle = isFromMe ? "me" : first.handleValue;
+          const handle = normalizeHandle(rawHandle);
+          const person = this.database.getOrCreatePerson(handle, isFromMe ? "You" : first.handleValue ?? "Unknown");
           seenPeople.add(person.id);
+
+          if (rawHandle) {
+            this.database.addParticipant(thread.id, person.id, rawHandle, first.service ?? null);
+          }
+
+          const inserted = this.database.insertMessage({
+            sourceMessageId: String(first.sourceMessageId),
+            threadId: thread.id,
+            personId: person.id,
+            body: first.body,
+            occurredAt: appleTimestampToUnixMs(first.appleDate),
+            isFromMe,
+            attachments: bucket
+              .filter((row) => row.attachmentPath)
+              .map((row) => ({
+                path: row.attachmentPath,
+                mimeType: row.attachmentMimeType,
+                transferName: row.attachmentTransferName,
+              })),
+            metadata: {
+              sourceChatId,
+              service: first.service,
+              importedAt: new Date().toISOString(),
+            },
+          });
+
+          if (inserted.inserted) {
+            job.importedMessages += 1;
+            importedMessageIds.add(inserted.messageId);
+          }
+
+          maxCursor = Math.max(maxCursor, first.sourceMessageId);
         }
 
-        if (rawHandle) {
-          this.database.addParticipant(thread.id, person.id, rawHandle, first.service ?? null);
+        batchCursor = maxCursor;
+        if (rows.length < importLimit) {
+          break;
         }
-
-        const inserted = this.database.insertMessage({
-          sourceMessageId: String(first.sourceMessageId),
-          threadId: thread.id,
-          personId: person.id,
-          body: first.body,
-          occurredAt: appleTimestampToUnixMs(first.appleDate),
-          isFromMe,
-          attachments: bucket
-            .filter((row) => row.attachmentPath)
-            .map((row) => ({
-              path: row.attachmentPath,
-              mimeType: row.attachmentMimeType,
-              transferName: row.attachmentTransferName,
-            })),
-          metadata: {
-            sourceChatId,
-            service: first.service,
-            importedAt: new Date().toISOString(),
-          },
-        });
-
-        if (inserted.inserted) {
-          job.importedMessages += 1;
-          importedMessageIds.add(inserted.messageId);
-        }
-
-        maxCursor = Math.max(maxCursor, first.sourceMessageId);
       }
 
       job.importedThreads = seenThreads.size;

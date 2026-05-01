@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
-import { Search, MessageSquare, User, FileText, Bell } from "lucide-react";
+import { Search, MessageSquare, User, FileText, Bell, Sparkles } from "lucide-react";
 import { useAppStore } from "../store";
-import type { SearchResult } from "@openfolio/shared-types";
+import type { AskResponse, SearchResult } from "@openfolio/shared-types";
 
 const ICON_MAP: Record<string, typeof MessageSquare> = {
   thread: MessageSquare,
@@ -18,10 +18,13 @@ function ResultIcon({ kind }: { kind: SearchResult["kind"] }) {
 }
 
 export function CommandPalette() {
-  const { commandPalette, closeCommandPalette, setCommandQuery, setCommandResults, selectThread, setView } =
+  const { commandPalette, closeCommandPalette, setCommandQuery, setCommandResults, selectThread, selectMessage, selectPerson, setView } =
     useAppStore();
   const { open, query, results, searching } = commandPalette;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [mode, setMode] = useState<"search" | "ask">("search");
+  const [asking, setAsking] = useState(false);
+  const [answer, setAnswer] = useState<AskResponse | null>(null);
 
   // Cmd+K global shortcut
   useEffect(() => {
@@ -60,14 +63,32 @@ export function CommandPalette() {
   const handleSelect = useCallback(
     (result: SearchResult) => {
       closeCommandPalette();
-      if (result.kind === "thread" || result.kind === "message") {
-        const threadId = result.kind === "thread" ? result.entityId : result.entityId;
+      if (result.personId) {
+        setView("people");
+        selectPerson(result.personId);
+      } else if (result.threadId) {
         setView("inbox");
-        selectThread(threadId);
+        selectThread(result.threadId);
+        selectMessage(result.messageId ?? null);
       }
     },
-    [closeCommandPalette, selectThread, setView],
+    [closeCommandPalette, selectThread, selectMessage, selectPerson, setView],
   );
+
+  const runAsk = useCallback(async () => {
+    if (!query.trim()) return;
+    setAsking(true);
+    setAnswer(null);
+    try {
+      const response = await window.openfolio.ai.run({ query });
+      setAnswer(response);
+      setCommandResults(response.citations, false);
+    } catch {
+      setAnswer({ answer: "Ask failed. Check your OpenAI key in Settings or try a narrower query.", citations: [], provider: "local" });
+    } finally {
+      setAsking(false);
+    }
+  }, [query, setCommandResults]);
 
   if (!open) return null;
 
@@ -76,21 +97,44 @@ export function CommandPalette() {
       <div className="cmd-container" onClick={(e) => e.stopPropagation()}>
         <Command shouldFilter={false} loop>
           <div className="cmd-input-wrap">
-            <Search size={16} className="text-muted-foreground shrink-0" />
+            {mode === "ask" ? <Sparkles size={16} className="text-muted-foreground shrink-0" /> : <Search size={16} className="text-muted-foreground shrink-0" />}
             <Command.Input
               value={query}
-              onValueChange={runSearch}
-              placeholder="Search conversations, people, notes..."
+              onValueChange={(value) => {
+                setAnswer(null);
+                if (mode === "search") runSearch(value);
+                else setCommandQuery(value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && mode === "ask") {
+                  event.preventDefault();
+                  void runAsk();
+                }
+              }}
+              placeholder={mode === "ask" ? "Ask about your message history..." : "Search conversations, people, notes..."}
               className="cmd-input"
               autoFocus
             />
             <kbd className="cmd-kbd">esc</kbd>
           </div>
 
+          <div className="cmd-mode-row">
+            <button className={mode === "search" ? "active" : ""} onClick={() => { setMode("search"); setAnswer(null); runSearch(query); }}>Search</button>
+            <button className={mode === "ask" ? "active" : ""} onClick={() => { setMode("ask"); setAnswer(null); setCommandResults([], false); }}>Ask</button>
+            {mode === "ask" && <button className="cmd-ask-button" onClick={() => void runAsk()} disabled={asking || !query.trim()}>{asking ? "Asking..." : "Ask"}</button>}
+          </div>
+
           <Command.List className="cmd-list">
-            {query.length === 0 && (
+            {answer && (
+              <div className="cmd-answer">
+                <strong>{answer.provider === "openai" ? "OpenAI answer" : "Local answer"}</strong>
+                <p>{answer.answer}</p>
+              </div>
+            )}
+
+            {query.length === 0 && !answer && (
               <Command.Empty className="cmd-empty">
-                Start typing to search your messages...
+                {mode === "ask" ? "Ask a question about your messages." : "Start typing to search your messages..."}
               </Command.Empty>
             )}
 

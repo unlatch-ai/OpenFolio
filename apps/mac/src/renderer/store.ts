@@ -16,7 +16,7 @@ import type {
 
 /* ─── Navigation ─── */
 
-export type View = "inbox" | "insights" | "settings";
+export type View = "inbox" | "people" | "insights" | "settings";
 
 /* ─── Command palette ─── */
 
@@ -37,6 +37,10 @@ export interface AppState {
   // Selected thread
   selectedThreadId: string | null;
   selectThread: (threadId: string | null) => void;
+  selectedMessageId: string | null;
+  selectMessage: (messageId: string | null) => void;
+  selectedPersonId: string | null;
+  selectPerson: (personId: string | null) => void;
 
   // Command palette
   commandPalette: CommandPaletteState;
@@ -100,6 +104,10 @@ export const useAppStore = create<AppState>((set) => ({
   // Selected thread
   selectedThreadId: null,
   selectThread: (threadId) => set({ selectedThreadId: threadId }),
+  selectedMessageId: null,
+  selectMessage: (messageId) => set({ selectedMessageId: messageId }),
+  selectedPersonId: null,
+  selectPerson: (personId) => set({ selectedPersonId: personId }),
 
   // Command palette
   commandPalette: { open: false, query: "", results: [], searching: false },

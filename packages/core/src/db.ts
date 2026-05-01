@@ -6,10 +6,12 @@ import type {
   ConnectorSyncResult,
   MessageThread,
   MessagesThreadSummary,
+  MessageDetail,
   NormalizedConnectorInteraction,
   NormalizedConnectorPerson,
   Note,
   Person,
+  PersonProfile,
   Reminder,
   ReminderSuggestion,
   RelationshipDigest,
@@ -28,6 +30,7 @@ import {
 import { contentHash, cosineSimilarity, createId, normalizeHandle, normalizeQueryForFts, now } from "./utils.js";
 
 const DEFAULT_DB_DIR = path.join(os.homedir(), "Library", "Application Support", "OpenFolio");
+const CURRENT_SCHEMA_VERSION = 2;
 
 function stringify(value: unknown) {
   return JSON.stringify(value ?? null);
@@ -51,6 +54,36 @@ function parseEmbedding(value: unknown): number[] | null {
   return null;
 }
 
+function parseJsonArray(value: unknown): string[] {
+  if (typeof value !== "string" || !value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function mapPerson(row: Record<string, unknown>): Person {
+  return {
+    id: String(row.id),
+    displayName: String(row.displayName),
+    primaryHandle: (row.primaryHandle as string | null) ?? null,
+    email: (row.email as string | null) ?? null,
+    phone: (row.phone as string | null) ?? null,
+    companyName: (row.companyName as string | null) ?? null,
+    jobTitle: (row.jobTitle as string | null) ?? null,
+    bio: (row.bio as string | null) ?? null,
+    location: (row.location as string | null) ?? null,
+    sourceKinds: parseJsonArray(row.sourceKinds) as Person["sourceKinds"],
+    createdAt: Number(row.createdAt),
+    updatedAt: Number(row.updatedAt),
+  };
+}
+
 type SearchTargets = {
   people?: string[];
   threads?: string[];
@@ -69,7 +102,44 @@ export class OpenFolioDatabase {
     this.dbPath = dbPath;
     this.db = new DatabaseSync(dbPath);
     this.db.exec("PRAGMA journal_mode = WAL;");
+    this.resetIncompatibleSchema();
     this.bootstrap();
+  }
+
+  private resetIncompatibleSchema() {
+    const version = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
+    const hasExistingTables = (this.db
+      .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+      .get() as { count: number }).count > 0;
+
+    if (!hasExistingTables || version.user_version === CURRENT_SCHEMA_VERSION) {
+      return;
+    }
+
+    this.db.exec(`
+      PRAGMA foreign_keys = OFF;
+      DROP TRIGGER IF EXISTS search_documents_ai;
+      DROP TRIGGER IF EXISTS search_documents_ad;
+      DROP TRIGGER IF EXISTS search_documents_au;
+      DROP TABLE IF EXISTS search_documents_fts;
+      DROP TABLE IF EXISTS attachment_refs;
+      DROP TABLE IF EXISTS message_messages;
+      DROP TABLE IF EXISTS message_participants;
+      DROP TABLE IF EXISTS message_threads;
+      DROP TABLE IF EXISTS reminders;
+      DROP TABLE IF EXISTS notes;
+      DROP TABLE IF EXISTS tags;
+      DROP TABLE IF EXISTS group_members;
+      DROP TABLE IF EXISTS groups;
+      DROP TABLE IF EXISTS interactions;
+      DROP TABLE IF EXISTS companies;
+      DROP TABLE IF EXISTS people;
+      DROP TABLE IF EXISTS source_item_refs;
+      DROP TABLE IF EXISTS ingestion_cursors;
+      DROP TABLE IF EXISTS source_accounts;
+      DROP TABLE IF EXISTS settings;
+      PRAGMA foreign_keys = ON;
+    `);
   }
 
   bootstrap() {
@@ -108,6 +178,13 @@ export class OpenFolioDatabase {
         id TEXT PRIMARY KEY,
         display_name TEXT NOT NULL,
         primary_handle TEXT UNIQUE,
+        email TEXT,
+        phone TEXT,
+        company_name TEXT,
+        job_title TEXT,
+        bio TEXT,
+        location TEXT,
+        source_kinds TEXT NOT NULL DEFAULT '[]',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -248,6 +325,7 @@ export class OpenFolioDatabase {
     this.ensureSearchDocumentColumn("content_hash", "TEXT NOT NULL DEFAULT ''");
     this.ensureSearchDocumentColumn("embedded_at", "INTEGER");
     this.ensureSearchDocumentColumn("dirty", "INTEGER NOT NULL DEFAULT 1");
+    this.db.exec(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION};`);
   }
 
   private ensureSearchDocumentColumn(column: string, type: string) {
@@ -328,18 +406,24 @@ export class OpenFolioDatabase {
 
     if (normalizedHandle) {
       const existing = this.db
-        .prepare("SELECT id, display_name AS displayName, primary_handle AS primaryHandle, created_at AS createdAt, updated_at AS updatedAt FROM people WHERE primary_handle = ?")
-        .get(normalizedHandle) as Person | undefined;
+        .prepare(`
+          SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
+            email, phone, company_name AS companyName, job_title AS jobTitle, bio, location,
+            source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
+          FROM people WHERE primary_handle = ?
+        `)
+        .get(normalizedHandle) as Record<string, unknown> | undefined;
       if (existing) {
-        if (existing.displayName !== fallbackName && fallbackName) {
+        const person = mapPerson(existing);
+        if (person.displayName !== fallbackName && fallbackName) {
           const updatedAt = now();
           this.db
             .prepare("UPDATE people SET display_name = ?, updated_at = ? WHERE id = ?")
-            .run(fallbackName, updatedAt, existing.id);
-          existing.displayName = fallbackName;
-          existing.updatedAt = updatedAt;
+            .run(fallbackName, updatedAt, person.id);
+          person.displayName = fallbackName;
+          person.updatedAt = updatedAt;
         }
-        return existing;
+        return person;
       }
     }
 
@@ -353,8 +437,8 @@ export class OpenFolioDatabase {
 
     this.db
       .prepare(`
-        INSERT INTO people(id, display_name, primary_handle, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO people(id, display_name, primary_handle, email, phone, company_name, job_title, bio, location, source_kinds, created_at, updated_at)
+        VALUES (?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, '["messages"]', ?, ?)
       `)
       .run(person.id, person.displayName, person.primaryHandle, person.createdAt, person.updatedAt);
 
@@ -362,9 +446,14 @@ export class OpenFolioDatabase {
   }
 
   listPeople() {
-    return this.db
-      .prepare("SELECT id, display_name AS displayName, primary_handle AS primaryHandle, created_at AS createdAt, updated_at AS updatedAt FROM people ORDER BY updated_at DESC")
-      .all() as unknown as Person[];
+    return (this.db
+      .prepare(`
+        SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
+          email, phone, company_name AS companyName, job_title AS jobTitle, bio, location,
+          source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
+        FROM people ORDER BY updated_at DESC
+      `)
+      .all() as Array<Record<string, unknown>>).map(mapPerson);
   }
 
   upsertThread(sourceChatId: string, displayName: string | null) {
@@ -521,9 +610,15 @@ export class OpenFolioDatabase {
   }
 
   getPerson(personId: string) {
-    return this.db
-      .prepare("SELECT id, display_name AS displayName, primary_handle AS primaryHandle, created_at AS createdAt, updated_at AS updatedAt FROM people WHERE id = ?")
-      .get(personId) as Person | undefined;
+    const row = this.db
+      .prepare(`
+        SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
+          email, phone, company_name AS companyName, job_title AS jobTitle, bio, location,
+          source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
+        FROM people WHERE id = ?
+      `)
+      .get(personId) as Record<string, unknown> | undefined;
+    return row ? mapPerson(row) : undefined;
   }
 
   getThreadSummaries(limit = 20) {
@@ -595,7 +690,15 @@ export class OpenFolioDatabase {
       content: buildPersonSearchContent({
         displayName: person.displayName,
         primaryHandle: person.primaryHandle,
-        recentThreadTitles: threadTitles,
+        recentThreadTitles: [
+          ...threadTitles,
+          person.email,
+          person.phone,
+          person.companyName,
+          person.jobTitle,
+          person.bio,
+          person.location,
+        ].filter((value): value is string => Boolean(value)),
         recentMessages,
       }),
       embedding: null,
@@ -905,47 +1008,98 @@ export class OpenFolioDatabase {
 
   private upsertConnectorPerson(person: NormalizedConnectorPerson) {
     const normalizedPrimaryHandle = normalizeHandle(person.primaryHandle);
+    const normalizedEmail = normalizeHandle(person.email ?? null);
+    const normalizedPhone = normalizeHandle(person.phone ?? null);
     const normalizedHandles = [
       normalizedPrimaryHandle,
+      normalizedEmail,
+      normalizedPhone,
       ...(Array.isArray(person.metadata?.handles) ? person.metadata.handles : [])
         .map((value) => typeof value === "string" ? normalizeHandle(value) : null),
     ].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
+
+    const persistDetails = (existing: Person, nextPrimaryHandle: string | null) => {
+      const updatedAt = now();
+      const sourceKinds = [...new Set([...(existing.sourceKinds ?? []), person.sourceKind])];
+      this.db
+        .prepare(`
+          UPDATE people SET
+            display_name = ?,
+            primary_handle = COALESCE(?, primary_handle),
+            email = COALESCE(?, email),
+            phone = COALESCE(?, phone),
+            company_name = COALESCE(?, company_name),
+            job_title = COALESCE(?, job_title),
+            bio = COALESCE(?, bio),
+            location = COALESCE(?, location),
+            source_kinds = ?,
+            updated_at = ?
+          WHERE id = ?
+        `)
+        .run(
+          person.displayName,
+          nextPrimaryHandle,
+          normalizedEmail,
+          normalizedPhone,
+          person.companyName ?? null,
+          person.jobTitle ?? null,
+          person.bio ?? null,
+          person.location ?? null,
+          stringify(sourceKinds),
+          updatedAt,
+          existing.id,
+        );
+      return {
+        ...existing,
+        displayName: person.displayName,
+        primaryHandle: existing.primaryHandle ?? nextPrimaryHandle,
+        email: existing.email ?? normalizedEmail,
+        phone: existing.phone ?? normalizedPhone,
+        companyName: existing.companyName ?? person.companyName ?? null,
+        jobTitle: existing.jobTitle ?? person.jobTitle ?? null,
+        bio: existing.bio ?? person.bio ?? null,
+        location: existing.location ?? person.location ?? null,
+        sourceKinds,
+        updatedAt,
+      };
+    };
+
     const existingSource = this.getSourceRef(person.sourceKind, person.sourceId, "person");
     if (existingSource) {
       const existing = this.getPerson(existingSource.entityId);
       if (existing) {
         const nextPrimaryHandle = existing.primaryHandle ?? normalizedPrimaryHandle;
-        const updatedAt = now();
-        this.db
-          .prepare("UPDATE people SET display_name = ?, primary_handle = COALESCE(?, primary_handle), updated_at = ? WHERE id = ?")
-          .run(person.displayName, nextPrimaryHandle, updatedAt, existing.id);
-        return { ...existing, displayName: person.displayName, primaryHandle: nextPrimaryHandle, updatedAt };
+        return persistDetails(existing, nextPrimaryHandle);
       }
     }
 
     const matchedPerson = this.findPersonByHandles(normalizedHandles);
     if (matchedPerson) {
       const nextPrimaryHandle = matchedPerson.primaryHandle ?? normalizedPrimaryHandle;
-      const updatedAt = now();
-      this.db
-        .prepare("UPDATE people SET display_name = ?, primary_handle = COALESCE(?, primary_handle), updated_at = ? WHERE id = ?")
-        .run(person.displayName, nextPrimaryHandle, updatedAt, matchedPerson.id);
+      const persisted = persistDetails(matchedPerson, nextPrimaryHandle);
       this.setSourceRef(person.sourceKind, person.sourceId, "person", matchedPerson.id);
-      return { ...matchedPerson, displayName: person.displayName, primaryHandle: nextPrimaryHandle, updatedAt };
+      return persisted;
     }
 
     const persisted = this.getOrCreatePerson(normalizedPrimaryHandle ?? normalizedHandles[0] ?? null, person.displayName);
+    const enriched = persistDetails(persisted, persisted.primaryHandle ?? normalizedPrimaryHandle ?? normalizedHandles[0] ?? null);
     this.setSourceRef(person.sourceKind, person.sourceId, "person", persisted.id);
-    return persisted;
+    return enriched;
   }
 
   private findPersonByHandles(handles: string[]) {
     for (const handle of handles) {
-      const match = this.db
-        .prepare("SELECT id, display_name AS displayName, primary_handle AS primaryHandle, created_at AS createdAt, updated_at AS updatedAt FROM people WHERE primary_handle = ?")
-        .get(handle) as Person | undefined;
-      if (match) {
-        return match;
+      const row = this.db
+        .prepare(`
+          SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
+            email, phone, company_name AS companyName, job_title AS jobTitle, bio, location,
+            source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
+          FROM people
+          WHERE primary_handle = ? OR email = ? OR phone = ?
+        `)
+        .get(handle, handle, handle) as Record<string, unknown> | undefined;
+      if (row) {
+        return mapPerson(row);
       }
     }
 
@@ -973,9 +1127,31 @@ export class OpenFolioDatabase {
     this.refreshSearchDocuments();
   }
 
+  private getSearchNavigation(kind: string, entityId: string) {
+    if (kind === "thread") {
+      return { threadId: entityId, messageId: null, personId: null };
+    }
+    if (kind === "message") {
+      const row = this.db
+        .prepare("SELECT thread_id AS threadId FROM message_messages WHERE id = ?")
+        .get(entityId) as { threadId: string } | undefined;
+      return { threadId: row?.threadId ?? null, messageId: entityId, personId: null };
+    }
+    if (kind === "person") {
+      return { threadId: null, messageId: null, personId: entityId };
+    }
+    if (kind === "reminder") {
+      const row = this.db
+        .prepare("SELECT person_id AS personId FROM reminders WHERE id = ?")
+        .get(entityId) as { personId: string | null } | undefined;
+      return { threadId: null, messageId: null, personId: row?.personId ?? null };
+    }
+    return { threadId: null, messageId: null, personId: null };
+  }
+
   search(query: string, limit = 10, queryEmbedding?: number[]) {
     const safeQuery = normalizeQueryForFts(query);
-    const rows = safeQuery
+    const textRows = safeQuery
       ? (this.db
           .prepare(`
             SELECT
@@ -996,7 +1172,7 @@ export class OpenFolioDatabase {
       : [];
 
     const escapedQuery = query.replace(/[%_]/g, (char) => `\\${char}`);
-    const fallbackRows = rows.length === 0
+    const fallbackRows = textRows.length === 0
       ? (this.db
           .prepare(`
             SELECT id, kind, entity_id AS entityId, title, content, embedding, 0 AS textScore
@@ -1005,25 +1181,67 @@ export class OpenFolioDatabase {
             LIMIT ?
           `)
           .all(`%${escapedQuery}%`, `%${escapedQuery}%`, limit * 3) as Array<Record<string, unknown>>)
-      : rows;
+      : textRows;
 
-    const ranked = fallbackRows.map((row) => {
+    const semanticRows = queryEmbedding
+      ? (this.db
+          .prepare(`
+            SELECT id, kind, entity_id AS entityId, title, content, embedding, NULL AS textScore
+            FROM search_documents
+            WHERE embedding IS NOT NULL AND embedding != ''
+          `)
+          .all() as Array<Record<string, unknown>>)
+      : [];
+
+    const byId = new Map<string, Record<string, unknown>>();
+    for (const row of [...fallbackRows, ...semanticRows]) {
+      byId.set(String(row.id), row);
+    }
+
+    const ranked = [...byId.values()].map((row) => {
       const embedding = parseEmbedding(row.embedding);
       const semanticScore = queryEmbedding && embedding ? cosineSimilarity(queryEmbedding, embedding) : 0;
       const keywordScore = Number(row.textScore ?? 0);
-      const combinedScore = semanticScore > 0 ? semanticScore - keywordScore : -keywordScore;
+      const textScore = Number.isFinite(keywordScore) ? Math.max(0, -keywordScore) : 0;
+      const combinedScore = semanticScore + textScore;
+      const kind = String(row.kind) as SearchResult["kind"];
+      const entityId = String(row.entityId);
+      const navigation = this.getSearchNavigation(kind, entityId);
 
       return {
         id: String(row.id),
-        kind: String(row.kind) as SearchResult["kind"],
-        entityId: String(row.entityId),
+        kind,
+        entityId,
         title: String(row.title),
         snippet: String(row.content).slice(0, 240),
         score: combinedScore,
+        ...navigation,
       } satisfies SearchResult;
     });
 
     return ranked.sort((left, right) => right.score - left.score).slice(0, limit);
+  }
+
+  getEmbeddingSyncStatus() {
+    const row = this.db
+      .prepare(`
+        SELECT
+          COUNT(*) AS totalDocuments,
+          SUM(CASE WHEN embedding IS NOT NULL AND embedding != '' THEN 1 ELSE 0 END) AS embeddedDocuments,
+          SUM(CASE WHEN dirty = 1 THEN 1 ELSE 0 END) AS dirtyDocuments,
+          MAX(embedding_provider) AS provider,
+          MAX(embedding_model) AS model
+        FROM search_documents
+      `)
+      .get() as Record<string, unknown>;
+
+    return {
+      totalDocuments: Number(row.totalDocuments ?? 0),
+      embeddedDocuments: Number(row.embeddedDocuments ?? 0),
+      dirtyDocuments: Number(row.dirtyDocuments ?? 0),
+      provider: (row.provider as SearchDocumentRecord["embeddingProvider"]) ?? null,
+      model: (row.model as string | null) ?? null,
+    };
   }
 
   relationshipDigest(personId: string): RelationshipDigest | null {
@@ -1039,11 +1257,22 @@ export class OpenFolioDatabase {
           COUNT(mm.id) AS messageCount,
           (SELECT COUNT(*) FROM notes WHERE entity_type = 'person' AND entity_id = ?) AS noteCount,
           (SELECT COUNT(*) FROM reminders WHERE person_id = ? AND status = 'open') AS reminderCount
-        FROM message_participants mp
-        LEFT JOIN message_messages mm ON mm.thread_id = mp.thread_id
-        WHERE mp.person_id = ?
+        FROM message_messages mm
+        JOIN message_threads t ON t.id = mm.thread_id
+        WHERE mm.body IS NOT NULL
+          AND (
+            mm.person_id = ?
+            OR (
+              mm.is_from_me = 1
+              AND t.participant_count <= 2
+              AND EXISTS (
+                SELECT 1 FROM message_participants mp
+                WHERE mp.thread_id = mm.thread_id AND mp.person_id = ?
+              )
+            )
+          )
       `)
-      .get(personId, personId, personId) as Record<string, unknown>;
+      .get(personId, personId, personId, personId) as Record<string, unknown>;
 
     return {
       personId,
@@ -1172,6 +1401,134 @@ export class OpenFolioDatabase {
       lastMessageAt: (row.lastMessageAt as number | null) ?? null,
       participantCount: Number(row.participantCount ?? 0),
     }));
+  }
+
+  listPeopleForPicker(limit = 100, query?: string) {
+    const filter = query?.trim();
+    const rows = filter
+      ? this.db
+          .prepare(`
+            SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
+              email, phone, company_name AS companyName, job_title AS jobTitle, bio, location,
+              source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
+            FROM people
+            WHERE display_name LIKE ? OR primary_handle LIKE ? OR email LIKE ? OR phone LIKE ?
+            ORDER BY updated_at DESC
+            LIMIT ?
+          `)
+          .all(`%${filter}%`, `%${filter}%`, `%${filter}%`, `%${filter}%`, limit)
+      : this.db
+          .prepare(`
+            SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
+              email, phone, company_name AS companyName, job_title AS jobTitle, bio, location,
+              source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
+            FROM people
+            ORDER BY updated_at DESC
+            LIMIT ?
+          `)
+          .all(limit);
+    return (rows as Array<Record<string, unknown>>).map(mapPerson);
+  }
+
+  getPersonThreads(personId: string, limit = 10) {
+    const rows = this.db
+      .prepare(`
+        SELECT
+          t.id AS threadId,
+          COALESCE(t.display_name, GROUP_CONCAT(DISTINCT allp.handle)) AS title,
+          GROUP_CONCAT(DISTINCT allp.handle) AS participantHandles,
+          (
+            SELECT body FROM message_messages mm
+            WHERE mm.thread_id = t.id
+            ORDER BY occurred_at DESC
+            LIMIT 1
+          ) AS lastMessagePreview,
+          t.last_message_at AS lastMessageAt,
+          t.participant_count AS participantCount
+        FROM message_threads t
+        JOIN message_participants target ON target.thread_id = t.id AND target.person_id = ?
+        LEFT JOIN message_participants allp ON allp.thread_id = t.id
+        GROUP BY t.id
+        ORDER BY t.last_message_at DESC
+        LIMIT ?
+      `)
+      .all(personId, limit) as Array<Record<string, unknown>>;
+
+    return rows.map((row) => ({
+      threadId: String(row.threadId),
+      title: String(row.title ?? "Untitled Thread"),
+      participantHandles: String(row.participantHandles ?? "").split(",").filter(Boolean),
+      lastMessagePreview: (row.lastMessagePreview as string | null) ?? null,
+      lastMessageAt: (row.lastMessageAt as number | null) ?? null,
+      participantCount: Number(row.participantCount ?? 0),
+    }));
+  }
+
+  getPersonRecentMessages(personId: string, limit = 20): MessageDetail[] {
+    return this.db
+      .prepare(`
+        SELECT
+          mm.id, mm.thread_id AS threadId, mm.person_id AS personId,
+          mm.body, mm.occurred_at AS occurredAt, mm.is_from_me AS isFromMe,
+          mm.has_attachments AS hasAttachments
+        FROM message_messages mm
+        WHERE mm.body IS NOT NULL
+          AND (
+            mm.person_id = ?
+            OR (
+              mm.is_from_me = 1
+              AND EXISTS (
+                SELECT 1 FROM message_participants mp
+                WHERE mp.thread_id = mm.thread_id AND mp.person_id = ?
+              )
+            )
+          )
+        ORDER BY mm.occurred_at DESC
+        LIMIT ?
+      `)
+      .all(personId, personId, limit)
+      .map((row) => {
+        const item = row as Record<string, unknown>;
+        return {
+          id: String(item.id),
+          threadId: String(item.threadId),
+          personId: (item.personId as string | null) ?? null,
+          body: (item.body as string | null) ?? null,
+          occurredAt: Number(item.occurredAt),
+          isFromMe: Boolean(item.isFromMe),
+          hasAttachments: Boolean(item.hasAttachments),
+        };
+      });
+  }
+
+  getPersonNotes(personId: string): Note[] {
+    return (this.db
+      .prepare("SELECT id, entity_type AS entityType, entity_id AS entityId, content, created_at AS createdAt FROM notes WHERE entity_type = 'person' AND entity_id = ? ORDER BY created_at DESC")
+      .all(personId) as unknown) as Note[];
+  }
+
+  getPersonReminders(personId: string): Reminder[] {
+    return (this.db
+      .prepare("SELECT id, title, person_id AS personId, due_at AS dueAt, status, created_at AS createdAt FROM reminders WHERE person_id = ? ORDER BY created_at DESC")
+      .all(personId) as unknown) as Reminder[];
+  }
+
+  getPersonProfile(personId: string, stats: PersonProfile["stats"] = null): PersonProfile | null {
+    const person = this.getPerson(personId);
+    const digest = this.relationshipDigest(personId);
+    if (!person || !digest) {
+      return null;
+    }
+
+    return {
+      person,
+      digest,
+      stats,
+      threads: this.getPersonThreads(personId, 12),
+      recentMessages: this.getPersonRecentMessages(personId, 25),
+      notes: this.getPersonNotes(personId),
+      reminders: this.getPersonReminders(personId),
+    };
   }
 
   close() {

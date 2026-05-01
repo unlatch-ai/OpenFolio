@@ -5,11 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { OpenFolioCore } from "@openfolio/core";
 import type {
+  AiSettingsStatus,
   ConnectorAccount,
   ConnectorCredential,
   ContactsSyncSummary,
   CloudRuntimeConfig,
   ContactsAccessStatus,
+  McpSetupStatus,
   MessagesAccessStatus,
   OpenFolioBridge,
   SearchResult,
@@ -46,6 +48,8 @@ const enforceSingleInstance = !process.defaultApp;
 const shouldOpenDevTools = process.env.OPENFOLIO_OPEN_DEVTOOLS === "1";
 const CONNECTOR_ACCOUNTS_KEY = "connector_accounts";
 const CONNECTOR_CREDENTIAL_PREFIX = "connector_credential:";
+const AI_SETTINGS_KEY = "ai_settings";
+const AI_OPENAI_KEY = "ai_openai_key";
 
 function logAuthDebug(...args: unknown[]) {
   if (debugAuthFlow || debugLogging) {
@@ -76,6 +80,86 @@ function readConnectorAccounts(): ConnectorAccount[] {
 
 function writeConnectorAccounts(accounts: ConnectorAccount[]) {
   core.db.setSetting(CONNECTOR_ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+function readEncryptedSetting(key: string) {
+  const raw = core.db.getSetting(key);
+  if (!raw) return null;
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      return safeStorage.decryptString(Buffer.from(raw, "base64"));
+    }
+    return raw;
+  } catch (error) {
+    console.warn(`[openfolio] Failed to decrypt ${key}:`, error);
+    return null;
+  }
+}
+
+function writeEncryptedSetting(key: string, value: string | null) {
+  if (!value) {
+    core.db.setSetting(key, "");
+    return;
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.warn("[openfolio] Keychain encryption unavailable — AI key will be stored in plaintext.");
+    core.db.setSetting(key, value);
+    return;
+  }
+  core.db.setSetting(key, safeStorage.encryptString(value).toString("base64"));
+}
+
+function readAiSettingsPayload() {
+  const raw = core.db.getSetting(AI_SETTINGS_KEY);
+  if (!raw) {
+    return {
+      answerModel: "gpt-5-mini",
+      embeddingModel: "text-embedding-3-small",
+      useOpenAIEmbeddings: false,
+    };
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<AiSettingsStatus>;
+    return {
+      answerModel: parsed.answerModel || "gpt-5-mini",
+      embeddingModel: parsed.embeddingModel || "text-embedding-3-small",
+      useOpenAIEmbeddings: Boolean(parsed.useOpenAIEmbeddings),
+    };
+  } catch {
+    return {
+      answerModel: "gpt-5-mini",
+      embeddingModel: "text-embedding-3-small",
+      useOpenAIEmbeddings: false,
+    };
+  }
+}
+
+function applyStoredAiConfig() {
+  const apiKey = readEncryptedSetting(AI_OPENAI_KEY) || process.env.OPENAI_API_KEY || "";
+  const settings = readAiSettingsPayload();
+  if (!apiKey) {
+    core.configureAi({ provider: "local" });
+    return;
+  }
+  core.configureAi({
+    provider: "openai",
+    apiKey,
+    model: settings.answerModel ?? undefined,
+    embeddingModel: settings.embeddingModel ?? undefined,
+    useOpenAIEmbeddings: settings.useOpenAIEmbeddings,
+  });
+}
+
+function getAiSettingsStatus(): AiSettingsStatus {
+  const settings = readAiSettingsPayload();
+  const hasOpenAIKey = Boolean(readEncryptedSetting(AI_OPENAI_KEY) || process.env.OPENAI_API_KEY);
+  return {
+    provider: hasOpenAIKey ? "openai" : "local",
+    hasOpenAIKey,
+    answerModel: settings.answerModel,
+    embeddingModel: settings.embeddingModel,
+    useOpenAIEmbeddings: settings.useOpenAIEmbeddings,
+  };
 }
 
 async function listConnectorAccounts() {
@@ -396,6 +480,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  applyStoredAiConfig();
   setDockIcon();
   createWindow();
   updater.initialize();
@@ -543,6 +628,22 @@ const api: OpenFolioBridge = {
       logAppDebug("ai", "result", { provider: result.provider, citations: result.citations.length });
       return result;
     },
+    getSettings: async () => getAiSettingsStatus(),
+    saveOpenAIKey: async (input) => {
+      writeEncryptedSetting(AI_OPENAI_KEY, input.apiKey);
+      core.db.setSetting(AI_SETTINGS_KEY, JSON.stringify({
+        answerModel: input.answerModel || "gpt-5-mini",
+        embeddingModel: input.embeddingModel || "text-embedding-3-small",
+        useOpenAIEmbeddings: Boolean(input.useOpenAIEmbeddings),
+      }));
+      applyStoredAiConfig();
+      return getAiSettingsStatus();
+    },
+    deleteOpenAIKey: async () => {
+      writeEncryptedSetting(AI_OPENAI_KEY, null);
+      applyStoredAiConfig();
+      return getAiSettingsStatus();
+    },
   },
   cloud: {
     getConfig: async () => {
@@ -609,6 +710,40 @@ const api: OpenFolioBridge = {
       logAppDebug("mcp", "stopResult", status);
       return status;
     },
+    getSetup: async (): Promise<McpSetupStatus> => {
+      const command = "pnpm --filter @openfolio/mcp exec openfolio mcp serve";
+      return {
+        available: true,
+        command,
+        details: "OpenFolio MCP runs locally over stdio. Your messages stay in the local SQLite database; clients receive only tool results.",
+        clients: [
+          {
+            id: "claude",
+            name: "Claude Desktop",
+            config: JSON.stringify({ mcpServers: { openfolio: { command: "pnpm", args: ["--filter", "@openfolio/mcp", "exec", "openfolio", "mcp", "serve"] } } }, null, 2),
+          },
+          {
+            id: "cursor",
+            name: "Cursor",
+            config: JSON.stringify({ mcpServers: { openfolio: { command: "pnpm", args: ["--filter", "@openfolio/mcp", "exec", "openfolio", "mcp", "serve"] } } }, null, 2),
+          },
+          {
+            id: "codex",
+            name: "Codex",
+            config: "Use the local command as a stdio MCP server:\n" + command,
+          },
+          {
+            id: "chatgpt",
+            name: "ChatGPT",
+            config: "Use OpenFolio's local MCP server through a local connector that supports stdio:\n" + command,
+          },
+        ],
+      };
+    },
+  },
+  people: {
+    list: async (input?: { limit?: number; query?: string }) => core.listPeople(input?.limit, input?.query),
+    getProfile: async (personId: string) => core.getPersonProfile(personId),
   },
   threads: {
     list: async (input: { limit?: number; offset?: number }) => {
@@ -660,6 +795,7 @@ const api: OpenFolioBridge = {
     getStatus: async () => {
       return core.getLocalEmbeddingStatus();
     },
+    getSyncStatus: async () => core.getEmbeddingSyncStatus(),
   },
   insights: {
     getWrappedSummary: async (year?: number) => {
@@ -702,6 +838,9 @@ safeHandle("openfolio:contacts:getAccessStatus", () => api.contacts.getAccessSta
 safeHandle("openfolio:contacts:sync", () => api.contacts.sync());
 safeHandle("openfolio:search:query", (_, input: { text: string; limit?: number }) => api.search.query(input));
 safeHandle("openfolio:ai:run", (_, input: { query: string; useHosted?: boolean }) => api.ai.run(input));
+safeHandle("openfolio:ai:getSettings", () => api.ai.getSettings());
+safeHandle("openfolio:ai:saveOpenAIKey", (_, input: { apiKey: string; answerModel?: string | null; embeddingModel?: string | null; useOpenAIEmbeddings?: boolean }) => api.ai.saveOpenAIKey(input));
+safeHandle("openfolio:ai:deleteOpenAIKey", () => api.ai.deleteOpenAIKey());
 safeHandle("openfolio:cloud:getConfig", () => api.cloud.getConfig());
 safeHandle("openfolio:cloud:beginAuthSession", () => api.cloud.beginAuthSession());
 safeHandle("openfolio:cloud:openExternal", (_, url: string) => api.cloud.openExternal(url));
@@ -714,6 +853,9 @@ safeHandle("openfolio:updates:installNow", () => api.updates.installNow());
 safeHandle("openfolio:mcp:getStatus", () => api.mcp.getStatus());
 safeHandle("openfolio:mcp:start", () => api.mcp.start());
 safeHandle("openfolio:mcp:stop", () => api.mcp.stop());
+safeHandle("openfolio:mcp:getSetup", () => api.mcp.getSetup());
+safeHandle("openfolio:people:list", (_, input?: { limit?: number; query?: string }) => api.people.list(input));
+safeHandle("openfolio:people:getProfile", (_, personId: string) => api.people.getProfile(personId));
 safeHandle("openfolio:threads:list", (_, input: { limit?: number; offset?: number }) => api.threads.list(input));
 safeHandle("openfolio:threads:getDetail", (_, threadId: string) => api.threads.getDetail(threadId));
 safeHandle("openfolio:threads:getMessages", (_, input: { threadId: string; limit?: number; offset?: number }) => api.threads.getMessages(input));
@@ -722,6 +864,7 @@ safeHandle("openfolio:sync:startWatcher", () => api.sync.startWatcher());
 safeHandle("openfolio:sync:stopWatcher", () => api.sync.stopWatcher());
 safeHandle("openfolio:sync:triggerSync", () => api.sync.triggerSync());
 safeHandle("openfolio:embeddings:getStatus", () => api.embeddings.getStatus());
+safeHandle("openfolio:embeddings:getSyncStatus", () => api.embeddings.getSyncStatus());
 safeHandle("openfolio:insights:getWrappedSummary", (_, year?: number) => api.insights.getWrappedSummary(year));
 safeHandle("openfolio:insights:getTopContacts", (_, limit?: number) => api.insights.getTopContacts(limit));
 safeHandle("openfolio:insights:getRelationshipStats", (_, personId: string) => api.insights.getRelationshipStats(personId));

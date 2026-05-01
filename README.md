@@ -5,7 +5,7 @@
 <h1 align="center">OpenFolio</h1>
 
 <p align="center">
-  <strong>Spotify Wrapped for your relationships — a beautiful iMessage visualization client for macOS</strong>
+  <strong>Local-first iMessage search and relationship memory for macOS</strong>
 </p>
 
 <p align="center">
@@ -21,24 +21,25 @@
 
 ---
 
-OpenFolio is a native macOS app that visualizes your iMessage relationships. Browse conversations, explore relationship stats, and get your personal "Wrapped" — top contacts, messaging patterns, response times, and activity heatmaps. Everything runs 100% locally on your Mac.
+OpenFolio is a native macOS app for searching and understanding your iMessage relationships. Browse conversations, inspect person profiles, explore relationship stats, ask local/BYOK AI questions, and configure MCP access for coding assistants. The local graph stays on your Mac.
 
 ## Highlights
 
-- **Spotify Wrapped for relationships** — See your top contacts, busiest hours, messaging streaks, and monthly trends in a beautiful dashboard with gradient cards and interactive charts.
+- **Relationship memory** — See top contacts, busiest hours, messaging streaks, monthly trends, and dense person profiles.
 - **100% local** — Your messages never leave your Mac. SQLite database, local embeddings, no cloud required.
 - **Conversation browser** — Two-panel inbox with real-time thread updates via FSEvents watcher on `chat.db`.
-- **Semantic search** — Cmd+K to search your entire message history using local AI embeddings (Transformers.js, no API keys needed).
+- **Hybrid semantic search** — Cmd+K searches FTS and local embeddings, with optional BYOK OpenAI answers and embeddings.
 - **Relationship insights** — Response times, message volume by hour/day/month, conversation streaks, and a GitHub-style activity heatmap.
+- **Person research profiles** — Inspect contact details, related threads, recent messages, notes, and reminders in one place.
 - **Beautiful design** — Warm color palette, gradient avatars, smooth Framer Motion transitions. Designed to feel like Partiful meets Apple Photos.
-- **MCP server** — Expose your relationship graph to AI assistants via Model Context Protocol.
+- **MCP setup assistant** — Copy local stdio MCP configuration for AI/coding assistants.
 - **Open source** — AGPL-3.0. Read the code, fork it, contribute back.
 
 ## How It Works
 
 OpenFolio reads your local `chat.db` (macOS Messages database) in read-only mode. It indexes conversations, computes relationship stats via SQL analytics, and generates local embeddings for semantic search — all without sending a single byte to the cloud.
 
-An optional hosted account unlocks identity, billing, and managed connectors — but the local graph is always yours.
+Optional hosted account, billing, managed connectors, and hosted AI are future commercial layers. The current open-source milestone is local-first and BYOK.
 
 ## Building from Source
 

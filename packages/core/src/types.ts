@@ -5,6 +5,7 @@ export interface StoredProviderConfig {
   apiKey?: string;
   model?: string;
   embeddingModel?: string;
+  useOpenAIEmbeddings?: boolean;
 }
 
 export interface LocalEmbeddingConfig {

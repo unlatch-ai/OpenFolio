@@ -65,6 +65,44 @@ export async function startOpenFolioMcpServer(options?: { dbPath?: string }) {
   );
 
   server.registerTool(
+    "get_person_profile",
+    {
+      title: "Get Person Profile",
+      description: "Fetch a dense local relationship profile for a person.",
+      inputSchema: z.object({
+        personId: z.string(),
+      }),
+    },
+    async ({ personId }) => {
+      const profile = core.getPersonProfile(personId);
+      return {
+        content: [{ type: "text", text: JSON.stringify(profile ?? null, null, 2) }],
+        structuredContent: { profile: profile ?? null },
+      };
+    }
+  );
+
+  server.registerTool(
+    "get_thread",
+    {
+      title: "Get Thread",
+      description: "Fetch thread participants and recent messages.",
+      inputSchema: z.object({
+        threadId: z.string(),
+        limit: z.number().int().min(1).max(200).optional(),
+      }),
+    },
+    async ({ threadId, limit }) => {
+      const detail = core.getThreadDetail(threadId);
+      const messages = core.getThreadMessages(threadId, limit ?? 50);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ detail, messages }, null, 2) }],
+        structuredContent: { detail, messages },
+      };
+    }
+  );
+
+  server.registerTool(
     "add_note",
     {
       title: "Add Note",
@@ -116,6 +154,24 @@ export async function startOpenFolioMcpServer(options?: { dbPath?: string }) {
       return {
         content: [{ type: "text", text: JSON.stringify(groups, null, 2) }],
         structuredContent: { groups },
+      };
+    }
+  );
+
+  server.registerTool(
+    "follow_up_suggestions",
+    {
+      title: "Follow-up Suggestions",
+      description: "List local reminder suggestions derived from message recency.",
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(20).optional(),
+      }),
+    },
+    async ({ limit }) => {
+      const suggestions = core.getReminderSuggestions(limit ?? 10);
+      return {
+        content: [{ type: "text", text: JSON.stringify(suggestions, null, 2) }],
+        structuredContent: { suggestions },
       };
     }
   );

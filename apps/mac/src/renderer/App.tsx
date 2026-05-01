@@ -13,6 +13,7 @@ import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { InboxView } from "./components/InboxView";
 import { InsightsView } from "./components/InsightsView";
+import { PeopleView } from "./components/PeopleView";
 import { SettingsView } from "./components/SettingsView";
 
 declare global {
@@ -55,6 +56,7 @@ function Dashboard() {
 
           <SidebarInset className="overflow-hidden flex flex-col">
             {view === "inbox" && <InboxView />}
+            {view === "people" && <PeopleView />}
             {view === "insights" && <InsightsView />}
             {view === "settings" && <SettingsView />}
           </SidebarInset>

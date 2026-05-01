@@ -53,9 +53,20 @@ export class AnalyticsEngine {
         MIN(mm.occurred_at) AS firstMessageAt,
         MAX(mm.occurred_at) AS lastMessageAt
       FROM message_messages mm
-      JOIN message_participants mp ON mp.thread_id = mm.thread_id AND mp.person_id = ?
+      JOIN message_threads t ON t.id = mm.thread_id
       WHERE mm.body IS NOT NULL
-    `, personId);
+        AND (
+          mm.person_id = ?
+          OR (
+            mm.is_from_me = 1
+            AND t.participant_count <= 2
+            AND EXISTS (
+              SELECT 1 FROM message_participants mp
+              WHERE mp.thread_id = mm.thread_id AND mp.person_id = ?
+            )
+          )
+        )
+    `, personId, personId);
 
     const row = counts[0];
     if (!row || Number(row.total) === 0) {
@@ -79,21 +90,43 @@ export class AnalyticsEngine {
         strftime('%Y-%m', datetime(mm.occurred_at / 1000, 'unixepoch')) AS month,
         COUNT(*) AS count
       FROM message_messages mm
-      JOIN message_participants mp ON mp.thread_id = mm.thread_id AND mp.person_id = ?
+      JOIN message_threads t ON t.id = mm.thread_id
       WHERE mm.body IS NOT NULL
+        AND (
+          mm.person_id = ?
+          OR (
+            mm.is_from_me = 1
+            AND t.participant_count <= 2
+            AND EXISTS (
+              SELECT 1 FROM message_participants mp
+              WHERE mp.thread_id = mm.thread_id AND mp.person_id = ?
+            )
+          )
+        )
       GROUP BY month
       ORDER BY month ASC
-    `, personId);
+    `, personId, personId);
 
     const hourRows = this.db.query<DbRow>(`
       SELECT
         CAST(strftime('%H', datetime(mm.occurred_at / 1000, 'unixepoch', 'localtime')) AS INTEGER) AS hour,
         COUNT(*) AS count
       FROM message_messages mm
-      JOIN message_participants mp ON mp.thread_id = mm.thread_id AND mp.person_id = ?
+      JOIN message_threads t ON t.id = mm.thread_id
       WHERE mm.body IS NOT NULL
+        AND (
+          mm.person_id = ?
+          OR (
+            mm.is_from_me = 1
+            AND t.participant_count <= 2
+            AND EXISTS (
+              SELECT 1 FROM message_participants mp
+              WHERE mp.thread_id = mm.thread_id AND mp.person_id = ?
+            )
+          )
+        )
       GROUP BY hour
-    `, personId);
+    `, personId, personId);
 
     const messagesByHour = new Array(24).fill(0);
     for (const h of hourRows) {
@@ -124,13 +157,15 @@ export class AnalyticsEngine {
   getTopContacts(limit = 10): RelationshipStats[] {
     const rows = this.db.query<DbRow>(`
       SELECT
-        mp.person_id AS personId,
+        mm.person_id AS personId,
         COUNT(*) AS total
       FROM message_messages mm
-      JOIN message_participants mp ON mp.thread_id = mm.thread_id
+      LEFT JOIN people p ON p.id = mm.person_id
       WHERE mm.body IS NOT NULL
-        AND mp.person_id IS NOT NULL
-      GROUP BY mp.person_id
+        AND mm.is_from_me = 0
+        AND mm.person_id IS NOT NULL
+        AND COALESCE(p.primary_handle, '') != 'me'
+      GROUP BY mm.person_id
       ORDER BY total DESC
       LIMIT ?
     `, limit);
@@ -198,14 +233,16 @@ export class AnalyticsEngine {
     // Top contacts for the period
     const topRows = this.db.query<DbRow>(`
       SELECT
-        mp.person_id AS personId,
+        mm.person_id AS personId,
         COUNT(*) AS total
       FROM message_messages mm
-      JOIN message_participants mp ON mp.thread_id = mm.thread_id
+      LEFT JOIN people p ON p.id = mm.person_id
       WHERE mm.occurred_at >= ? AND mm.occurred_at < ?
         AND mm.body IS NOT NULL
-        AND mp.person_id IS NOT NULL
-      GROUP BY mp.person_id
+        AND mm.is_from_me = 0
+        AND mm.person_id IS NOT NULL
+        AND COALESCE(p.primary_handle, '') != 'me'
+      GROUP BY mm.person_id
       ORDER BY total DESC
       LIMIT 5
     `, startMs, endMs);
@@ -309,10 +346,21 @@ export class AnalyticsEngine {
       SELECT DISTINCT
         strftime('%Y-%W', datetime(mm.occurred_at / 1000, 'unixepoch', 'localtime')) AS week
       FROM message_messages mm
-      JOIN message_participants mp ON mp.thread_id = mm.thread_id AND mp.person_id = ?
+      JOIN message_threads t ON t.id = mm.thread_id
       WHERE mm.body IS NOT NULL
+        AND (
+          mm.person_id = ?
+          OR (
+            mm.is_from_me = 1
+            AND t.participant_count <= 2
+            AND EXISTS (
+              SELECT 1 FROM message_participants mp
+              WHERE mp.thread_id = mm.thread_id AND mp.person_id = ?
+            )
+          )
+        )
       ORDER BY week DESC
-    `, personId);
+    `, personId, personId);
 
     if (rows.length === 0) return 0;
 

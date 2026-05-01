@@ -1,4 +1,4 @@
-import { Inbox, BarChart3, Settings, Search, Zap } from "lucide-react";
+import { Inbox, BarChart3, Settings, Search, Zap, Users } from "lucide-react";
 import { useAppStore, type View } from "../store";
 import {
   Sidebar,
@@ -20,11 +20,12 @@ import {
 
 const NAV_ITEMS: Array<{ id: View; icon: typeof Inbox; label: string }> = [
   { id: "inbox", icon: Inbox, label: "Messages" },
+  { id: "people", icon: Users, label: "People" },
   { id: "insights", icon: BarChart3, label: "Insights" },
 ];
 
 export function AppSidebar() {
-  const { view, setView, messagesStatus, mcpRunning, threads, openCommandPalette } = useAppStore();
+  const { view, setView, messagesStatus, threads, openCommandPalette } = useAppStore();
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -108,15 +109,15 @@ export function AppSidebar() {
                     <Zap
                       size={10}
                       className="shrink-0"
-                      style={{ color: mcpRunning ? "var(--accent)" : "var(--border)" }}
+                      style={{ color: "var(--accent)" }}
                     />
                     <span className="group-data-[collapsible=icon]:hidden">
-                      MCP {mcpRunning ? "on" : "off"}
+                      MCP setup
                     </span>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="right">
-                  MCP {mcpRunning ? "running" : "stopped"}
+                  Configure MCP in Settings
                 </TooltipContent>
               </Tooltip>
             </div>

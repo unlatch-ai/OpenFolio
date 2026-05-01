@@ -18,7 +18,7 @@ import type { StoredProviderConfig } from "./types.js";
 export class OpenFolioCore {
   readonly db: OpenFolioDatabase;
 
-  readonly ai: AIOrchestrator;
+  ai: AIOrchestrator;
 
   readonly messages: MessagesImporter;
 
@@ -50,6 +50,10 @@ export class OpenFolioCore {
     this.analytics = new AnalyticsEngine(this.db);
   }
 
+  configureAi(aiConfig: StoredProviderConfig | null) {
+    this.ai = new AIOrchestrator(aiConfig, this.localEmbeddings);
+  }
+
   getMessagesAccessStatus(): MessagesAccessStatus {
     return getMessagesAccessStatus();
   }
@@ -57,7 +61,7 @@ export class OpenFolioCore {
   async startMessagesImport(): Promise<MessagesImportJob> {
     const job = await this.messages.importFromChatDb();
     if (job.status === "completed") {
-      await this.syncDirtySearchDocuments();
+      await this.syncAllDirtySearchDocuments();
     }
     return job;
   }
@@ -134,8 +138,36 @@ export class OpenFolioCore {
     return { embedded: embeddings.length, skipped: dirtyDocuments.length - embeddings.length };
   }
 
+  async syncAllDirtySearchDocuments(batchSize = 50, maxBatches = 200) {
+    let embedded = 0;
+    let skipped = 0;
+
+    for (let batch = 0; batch < maxBatches; batch += 1) {
+      const result = await this.syncDirtySearchDocuments(batchSize);
+      embedded += result.embedded;
+      skipped += result.skipped;
+      if (result.embedded === 0 || this.db.getDirtySearchDocuments(1).length === 0) {
+        break;
+      }
+    }
+
+    return { embedded, skipped };
+  }
+
+  getEmbeddingSyncStatus() {
+    return this.db.getEmbeddingSyncStatus();
+  }
+
   getRelationshipDigest(personId: string): RelationshipDigest | null {
     return this.db.relationshipDigest(personId);
+  }
+
+  getPersonProfile(personId: string) {
+    return this.db.getPersonProfile(personId, this.analytics.getRelationshipStats(personId));
+  }
+
+  listPeople(limit = 100, query?: string) {
+    return this.db.listPeopleForPicker(limit, query);
   }
 
   getReminderSuggestions(limit = 10): ReminderSuggestion[] {

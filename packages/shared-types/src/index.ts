@@ -58,6 +58,13 @@ export interface Person {
   id: LocalEntityId;
   displayName: string;
   primaryHandle: string | null;
+  email?: string | null;
+  phone?: string | null;
+  companyName?: string | null;
+  jobTitle?: string | null;
+  bio?: string | null;
+  location?: string | null;
+  sourceKinds?: SourceKind[];
   createdAt: number;
   updatedAt: number;
 }
@@ -153,6 +160,9 @@ export interface SearchResult {
   title: string;
   snippet: string;
   score: number;
+  threadId?: string | null;
+  messageId?: string | null;
+  personId?: string | null;
 }
 
 export interface MessagesImportJob {
@@ -235,6 +245,14 @@ export interface AskResponse {
   answer: string;
   citations: SearchResult[];
   provider: "local" | LLMProvider;
+}
+
+export interface AiSettingsStatus {
+  provider: "local" | "openai";
+  hasOpenAIKey: boolean;
+  answerModel: string | null;
+  embeddingModel: string | null;
+  useOpenAIEmbeddings: boolean;
 }
 
 export interface ConnectorAccount {
@@ -326,6 +344,14 @@ export interface LocalEmbeddingStatus {
   error: string | null;
 }
 
+export interface EmbeddingSyncStatus {
+  totalDocuments: number;
+  embeddedDocuments: number;
+  dirtyDocuments: number;
+  provider: EmbeddingProvider | null;
+  model: string | null;
+}
+
 /* ─── Analytics types (mirrored from core/analytics.ts) ─── */
 
 export interface RelationshipStats {
@@ -368,6 +394,27 @@ export interface ThreadListItem {
   participantCount: number;
 }
 
+export interface PersonProfile {
+  person: Person;
+  digest: RelationshipDigest;
+  stats: RelationshipStats | null;
+  threads: ThreadListItem[];
+  recentMessages: MessageDetail[];
+  notes: Note[];
+  reminders: Reminder[];
+}
+
+export interface McpSetupStatus {
+  available: boolean;
+  command: string;
+  clients: Array<{
+    id: "claude" | "cursor" | "codex" | "chatgpt";
+    name: string;
+    config: string;
+  }>;
+  details: string;
+}
+
 export interface OpenFolioBridge {
   dashboard: {
     getThreadSummaries(limit?: number): Promise<MessagesThreadSummary[]>;
@@ -390,6 +437,9 @@ export interface OpenFolioBridge {
   };
   ai: {
     run(input: { query: string; useHosted?: boolean }): Promise<AskResponse>;
+    getSettings(): Promise<AiSettingsStatus>;
+    saveOpenAIKey(input: { apiKey: string; answerModel?: string | null; embeddingModel?: string | null; useOpenAIEmbeddings?: boolean }): Promise<AiSettingsStatus>;
+    deleteOpenAIKey(): Promise<AiSettingsStatus>;
   };
   cloud: {
     getConfig(): Promise<CloudRuntimeConfig>;
@@ -412,6 +462,11 @@ export interface OpenFolioBridge {
     getStatus(): Promise<{ running: boolean }>;
     start(): Promise<{ running: boolean }>;
     stop(): Promise<{ running: boolean }>;
+    getSetup(): Promise<McpSetupStatus>;
+  };
+  people: {
+    list(input?: { limit?: number; query?: string }): Promise<Person[]>;
+    getProfile(personId: string): Promise<PersonProfile | null>;
   };
   threads: {
     list(input: { limit?: number; offset?: number }): Promise<ThreadListItem[]>;
@@ -427,6 +482,7 @@ export interface OpenFolioBridge {
   };
   embeddings: {
     getStatus(): Promise<LocalEmbeddingStatus>;
+    getSyncStatus(): Promise<EmbeddingSyncStatus>;
   };
   insights: {
     getWrappedSummary(year?: number): Promise<WrappedSummary>;
