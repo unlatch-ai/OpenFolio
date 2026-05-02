@@ -128,6 +128,27 @@ export function SettingsView() {
     }
   }, [setBusy, setContactsSync]);
 
+  const requestContactsAndSync = useCallback(async () => {
+    setBusy(true);
+    try {
+      const status = await window.openfolio.contacts.requestAccess();
+      setContactsStatus(status);
+
+      if (status.status !== "granted") {
+        toast.error(status.details || "Contacts access was not granted.");
+        return;
+      }
+
+      const summary = await window.openfolio.contacts.sync();
+      setContactsSync(summary);
+      toast.success(`Synced ${summary.importedContacts} contacts`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Contacts sync failed.");
+    } finally {
+      setBusy(false);
+    }
+  }, [setBusy, setContactsStatus, setContactsSync]);
+
   const saveAiKey = useCallback(async () => {
     if (!apiKey.trim()) {
       toast.error("Enter an OpenAI API key first.");
@@ -234,12 +255,10 @@ export function SettingsView() {
                 <Button
                   variant="secondary"
                   size="xs"
-                  onClick={async () => {
-                    const s = await window.openfolio.contacts.requestAccess();
-                    setContactsStatus(s);
-                  }}
+                  onClick={requestContactsAndSync}
+                  disabled={busy}
                 >
-                  Allow
+                  Allow & Sync
                 </Button>
               ) : (
                 <Button size="xs" onClick={syncContacts} disabled={busy}>
