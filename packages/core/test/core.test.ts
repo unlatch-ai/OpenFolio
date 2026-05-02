@@ -113,6 +113,23 @@ describe("OpenFolioCore", () => {
     expect(results[0]?.snippet).toContain("hello ada");
   });
 
+  it("can fetch a thread message page around a selected search hit", async () => {
+    appendManyMessages(chatDbPath, 150);
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+
+    const [hit] = await core.search("bulk message 50");
+    expect(hit?.kind).toBe("message");
+    expect(hit?.threadId).toBeTruthy();
+    expect(hit?.messageId).toBeTruthy();
+
+    const newestPage = core.getThreadMessages(hit.threadId!, 20);
+    expect(newestPage.some((message) => message.id === hit.messageId)).toBe(false);
+
+    const aroundHit = core.getThreadMessages(hit.threadId!, 20, 0, hit.messageId);
+    expect(aroundHit.some((message) => message.id === hit.messageId)).toBe(true);
+  });
+
   it("fails gracefully when the Messages database is unavailable", async () => {
     process.env.OPENFOLIO_MESSAGES_DB_PATH = tempPath("missing-chat.db");
     const core = new OpenFolioCore({ dbPath });

@@ -214,8 +214,8 @@ export class OpenFolioCore {
     return this.db.getThreadDetail(threadId);
   }
 
-  getThreadMessages(threadId: string, limit = 50, offset = 0) {
-    return this.db.getThreadMessages(threadId, limit, offset);
+  getThreadMessages(threadId: string, limit = 50, offset = 0, aroundMessageId?: string | null) {
+    return this.db.getThreadMessages(threadId, limit, offset, aroundMessageId);
   }
 
   listThreadsPaginated(limit = 50, offset = 0) {

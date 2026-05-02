@@ -1347,7 +1347,26 @@ export class OpenFolioDatabase {
     };
   }
 
-  getThreadMessages(threadId: string, limit = 50, offset = 0) {
+  getThreadMessages(threadId: string, limit = 50, offset = 0, aroundMessageId?: string | null) {
+    let resolvedOffset = offset;
+    if (aroundMessageId) {
+      const anchor = this.db
+        .prepare("SELECT id, occurred_at AS occurredAt FROM message_messages WHERE thread_id = ? AND id = ?")
+        .get(threadId, aroundMessageId) as { id: string; occurredAt: number } | undefined;
+
+      if (anchor) {
+        const newerCount = this.db
+          .prepare(`
+            SELECT COUNT(*) AS count
+            FROM message_messages
+            WHERE thread_id = ?
+              AND (occurred_at > ? OR (occurred_at = ? AND id > ?))
+          `)
+          .get(threadId, anchor.occurredAt, anchor.occurredAt, anchor.id) as { count: number };
+        resolvedOffset = Math.max(0, newerCount.count - Math.floor(limit / 2));
+      }
+    }
+
     return this.db
       .prepare(`
         SELECT
@@ -1356,10 +1375,10 @@ export class OpenFolioDatabase {
           mm.has_attachments AS hasAttachments
         FROM message_messages mm
         WHERE mm.thread_id = ?
-        ORDER BY mm.occurred_at DESC
+        ORDER BY mm.occurred_at DESC, mm.id DESC
         LIMIT ? OFFSET ?
       `)
-      .all(threadId, limit, offset) as Array<{
+      .all(threadId, limit, resolvedOffset) as Array<{
         id: string;
         threadId: string;
         personId: string | null;

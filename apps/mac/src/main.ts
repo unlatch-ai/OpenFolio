@@ -754,9 +754,9 @@ const api: OpenFolioBridge = {
       logAppDebug("threads", "getDetail", threadId);
       return core.getThreadDetail(threadId);
     },
-    getMessages: async (input: { threadId: string; limit?: number; offset?: number }) => {
+    getMessages: async (input: { threadId: string; limit?: number; offset?: number; aroundMessageId?: string | null }) => {
       logAppDebug("threads", "getMessages", input);
-      const rows = core.getThreadMessages(input.threadId, input.limit, input.offset);
+      const rows = core.getThreadMessages(input.threadId, input.limit, input.offset, input.aroundMessageId);
       return rows.map((r) => ({
         id: r.id,
         threadId: r.threadId,

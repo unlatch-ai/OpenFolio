@@ -471,7 +471,7 @@ export interface OpenFolioBridge {
   threads: {
     list(input: { limit?: number; offset?: number }): Promise<ThreadListItem[]>;
     getDetail(threadId: string): Promise<ThreadDetail | null>;
-    getMessages(input: { threadId: string; limit?: number; offset?: number }): Promise<MessageDetail[]>;
+    getMessages(input: { threadId: string; limit?: number; offset?: number; aroundMessageId?: string | null }): Promise<MessageDetail[]>;
   };
   sync: {
     getWatcherState(): Promise<SyncWatcherState>;

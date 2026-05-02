@@ -65,7 +65,7 @@ const bridge: OpenFolioBridge = {
   threads: {
     list: (input: { limit?: number; offset?: number }) => ipcRenderer.invoke("openfolio:threads:list", input),
     getDetail: (threadId: string) => ipcRenderer.invoke("openfolio:threads:getDetail", threadId),
-    getMessages: (input: { threadId: string; limit?: number; offset?: number }) => ipcRenderer.invoke("openfolio:threads:getMessages", input),
+    getMessages: (input: { threadId: string; limit?: number; offset?: number; aroundMessageId?: string | null }) => ipcRenderer.invoke("openfolio:threads:getMessages", input),
   },
   sync: {
     getWatcherState: () => ipcRenderer.invoke("openfolio:sync:getWatcherState"),

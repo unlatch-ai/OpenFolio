@@ -50,12 +50,13 @@ function ThreadPanel({ threadId, selectedMessageId }: { threadId: string; select
   const [detail, setDetail] = useState<ThreadDetail | null>(null);
   const [messages, setMessages] = useState<MessageDetail[]>([]);
   const [loading, setLoading] = useState(true);
+  const selectedMessageRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setLoading(true);
     Promise.all([
       window.openfolio.threads.getDetail(threadId),
-      window.openfolio.threads.getMessages({ threadId, limit: 100 }),
+      window.openfolio.threads.getMessages({ threadId, limit: 100, aroundMessageId: selectedMessageId }),
     ])
       .then(([d, m]) => {
         setDetail(d);
@@ -63,7 +64,13 @@ function ThreadPanel({ threadId, selectedMessageId }: { threadId: string; select
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [threadId]);
+  }, [threadId, selectedMessageId]);
+
+  useEffect(() => {
+    if (!loading && selectedMessageId) {
+      selectedMessageRef.current?.scrollIntoView({ block: "center" });
+    }
+  }, [loading, selectedMessageId, messages]);
 
   if (loading) {
     return (
@@ -103,6 +110,7 @@ function ThreadPanel({ threadId, selectedMessageId }: { threadId: string; select
         {messages.map((msg) => (
           <div
             key={msg.id}
+            ref={selectedMessageId === msg.id ? selectedMessageRef : null}
             className={`thread-msg ${msg.isFromMe ? "from-me" : "from-them"} ${selectedMessageId === msg.id ? "highlight" : ""}`}
           >
             {!msg.isFromMe && (
