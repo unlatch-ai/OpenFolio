@@ -3,6 +3,7 @@ import { Command } from "cmdk";
 import { Search, MessageSquare, User, FileText, Bell, Sparkles } from "lucide-react";
 import { useAppStore } from "../store";
 import type { AiSettingsStatus, AskResponse, SearchResult } from "@openfolio/shared-types";
+import { groupSearchResults } from "../search-results";
 
 const ICON_MAP: Record<string, typeof MessageSquare> = {
   thread: MessageSquare,
@@ -96,11 +97,7 @@ export function CommandPalette() {
     }
   }, [query, setCommandResults]);
 
-  const groupedResults = results.reduce<Record<string, SearchResult[]>>((groups, result) => {
-    const key = result.kind;
-    groups[key] = [...(groups[key] ?? []), result];
-    return groups;
-  }, {});
+  const groupedResults = groupSearchResults(results);
 
   if (!open) return null;
 

@@ -100,6 +100,34 @@ describe("OpenFolioCore", () => {
     delete process.env.OPENFOLIO_IMPORT_BATCH_SIZE;
   });
 
+  it("can cancel a running Messages import between batches and retry later", async () => {
+    process.env.OPENFOLIO_IMPORT_BATCH_SIZE = "1";
+    appendManyMessages(chatDbPath, 8);
+    const core = new OpenFolioCore({ dbPath });
+    const started = core.startMessagesImport();
+    const job = core.messages.getActiveJob();
+    expect(job?.status).toBe("running");
+    expect(job).toBeTruthy();
+    while (job!.importedMessages === 0) {
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+    }
+
+    const cancelled = core.cancelMessagesImport(job!.id);
+    const result = await started;
+
+    expect(cancelled).toBeTruthy();
+    expect(result.status).toBe("cancelled");
+    expect(result.importedMessages).toBeGreaterThan(0);
+    expect(result.importedMessages).toBeLessThan(9);
+
+    const retry = await core.retryMessagesImport(result.id);
+    expect(retry.status).toBe("completed");
+    expect(retry.lastCursor).toBe(9);
+    delete process.env.OPENFOLIO_IMPORT_BATCH_SIZE;
+  });
+
   it("finds semantic-only matches from embedded documents without keyword hits", async () => {
     const core = new OpenFolioCore({ dbPath });
     await core.startMessagesImport();
@@ -161,6 +189,17 @@ describe("OpenFolioCore", () => {
     const status = core.getEmbeddingSyncStatus();
     expect(status.syncing).toBe(false);
     expect(status.dirtyDocuments).toBe(0);
+  });
+
+  it("reports when embedded-document scale needs a local vector index benchmark", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+
+    const status = core.getSearchScaleStatus({ vectorScanWarningThreshold: 1 });
+
+    expect(status.embeddedDocuments).toBeGreaterThanOrEqual(0);
+    expect(status.vectorScanWarningThreshold).toBe(1);
+    expect(status.recommendVectorIndex).toBe(status.embeddedDocuments >= 1);
   });
 
   it("can fetch a thread message page around a selected search hit", async () => {

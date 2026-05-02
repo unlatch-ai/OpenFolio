@@ -12,6 +12,9 @@ const bridge: OpenFolioBridge = {
     openSettings: () => ipcRenderer.invoke("openfolio:messages:openSettings"),
     startImport: () => ipcRenderer.invoke("openfolio:messages:startImport"),
     getImportStatus: (jobId: string) => ipcRenderer.invoke("openfolio:messages:getImportStatus", jobId),
+    getActiveImport: () => ipcRenderer.invoke("openfolio:messages:getActiveImport"),
+    cancelImport: (jobId: string) => ipcRenderer.invoke("openfolio:messages:cancelImport", jobId),
+    retryImport: (jobId?: string | null) => ipcRenderer.invoke("openfolio:messages:retryImport", jobId),
   },
   contacts: {
     requestAccess: () => ipcRenderer.invoke("openfolio:contacts:requestAccess"),
@@ -20,6 +23,7 @@ const bridge: OpenFolioBridge = {
   },
   search: {
     query: (input: { text: string; limit?: number }) => ipcRenderer.invoke("openfolio:search:query", input),
+    getScaleStatus: () => ipcRenderer.invoke("openfolio:search:getScaleStatus"),
   },
   ai: {
     run: (input: { query: string; useHosted?: boolean }) => ipcRenderer.invoke("openfolio:ai:run", input),

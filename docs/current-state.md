@@ -20,6 +20,8 @@ iMessage history. The current product surface is focused on a stable local MVP.
   notes, reminders, and person-scoped message filtering.
 - Local stdio MCP server and setup snippets for compatible assistants.
 - GitHub Releases based Mac updater and signed local Mac packaging.
+- Cancellable/retryable Messages import with clearer recovery state.
+- Search scale reporting and a repeatable local benchmark command.
 
 ## Boundaries
 
@@ -32,11 +34,13 @@ iMessage history. The current product surface is focused on a stable local MVP.
 
 ## Known gaps
 
-- Search currently scans stored vectors in-process. This is acceptable for MVP
-  testing, but large histories need measured benchmarks and likely a vector
-  index such as sqlite-vec or another local ANN layer.
-- Renderer coverage is still mostly state/helper focused. More UI interaction
-  tests are needed as the app surface stabilizes.
-- Dependency vulnerability cleanup remains open from GitHub security reporting.
+- Search currently scans stored vectors in-process. The app now warns at larger
+  embedded-document counts and includes `pnpm bench:search` for local benchmark
+  runs. A vector index should be added once benchmark data shows user-visible
+  latency.
+- Renderer coverage is still helper-focused. Full DOM interaction tests are the
+  next testing step once the app adopts a browser-like test environment.
+- Dependency audit is reduced to a remaining low-severity advisory after pinned
+  transitive overrides and the Electron 39 upgrade.
 - The hosted package exists for future commercial boundaries but is not part of
   the local MVP path.

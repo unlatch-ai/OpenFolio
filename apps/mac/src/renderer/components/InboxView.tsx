@@ -6,6 +6,7 @@ import { Button } from "./ui/button";
 import { ContactAvatar } from "./ContactAvatar";
 import { toast } from "sonner";
 import type { MessageDetail, ThreadDetail } from "@openfolio/shared-types";
+import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
 
 /* ─── Thread list item ─── */
 function ThreadRow({
@@ -137,20 +138,39 @@ function ThreadPanel({ threadId, selectedMessageId }: { threadId: string; select
 
 /* ─── Empty state ─── */
 function EmptyInbox() {
-  const { messagesStatus, setBusy, setThreads, setMessagesStatus } = useAppStore();
+  const { messagesStatus, importJob, setBusy, setThreads, setMessagesStatus, setImportJob } = useAppStore();
   const [importing, setImporting] = useState(false);
 
   const handleImport = useCallback(async () => {
     setImporting(true);
     setBusy(true);
     try {
-      const job = await window.openfolio.messages.startImport();
-      if (job.status === "completed") {
-        toast.success(`Imported ${job.importedMessages} messages across ${job.importedThreads} threads`);
+      const action = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
+      if (action.kind === "cancel" && importJob) {
+        const cancelled = await window.openfolio.messages.cancelImport(importJob.id);
+        if (cancelled) setImportJob(cancelled);
+        toast("Import cancellation requested");
+        return;
+      }
+
+      const job = action.kind === "retry"
+        ? await window.openfolio.messages.retryImport(importJob?.id)
+        : await window.openfolio.messages.startImport();
+      setImportJob(job);
+      const isRunning = job.status === "running" || job.status === "cancelling";
+      if (isRunning) {
+        setBusy(false);
+        setImporting(false);
+      }
+      const finalJob = isRunning ? await waitForImportJob(job.id, setImportJob) : job;
+      if (finalJob?.status === "completed") {
+        toast.success(`Imported ${finalJob.importedMessages} messages across ${finalJob.importedThreads} threads`);
         const threads = await window.openfolio.threads.list({ limit: 50 });
         setThreads(threads);
+      } else if (finalJob?.status === "cancelled") {
+        toast("Import cancelled");
       } else {
-        toast.error(job.error || "Import failed.");
+        toast.error(finalJob?.error || "Import failed.");
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Import failed.");
@@ -158,7 +178,7 @@ function EmptyInbox() {
       setImporting(false);
       setBusy(false);
     }
-  }, [setBusy, setThreads]);
+  }, [importJob, messagesStatus?.status, setBusy, setImportJob, setThreads]);
 
   const handleRequestAccess = useCallback(async () => {
     try {
@@ -171,6 +191,8 @@ function EmptyInbox() {
       toast.error(error instanceof Error ? error.message : "Failed to check access.");
     }
   }, [setMessagesStatus]);
+
+  const importAction = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
 
   return (
     <div className="inbox-empty">
@@ -190,8 +212,8 @@ function EmptyInbox() {
             </Button>
           ) : (
             <Button onClick={handleImport} disabled={importing} size="sm">
-              <RefreshCw size={14} className={importing ? "animate-spin" : ""} />
-              Import Messages
+              <RefreshCw size={14} className={importing || importJob?.status === "running" || importJob?.status === "cancelling" ? "animate-spin" : ""} />
+              {importAction.label}
             </Button>
           )}
         </div>

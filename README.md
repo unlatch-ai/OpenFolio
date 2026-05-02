@@ -18,6 +18,7 @@
   <a href="https://openfolio.ai">Website</a> &middot;
   <a href="docs/current-state.md">Current State</a> &middot;
   <a href="docs/roadmap.md">Roadmap</a> &middot;
+  <a href="docs/release-checklist.md">Release Checklist</a> &middot;
   <a href="https://github.com/unlatch-ai/OpenFolio/issues">Report an Issue</a>
 </p>
 

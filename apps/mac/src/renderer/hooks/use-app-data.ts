@@ -15,6 +15,7 @@ export function useAppData() {
     setThreads,
     setThreadSummaries,
     setSuggestions,
+    setImportJob,
     setUpdateState,
     setWatcherState,
     setInitialized,
@@ -28,7 +29,7 @@ export function useAppData() {
 
     async function bootstrap() {
       try {
-        const [messagesStatus, contactsStatus, mcpStatus, threads, summaries, suggestions, watcherState, embeddingSync] =
+        const [messagesStatus, contactsStatus, mcpStatus, threads, summaries, suggestions, watcherState, embeddingSync, activeImport] =
           await Promise.all([
             window.openfolio.messages.getAccessStatus(),
             window.openfolio.contacts.getAccessStatus(),
@@ -38,6 +39,7 @@ export function useAppData() {
             window.openfolio.dashboard.getReminderSuggestions(10),
             window.openfolio.sync.getWatcherState(),
             window.openfolio.embeddings.getSyncStatus(),
+            window.openfolio.messages.getActiveImport(),
           ]);
 
         setMessagesStatus(messagesStatus);
@@ -48,6 +50,7 @@ export function useAppData() {
         setSuggestions(suggestions);
         setWatcherState(watcherState);
         setEmbeddingSync(embeddingSync);
+        setImportJob(activeImport);
 
         // Auto-start watcher if messages access is granted
         if (messagesStatus.status === "granted" && !watcherState.watching) {
@@ -70,6 +73,7 @@ export function useAppData() {
     setThreads,
     setThreadSummaries,
     setSuggestions,
+    setImportJob,
     setUpdateState,
     setWatcherState,
     setInitialized,
@@ -88,6 +92,7 @@ export function useAppData() {
   // Sync complete listener — refresh threads on new import
   useEffect(() => {
     return window.openfolio.sync.onSyncComplete((job) => {
+      setImportJob(job);
       if (job.status === "completed" && job.importedMessages > 0) {
         toast.success(`Synced ${job.importedMessages} new messages`);
         // Refresh thread list
@@ -101,5 +106,5 @@ export function useAppData() {
           .catch(console.error);
       }
     });
-  }, [setThreads, setThreadSummaries]);
+  }, [setImportJob, setThreads, setThreadSummaries]);
 }

@@ -14,6 +14,7 @@ import type {
   ContactsAccessStatus,
   McpSetupStatus,
   MessagesAccessStatus,
+  MessagesImportJob,
   OpenFolioBridge,
   SearchResult,
 } from "@openfolio/shared-types";
@@ -43,6 +44,7 @@ const cloudConfig: CloudRuntimeConfig = {
 let mainWindow: BrowserWindow | null = null;
 let pendingAuthCallbackUrl: string | null = null;
 let authCallbackServer: Server | null = null;
+let messagesImportPromise: Promise<MessagesImportJob> | null = null;
 const debugLogging = process.env.OPENFOLIO_DEBUG === "1" || process.env.OPENFOLIO_DEBUG_LOGS === "1";
 const debugAuthFlow = process.env.OPENFOLIO_DEBUG_AUTH === "1";
 const enforceSingleInstance = !process.defaultApp;
@@ -332,6 +334,24 @@ function getGuidedMessagesAccessStatus(
   });
 }
 
+function startMessagesImportInBackground() {
+  const active = core.getActiveMessagesImport();
+  if (active) {
+    return active;
+  }
+
+  messagesImportPromise = core.startMessagesImport()
+    .then((job) => {
+      mainWindow?.webContents.send("openfolio:sync:complete", job);
+      return job;
+    })
+    .finally(() => {
+      messagesImportPromise = null;
+    });
+
+  return core.getActiveMessagesImport();
+}
+
 async function stopAuthCallbackServer() {
   if (!authCallbackServer) {
     return;
@@ -572,13 +592,29 @@ const api: OpenFolioBridge = {
     },
     startImport: async () => {
       logAppDebug("messages", "startImport");
-      const job = await core.startMessagesImport();
+      const job = startMessagesImportInBackground() ?? await (messagesImportPromise ?? core.startMessagesImport());
       logAppDebug("messages", "startImportResult", job);
       return job;
     },
     getImportStatus: async (jobId: string) => {
       const job = core.getMessagesImportStatus(jobId);
       logAppDebug("messages", "getImportStatus", jobId, job);
+      return job;
+    },
+    getActiveImport: async () => {
+      const job = core.getActiveMessagesImport();
+      logAppDebug("messages", "getActiveImport", job);
+      return job;
+    },
+    cancelImport: async (jobId: string) => {
+      const job = core.cancelMessagesImport(jobId);
+      logAppDebug("messages", "cancelImport", jobId, job);
+      return job;
+    },
+    retryImport: async (jobId?: string | null) => {
+      logAppDebug("messages", "retryImport", jobId);
+      const job = await core.retryMessagesImport(jobId);
+      logAppDebug("messages", "retryImportResult", job);
       return job;
     },
   },
@@ -646,6 +682,7 @@ const api: OpenFolioBridge = {
       logAppDebug("search", "resultCount", results.length);
       return results;
     },
+    getScaleStatus: async () => core.getSearchScaleStatus(),
   },
   ai: {
     run: async ({ query }: { query: string; useHosted?: boolean }) => {
@@ -866,10 +903,14 @@ safeHandle("openfolio:messages:getAccessStatus", () => api.messages.getAccessSta
 safeHandle("openfolio:messages:openSettings", () => api.messages.openSettings());
 safeHandle("openfolio:messages:startImport", () => api.messages.startImport());
 safeHandle("openfolio:messages:getImportStatus", (_, jobId: string) => api.messages.getImportStatus(jobId));
+safeHandle("openfolio:messages:getActiveImport", () => api.messages.getActiveImport());
+safeHandle("openfolio:messages:cancelImport", (_, jobId: string) => api.messages.cancelImport(jobId));
+safeHandle("openfolio:messages:retryImport", (_, jobId?: string | null) => api.messages.retryImport(jobId));
 safeHandle("openfolio:contacts:requestAccess", () => api.contacts.requestAccess());
 safeHandle("openfolio:contacts:getAccessStatus", () => api.contacts.getAccessStatus());
 safeHandle("openfolio:contacts:sync", () => api.contacts.sync());
 safeHandle("openfolio:search:query", (_, input: { text: string; limit?: number }) => api.search.query(input));
+safeHandle("openfolio:search:getScaleStatus", () => api.search.getScaleStatus());
 safeHandle("openfolio:ai:run", (_, input: { query: string; useHosted?: boolean }) => api.ai.run(input));
 safeHandle("openfolio:ai:getSettings", () => api.ai.getSettings());
 safeHandle("openfolio:ai:saveOpenAIKey", (_, input: { apiKey: string; answerModel?: string | null; embeddingModel?: string | null; useOpenAIEmbeddings?: boolean }) => api.ai.saveOpenAIKey(input));

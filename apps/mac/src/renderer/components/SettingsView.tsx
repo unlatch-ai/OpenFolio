@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "@openfolio/hosted";
-import type { AiSettingsStatus, CloudAccountStatus, EmbeddingSyncStatus, McpSetupStatus } from "@openfolio/shared-types";
+import type { AiSettingsStatus, CloudAccountStatus, EmbeddingSyncStatus, McpSetupStatus, SearchScaleStatus } from "@openfolio/shared-types";
 import { Copy, Download, KeyRound, LogOut, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "./ui/badge";
@@ -10,6 +10,8 @@ import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
 import { useTheme } from "@/lib/use-theme";
 import { useAppStore } from "../store";
+import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
+import { describeSearchScale } from "../search-results";
 
 type OAuthActionResult = { redirect?: URL; signingIn: boolean };
 
@@ -45,6 +47,7 @@ export function SettingsView() {
   const [useOpenAIEmbeddings, setUseOpenAIEmbeddings] = useState(false);
   const [mcpSetup, setMcpSetup] = useState<McpSetupStatus | null>(null);
   const [embeddingSync, setEmbeddingSync] = useState<EmbeddingSyncStatus | null>(null);
+  const [searchScale, setSearchScale] = useState<SearchScaleStatus | null>(null);
 
   useEffect(() => {
     void window.openfolio.ai.getSettings().then((settings) => {
@@ -53,6 +56,7 @@ export function SettingsView() {
     });
     void window.openfolio.mcp.getSetup().then(setMcpSetup);
     void window.openfolio.embeddings.getSyncStatus().then(setEmbeddingSync);
+    void window.openfolio.search.getScaleStatus().then(setSearchScale);
   }, []);
 
   // Register device on sign-in
@@ -99,21 +103,41 @@ export function SettingsView() {
   const runImport = useCallback(async () => {
     setBusy(true);
     try {
-      const job = await window.openfolio.messages.startImport();
+      const action = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
+      if (action.kind === "cancel" && importJob) {
+        const cancelled = await window.openfolio.messages.cancelImport(importJob.id);
+        if (cancelled) setImportJob(cancelled);
+        toast("Import cancellation requested");
+        return;
+      }
+
+      const job = action.kind === "retry"
+        ? await window.openfolio.messages.retryImport(importJob?.id)
+        : await window.openfolio.messages.startImport();
       setImportJob(job);
-      if (job.status === "completed") {
-        toast.success(`Imported ${job.importedMessages} messages`);
+      const isRunning = job.status === "running" || job.status === "cancelling";
+      if (isRunning) {
+        setBusy(false);
+      }
+      const finalJob = isRunning ? await waitForImportJob(job.id, setImportJob) : job;
+      if (!finalJob) {
+        toast.error("Import status was lost.");
+      } else if (finalJob.status === "completed") {
+        toast.success(`Imported ${finalJob.importedMessages} messages`);
         const threads = await window.openfolio.threads.list({ limit: 50 });
         setThreads(threads);
+        await window.openfolio.search.getScaleStatus().then(setSearchScale);
+      } else if (finalJob.status === "cancelled") {
+        toast("Import cancelled");
       } else {
-        toast.error(job.error || "Import failed.");
+        toast.error(finalJob.error || "Import failed.");
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Import failed.");
     } finally {
       setBusy(false);
     }
-  }, [setBusy, setImportJob, setThreads]);
+  }, [importJob, messagesStatus?.status, setBusy, setImportJob, setThreads]);
 
   const syncContacts = useCallback(async () => {
     setBusy(true);
@@ -166,6 +190,8 @@ export function SettingsView() {
       toast.error(e instanceof Error ? e.message : "Failed to save key.");
     }
   }, [apiKey, useOpenAIEmbeddings]);
+
+  const importAction = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
 
   return (
     <div className="settings-view">
@@ -232,8 +258,8 @@ export function SettingsView() {
             </div>
             <div className="settings-row-actions">
               <Button size="xs" onClick={runImport} disabled={busy || messagesStatus?.status !== "granted"}>
-                <RefreshCw size={12} />
-                Import
+                <RefreshCw size={12} className={importJob?.status === "running" || importJob?.status === "cancelling" ? "animate-spin" : ""} />
+                {importAction.label}
               </Button>
             </div>
           </div>
@@ -369,7 +395,7 @@ export function SettingsView() {
               <p className="settings-row-label">Embedding index</p>
               <p className="settings-row-detail">
                 {embeddingSync
-                  ? `${embeddingSync.embeddedDocuments}/${embeddingSync.totalDocuments} documents embedded, ${embeddingSync.dirtyDocuments} pending`
+                  ? `${embeddingSync.embeddedDocuments}/${embeddingSync.totalDocuments} documents embedded, ${embeddingSync.dirtyDocuments} pending${embeddingSync.syncing ? ", indexing now" : ""}`
                   : "Checking local search index..."}
               </p>
             </div>
@@ -381,6 +407,21 @@ export function SettingsView() {
               >
                 Refresh
               </Button>
+            </div>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Search scale</p>
+              <p className="settings-row-detail">
+                {searchScale
+                  ? describeSearchScale(searchScale)
+                  : "Checking search scale..."}
+              </p>
+            </div>
+            <div className="settings-row-actions">
+              <Badge variant={searchScale?.recommendVectorIndex ? "default" : "secondary"}>
+                {searchScale?.recommendVectorIndex ? "benchmark" : "ok"}
+              </Badge>
             </div>
           </div>
         </div>

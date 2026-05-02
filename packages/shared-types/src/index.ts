@@ -167,7 +167,7 @@ export interface SearchResult {
 
 export interface MessagesImportJob {
   id: string;
-  status: "idle" | "running" | "completed" | "failed";
+  status: "idle" | "running" | "cancelling" | "cancelled" | "completed" | "failed";
   importedMessages: number;
   importedThreads: number;
   importedPeople: number;
@@ -175,6 +175,15 @@ export interface MessagesImportJob {
   error: string | null;
   startedAt: number;
   completedAt: number | null;
+}
+
+export interface SearchScaleStatus {
+  totalDocuments: number;
+  embeddedDocuments: number;
+  dirtyDocuments: number;
+  vectorScanWarningThreshold: number;
+  recommendVectorIndex: boolean;
+  estimatedVectorBytes: number;
 }
 
 export interface MessagesThreadSummary {
@@ -436,6 +445,9 @@ export interface OpenFolioBridge {
     openSettings(): Promise<MessagesAccessStatus>;
     startImport(): Promise<MessagesImportJob>;
     getImportStatus(jobId: string): Promise<MessagesImportJob | null>;
+    getActiveImport(): Promise<MessagesImportJob | null>;
+    cancelImport(jobId: string): Promise<MessagesImportJob | null>;
+    retryImport(jobId?: string | null): Promise<MessagesImportJob>;
   };
   contacts: {
     requestAccess(): Promise<ContactsAccessStatus>;
@@ -444,6 +456,7 @@ export interface OpenFolioBridge {
   };
   search: {
     query(input: { text: string; limit?: number }): Promise<SearchResult[]>;
+    getScaleStatus(): Promise<SearchScaleStatus>;
   };
   ai: {
     run(input: { query: string; useHosted?: boolean }): Promise<AskResponse>;

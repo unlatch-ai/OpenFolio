@@ -5,6 +5,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { useAppStore } from "../store";
 import { getOnboardingState, type OnboardingStep } from "../onboarding";
+import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
 
 const STEP_ICONS: Record<OnboardingStep["id"], typeof MessageSquare> = {
   messages: ShieldCheck,
@@ -115,13 +116,39 @@ export function OnboardingView() {
   async function runImport() {
     setBusy(true);
     try {
-      const job = await window.openfolio.messages.startImport();
-      setImportJob(job);
-      if (job.status !== "completed") {
-        toast.error(job.error || "Messages import failed.");
+      const action = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
+      if ((action.kind === "cancel") && importJob) {
+        const cancelled = await window.openfolio.messages.cancelImport(importJob.id);
+        if (cancelled) setImportJob(cancelled);
+        toast("Import cancellation requested");
         return;
       }
-      toast.success(`Imported ${job.importedMessages} messages`);
+
+      const job = action.kind === "retry"
+        ? await window.openfolio.messages.retryImport(importJob?.id)
+        : await window.openfolio.messages.startImport();
+      setImportJob(job);
+      const isRunning = job.status === "running" || job.status === "cancelling";
+      if (isRunning) {
+        setBusy(false);
+      }
+      const finalJob = isRunning ? await waitForImportJob(job.id, setImportJob) : job;
+
+      if (!finalJob) {
+        toast.error("Import status was lost.");
+        return;
+      }
+
+      if (finalJob.status === "cancelled") {
+        toast("Import cancelled");
+        return;
+      }
+
+      if (finalJob.status !== "completed") {
+        toast.error(finalJob.error || "Messages import failed.");
+        return;
+      }
+      toast.success(`Imported ${finalJob.importedMessages} messages`);
       await refreshAppData();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Messages import failed.");

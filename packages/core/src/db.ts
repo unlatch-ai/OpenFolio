@@ -1246,6 +1246,29 @@ export class OpenFolioDatabase {
     };
   }
 
+  getSearchScaleStatus(options?: { vectorScanWarningThreshold?: number }) {
+    const threshold = options?.vectorScanWarningThreshold ?? 50_000;
+    const row = this.db
+      .prepare(`
+        SELECT
+          COUNT(*) AS totalDocuments,
+          SUM(CASE WHEN embedding IS NOT NULL AND embedding != '' THEN 1 ELSE 0 END) AS embeddedDocuments,
+          SUM(CASE WHEN dirty = 1 THEN 1 ELSE 0 END) AS dirtyDocuments
+        FROM search_documents
+      `)
+      .get() as Record<string, unknown>;
+
+    const embeddedDocuments = Number(row.embeddedDocuments ?? 0);
+    return {
+      totalDocuments: Number(row.totalDocuments ?? 0),
+      embeddedDocuments,
+      dirtyDocuments: Number(row.dirtyDocuments ?? 0),
+      vectorScanWarningThreshold: threshold,
+      recommendVectorIndex: embeddedDocuments >= threshold,
+      estimatedVectorBytes: embeddedDocuments * 384 * 4,
+    };
+  }
+
   relationshipDigest(personId: string): RelationshipDigest | null {
     const person = this.getPerson(personId);
     if (!person) {

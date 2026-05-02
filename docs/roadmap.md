@@ -2,7 +2,7 @@
 
 ## Sprint 1: Reliable First Run + Search Confidence
 
-Status: in progress.
+Status: complete.
 
 - Guided local setup for Messages permission, import, Contacts sync, and
   semantic index status.
@@ -17,6 +17,8 @@ Status: in progress.
 
 ## Sprint 2: Scale and Correctness
 
+Status: in progress.
+
 - Benchmark local vector search on large imported histories.
 - Choose and integrate a local vector index if in-process vector scans become a
   user-visible bottleneck.
@@ -24,6 +26,7 @@ Status: in progress.
 - Add deeper renderer interaction tests for setup, Settings, Search/Ask, and
   People workflows.
 - Address GitHub dependency vulnerability reports.
+- Document release hygiene, version checks, and notarization status.
 
 ## Sprint 3: Local Relationship Workspace
 

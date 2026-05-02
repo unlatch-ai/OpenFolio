@@ -5,6 +5,7 @@ import type { Person, PersonProfile } from "@openfolio/shared-types";
 import { useAppStore } from "../store";
 import { ContactAvatar } from "./ContactAvatar";
 import { Button } from "./ui/button";
+import { filterPersonMessages } from "../people-profile";
 
 function formatDate(value: number | null) {
   return value ? new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "No messages";
@@ -42,10 +43,7 @@ export function PeopleView() {
     window.openfolio.people.getProfile(selectedPersonId).then(setProfile).catch(console.error);
   }, [selectedPersonId]);
 
-  const recentMessages = profile?.recentMessages.filter((message) => {
-    if (!profileQuery.trim()) return true;
-    return (message.body || "").toLowerCase().includes(profileQuery.trim().toLowerCase());
-  }) ?? [];
+  const recentMessages = profile ? filterPersonMessages(profile.recentMessages, profileQuery) : [];
 
   async function refreshProfile(personId: string) {
     const nextProfile = await window.openfolio.people.getProfile(personId);

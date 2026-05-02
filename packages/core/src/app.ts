@@ -76,9 +76,25 @@ export class OpenFolioCore {
     return this.messages.getJob(jobId);
   }
 
+  getActiveMessagesImport() {
+    return this.messages.getActiveJob();
+  }
+
+  cancelMessagesImport(jobId: string) {
+    return this.messages.cancelJob(jobId);
+  }
+
+  async retryMessagesImport(_jobId?: string | null): Promise<MessagesImportJob> {
+    return this.startMessagesImport();
+  }
+
   async search(text: string, limit = 10): Promise<SearchResult[]> {
     const embedding = await this.ai.embed(text);
     return this.db.search(text, limit, embedding ?? undefined);
+  }
+
+  getSearchScaleStatus(options?: { vectorScanWarningThreshold?: number }) {
+    return this.db.getSearchScaleStatus(options);
   }
 
   async ask(query: string): Promise<AskResponse> {

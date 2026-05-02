@@ -54,13 +54,43 @@ export function getMessagesAccessStatus(chatDbPath = process.env.OPENFOLIO_MESSA
 export class MessagesImporter {
   private readonly jobs = new Map<string, MessagesImportJob>();
 
+  private activeJobId: string | null = null;
+
   constructor(private readonly database: OpenFolioDatabase) {}
 
   getJob(jobId: string) {
     return this.jobs.get(jobId) ?? null;
   }
 
+  getActiveJob() {
+    if (!this.activeJobId) {
+      return null;
+    }
+    const job = this.jobs.get(this.activeJobId);
+    return job && (job.status === "running" || job.status === "cancelling") ? job : null;
+  }
+
+  cancelJob(jobId: string) {
+    const job = this.jobs.get(jobId);
+    if (!job || job.status !== "running") {
+      return job ?? null;
+    }
+    job.status = "cancelling";
+    return job;
+  }
+
+  private async yieldToEventLoop() {
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+  }
+
   async importFromChatDb(chatDbPath = process.env.OPENFOLIO_MESSAGES_DB_PATH || DEFAULT_MESSAGES_DB_PATH) {
+    const active = this.getActiveJob();
+    if (active) {
+      return active;
+    }
+
     const access = getMessagesAccessStatus(chatDbPath);
     const job: MessagesImportJob = {
       id: createId("import"),
@@ -74,11 +104,14 @@ export class MessagesImporter {
       completedAt: null,
     };
     this.jobs.set(job.id, job);
+    this.activeJobId = job.id;
+    await this.yieldToEventLoop();
 
     if (access.status !== "granted") {
       job.status = "failed";
       job.error = access.details;
       job.completedAt = now();
+      this.activeJobId = null;
       return job;
     }
 
@@ -94,6 +127,12 @@ export class MessagesImporter {
       let maxCursor = cursor;
 
       while (true) {
+        if (job.status === "cancelling") {
+          job.status = "cancelled";
+          job.completedAt = now();
+          return job;
+        }
+
         const rows = source
           .prepare(`
             SELECT
@@ -178,6 +217,7 @@ export class MessagesImporter {
         }
 
         batchCursor = maxCursor;
+        await this.yieldToEventLoop();
         if (rows.length < importLimit) {
           break;
         }
@@ -201,6 +241,9 @@ export class MessagesImporter {
       job.completedAt = now();
       return job;
     } finally {
+      if (this.activeJobId === job.id) {
+        this.activeJobId = null;
+      }
       source.close();
     }
   }

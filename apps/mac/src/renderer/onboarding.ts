@@ -45,15 +45,22 @@ function messagesStep(input: OnboardingInput): OnboardingStep {
 function importStep(input: OnboardingInput, messagesGranted: boolean): OnboardingStep {
   const imported = input.threadCount > 0 || (input.importJob?.status === "completed" && input.importJob.importedMessages > 0);
   const running = input.importJob?.status === "running";
+  const cancelling = input.importJob?.status === "cancelling";
+  const failed = input.importJob?.status === "failed";
+  const cancelled = input.importJob?.status === "cancelled";
   return {
     id: "import",
     title: "Import local conversations",
-    description: imported
+    description: failed
+      ? input.importJob?.error || "Import failed. Retry after fixing the issue."
+      : cancelled
+        ? "Import was cancelled. Retry when you are ready."
+        : imported
       ? `${input.threadCount || input.importJob?.importedThreads || 0} conversations are ready.`
       : "Build the local graph from Messages. This reads data locally and does not modify Messages.",
-    status: imported ? "complete" : running ? "running" : messagesGranted ? "active" : "blocked",
+    status: imported ? "complete" : running || cancelling ? "running" : messagesGranted ? "active" : "blocked",
     required: true,
-    actionLabel: imported ? "Import again" : running ? null : "Import messages",
+    actionLabel: running ? "Cancel import" : cancelling ? "Cancelling..." : imported ? "Import again" : failed || cancelled ? "Retry import" : "Import messages",
   };
 }
 
