@@ -164,6 +164,7 @@ export class OpenFolioDatabase {
       DROP TRIGGER IF EXISTS search_documents_ad;
       DROP TRIGGER IF EXISTS search_documents_au;
       DROP TABLE IF EXISTS search_documents_fts;
+      DROP TABLE IF EXISTS search_documents;
       DROP TABLE IF EXISTS attachment_refs;
       DROP TABLE IF EXISTS message_messages;
       DROP TABLE IF EXISTS message_participants;

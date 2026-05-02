@@ -36,10 +36,9 @@ const mcpController = new LocalMcpController();
 const updater = new OpenFolioUpdater(() => mainWindow, (...args) => {
   logAppDebug("updates", ...args);
 });
-const DEFAULT_CONVEX_URL = "https://blessed-pig-525.convex.cloud";
 const DEFAULT_SITE_URL = "https://openfolio.ai";
 const cloudConfig: CloudRuntimeConfig = {
-  convexUrl: process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || DEFAULT_CONVEX_URL,
+  convexUrl: process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || null,
   hostedBaseUrl: process.env.SITE_URL || process.env.OPENFOLIO_SITE_URL || DEFAULT_SITE_URL,
   deviceName: os.hostname(),
   platform: process.platform,

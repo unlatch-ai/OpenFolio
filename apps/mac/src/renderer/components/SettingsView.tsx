@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { useAuthActions } from "@convex-dev/auth/react";
-import { api } from "@openfolio/hosted";
-import type { AiSettingsStatus, CloudAccountStatus, EmbeddingSyncStatus, McpSetupStatus, SearchScaleStatus } from "@openfolio/shared-types";
-import { Copy, Download, KeyRound, LogOut, RefreshCw } from "lucide-react";
+import type { AiSettingsStatus, EmbeddingSyncStatus, McpSetupStatus, SearchScaleStatus } from "@openfolio/shared-types";
+import { Copy, Download, KeyRound, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -13,11 +10,7 @@ import { useAppStore } from "../store";
 import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
 import { describeSearchScale } from "../search-results";
 
-type OAuthActionResult = { redirect?: URL; signingIn: boolean };
-
 export function SettingsView() {
-  const { isAuthenticated, isLoading } = useConvexAuth();
-  const { signIn, signOut } = useAuthActions();
   const { theme, setTheme } = useTheme();
 
   const {
@@ -27,21 +20,15 @@ export function SettingsView() {
     updateState,
     importJob,
     busy,
-    cloudConfig,
     cloudError,
     setMessagesStatus,
     setContactsStatus,
     setContactsSync,
     setImportJob,
     setBusy,
-    setCloudError,
     setThreads,
-    setThreadSummaries,
   } = useAppStore();
 
-  const currentUser = useQuery(api.accounts.getCurrentUser, isAuthenticated ? {} : "skip");
-  const cloudStatus = useQuery(api.accounts.getCloudStatus, isAuthenticated ? {} : "skip") as CloudAccountStatus | undefined;
-  const registerCurrentDevice = useMutation(api.accounts.registerCurrentDevice);
   const [aiSettings, setAiSettings] = useState<AiSettingsStatus | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [useOpenAIEmbeddings, setUseOpenAIEmbeddings] = useState(false);
@@ -58,47 +45,6 @@ export function SettingsView() {
     void window.openfolio.embeddings.getSyncStatus().then(setEmbeddingSync);
     void window.openfolio.search.getScaleStatus().then(setSearchScale);
   }, []);
-
-  // Register device on sign-in
-  const [registeredUserId, setRegisteredUserId] = useState<string | null>(null);
-  useEffect(() => {
-    if (!isAuthenticated || !currentUser?.id || registeredUserId === currentUser.id || !cloudConfig) return;
-    void registerCurrentDevice({
-      deviceName: cloudConfig.deviceName,
-      platform: cloudConfig.platform,
-    })
-      .then(() => setRegisteredUserId(currentUser.id))
-      .catch((err) => setCloudError(err instanceof Error ? err.message : "Failed to register device."));
-  }, [currentUser?.id, isAuthenticated, registerCurrentDevice, registeredUserId, cloudConfig, setCloudError]);
-
-  // Auth callback
-  useEffect(() => {
-    return window.openfolio.cloud.onAuthCallback((url) => {
-      const callback = new URL(url);
-      const code = callback.searchParams.get("code");
-      const authError = callback.searchParams.get("error_description") || callback.searchParams.get("error");
-      if (authError) { setCloudError(authError); return; }
-      if (!code) { setCloudError("Google sign-in returned without an authorization code."); return; }
-
-      void (signIn as unknown as (provider: string | undefined, params: { code: string }) => Promise<OAuthActionResult>)(undefined, { code })
-        .then((result) => {
-          if (result.redirect) { setCloudError("Unexpected redirect."); return; }
-          if (result.signingIn) window.location.reload();
-        })
-        .catch((e) => setCloudError(e instanceof Error ? e.message : "Sign-in failed."));
-    });
-  }, [signIn, setCloudError]);
-
-  const startGoogleSignIn = useCallback(async () => {
-    setCloudError(null);
-    try {
-      const authSession = await window.openfolio.cloud.beginAuthSession();
-      const result = (await signIn("google", { redirectTo: authSession.redirectUri })) as OAuthActionResult;
-      if (result.redirect) await window.openfolio.cloud.openExternal(result.redirect.toString());
-    } catch (e) {
-      setCloudError(e instanceof Error ? e.message : "Failed to start sign-in.");
-    }
-  }, [signIn, setCloudError]);
 
   const runImport = useCallback(async () => {
     setBusy(true);
@@ -298,47 +244,15 @@ export function SettingsView() {
         {/* Account */}
         <div className="settings-group">
           <h3 className="settings-group-title">Account</h3>
-          {isLoading ? (
-            <p className="settings-row-detail">Checking...</p>
-          ) : !isAuthenticated ? (
-            <div className="settings-row">
-              <div className="settings-row-info">
-                <p className="settings-row-label">Hosted account</p>
-                <p className="settings-row-detail">Optional. Sign in for hosted AI, connectors, or billing.</p>
-              </div>
-              <div className="settings-row-actions">
-                <Button variant="secondary" size="xs" onClick={startGoogleSignIn}>
-                  Continue with Google
-                </Button>
-              </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Hosted account</p>
+              <p className="settings-row-detail">Deferred. The Mac app currently runs local-first without account sign-in or hosted AI.</p>
             </div>
-          ) : (
-            <div className="settings-row">
-              <div className="settings-row-info">
-                <p className="settings-row-label">{cloudStatus?.accountEmail || currentUser?.email || "Signed in"}</p>
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {(cloudStatus?.capabilities ?? []).map((c) => (
-                    <Badge key={c} variant="info">{c}</Badge>
-                  ))}
-                  {!(cloudStatus?.capabilities ?? []).length && <Badge variant="secondary">local-only</Badge>}
-                </div>
-              </div>
-              <div className="settings-row-actions">
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={async () => {
-                    setCloudError(null);
-                    try { await signOut(); setRegisteredUserId(null); }
-                    catch (e) { setCloudError(e instanceof Error ? e.message : "Sign-out failed."); }
-                  }}
-                >
-                  <LogOut size={12} />
-                  Sign Out
-                </Button>
-              </div>
+            <div className="settings-row-actions">
+              <Badge variant="secondary">future</Badge>
             </div>
-          )}
+          </div>
           {cloudError && <p className="text-sm text-destructive mt-2">{cloudError}</p>}
         </div>
 

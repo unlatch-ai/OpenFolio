@@ -270,6 +270,9 @@ export class OpenFolioCore {
     const personId = this.db.deletePersonAlias(aliasId);
     if (personId) {
       this.db.refreshSearchDocuments({ people: [personId] });
+      void this.queueEmbeddingSync().catch((error) => {
+        console.error("[openfolio-core] Background embedding sync failed:", error);
+      });
     }
     return { ok: Boolean(personId) };
   }

@@ -14,6 +14,11 @@ OpenFolio is local-first by default.
 - local embedding cache
 - local connector credentials and BYOK AI keys
 
+If you add your own OpenAI key and use Ask mode, OpenFolio sends the selected
+retrieved snippets needed to answer that question to OpenAI. If you enable
+OpenAI embeddings, document text needed for embedding is sent to OpenAI. Without
+those BYOK settings, semantic indexing and retrieval stay local.
+
 ## macOS permissions
 
 OpenFolio asks for Full Disk Access so it can read the local iMessage database

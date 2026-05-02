@@ -11,6 +11,8 @@ OpenFolio currently ships the macOS app from `apps/mac` through GitHub Releases.
 - Run `codesign --verify --deep --strict --verbose=1 apps/mac/dist/mac-arm64/OpenFolio.app`.
 - Run `pnpm audit --audit-level moderate`.
 - Run `pnpm bench:search` after `pnpm build` when search or indexing code changes.
+- Confirm the packaged Mac app does not initialize hosted services unless a
+  future hosted feature is explicitly enabled.
 
 ## Version rules
 

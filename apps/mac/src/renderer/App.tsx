@@ -1,6 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { ConvexReactClient } from "convex/react";
-import { ConvexAuthProvider } from "@convex-dev/auth/react";
+import { useEffect, useState } from "react";
 import type { CloudRuntimeConfig } from "@openfolio/shared-types";
 import { TooltipProvider } from "@/renderer/components/ui/tooltip";
 import { SidebarProvider, SidebarInset } from "@/renderer/components/ui/sidebar";
@@ -114,11 +112,6 @@ export function App() {
       });
   }, [setCloudConfig]);
 
-  const convexClient = useMemo(() => {
-    if (!runtimeConfig?.convexUrl) return null;
-    return new ConvexReactClient(runtimeConfig.convexUrl);
-  }, [runtimeConfig?.convexUrl]);
-
   if (configError) {
     return (
       <div className="gate-shell">
@@ -133,7 +126,7 @@ export function App() {
     );
   }
 
-  if (!runtimeConfig || !convexClient) {
+  if (!runtimeConfig) {
     return (
       <div className="gate-shell">
         <div className="gate-card">
@@ -142,7 +135,7 @@ export function App() {
           </p>
           <h1 className="text-xl font-bold tracking-tight">Loading OpenFolio</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Preparing your local graph and hosted connection.
+            Preparing your local relationship graph.
           </p>
         </div>
       </div>
@@ -151,9 +144,7 @@ export function App() {
 
   return (
     <ErrorBoundary>
-      <ConvexAuthProvider client={convexClient}>
-        <Dashboard />
-      </ConvexAuthProvider>
+      <Dashboard />
     </ErrorBoundary>
   );
 }

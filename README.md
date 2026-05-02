@@ -33,9 +33,9 @@ OpenFolio is a native macOS app for searching and understanding your iMessage re
 - **Conversation browser** — Two-panel inbox with real-time thread updates via FSEvents watcher on `chat.db`.
 - **Hybrid semantic search** — Cmd+K searches FTS and local embeddings, with optional BYOK OpenAI answers and embeddings.
 - **Relationship insights** — Response times, message volume by hour/day/month, conversation streaks, and a GitHub-style activity heatmap.
-- **Person research profiles** — Inspect contact details, related threads, recent messages, notes, and reminders in one place.
+- **Person research profiles** — Edit identity fields and aliases, inspect related threads, search person-scoped history, pin notes, and track reminders.
 - **Guided first run** — Walk through Messages permission, import, Contacts sync, and local semantic indexing.
-- **Beautiful design** — Warm color palette, gradient avatars, smooth Framer Motion transitions. Designed to feel like Partiful meets Apple Photos.
+- **Polished macOS design** — Dense local workflows with restrained styling, gradient avatars, and smooth Framer Motion transitions.
 - **MCP setup assistant** — Copy local stdio MCP configuration for AI/coding assistants.
 - **Open source** — AGPL-3.0. Read the code, fork it, contribute back.
 
@@ -43,7 +43,7 @@ OpenFolio is a native macOS app for searching and understanding your iMessage re
 
 OpenFolio reads your local `chat.db` (macOS Messages database) in read-only mode. It indexes conversations, computes relationship stats via SQL analytics, and generates local embeddings for semantic search — all without sending a single byte to the cloud.
 
-Optional hosted account, billing, managed connectors, and hosted AI are future commercial layers. The current open-source milestone is local-first and BYOK.
+Optional hosted account, billing, managed connectors, and hosted AI are future commercial layers. The current open-source milestone is local-first and BYOK; the Mac app does not connect to hosted services by default.
 
 ## Building from Source
 

@@ -23,6 +23,8 @@ iMessage history. The current product surface is focused on a stable local MVP.
   attachment filename/type metadata.
 - Ask citations include source labels, dates when available, navigation targets,
   and optional all/person/thread source filters.
+- Hosted account sign-in is deferred in the Mac app. The renderer does not
+  initialize a hosted Convex client by default.
 - Local stdio MCP server and setup snippets for compatible assistants.
 - GitHub Releases based Mac updater and signed local Mac packaging.
 - Cancellable/retryable Messages import with clearer recovery state.
@@ -32,6 +34,8 @@ iMessage history. The current product surface is focused on a stable local MVP.
 
 - Raw Messages history stays local by default.
 - Hosted account creation is optional and is not required for the local app.
+- The local app should not open hosted connections unless a future hosted
+  feature is explicitly enabled by the user.
 - Hosted AI, billing, managed Google/Gmail connectors, cloud graph sync, and
   hosted/remote MCP are future work.
 - No legacy local schema compatibility is required yet because there are no

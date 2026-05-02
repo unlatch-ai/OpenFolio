@@ -64,6 +64,32 @@ function appendSecondPersonThread(chatDbPath: string) {
   db.close();
 }
 
+function seedLegacyLocalDb(localDbPath: string) {
+  const db = new DatabaseSync(localDbPath);
+  db.exec(`
+    PRAGMA user_version = 2;
+    CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE search_documents (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      embedding TEXT,
+      embedding_provider TEXT,
+      embedding_model TEXT,
+      content_hash TEXT NOT NULL DEFAULT '',
+      embedded_at INTEGER,
+      dirty INTEGER NOT NULL DEFAULT 1,
+      updated_at INTEGER NOT NULL
+    );
+    INSERT INTO settings(key, value) VALUES ('legacy', 'stale');
+    INSERT INTO search_documents(id, kind, entity_id, title, content, updated_at)
+      VALUES ('doc_stale', 'person', 'person_missing', 'Stale', 'Dangling document', 1);
+  `);
+  db.close();
+}
+
 describe("OpenFolioCore", () => {
   let dbPath: string;
   let chatDbPath: string;
@@ -93,6 +119,14 @@ describe("OpenFolioCore", () => {
     const messageHit = results.find((result) => result.kind === "message");
     expect(messageHit?.threadId).toBeTruthy();
     expect(messageHit?.messageId).toBeTruthy();
+  });
+
+  it("fully resets derived local tables during incompatible schema cutover", () => {
+    seedLegacyLocalDb(dbPath);
+    const core = new OpenFolioCore({ dbPath });
+
+    expect(core.db.getSetting("legacy")).toBeNull();
+    expect(core.db.query<{ count: number }>("SELECT COUNT(*) AS count FROM search_documents")[0]?.count).toBe(0);
   });
 
   it("imports only the delta on the next Messages sync", async () => {
