@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { spawn } from "node:child_process";
 import { app, BrowserWindow, ipcMain, nativeImage, safeStorage, shell } from "electron";
 import { createServer, type Server } from "node:http";
 import os from "node:os";
@@ -295,6 +296,26 @@ async function openMessagesFullDiskAccessSettings() {
   }
 }
 
+function getPermissionGuideAppPath() {
+  const basePath = app.isPackaged ? process.resourcesPath : app.getAppPath();
+  return path.join(basePath, "bin", "OpenFolioPermissionGuide.app");
+}
+
+function openMessagesPermissionGuide() {
+  const guideAppPath = getPermissionGuideAppPath();
+  if (!fs.existsSync(guideAppPath)) {
+    return false;
+  }
+
+  const target = getMessagesAccessTarget();
+  const child = spawn("open", ["-na", guideAppPath, "--args", "--app-path", target.revealPath], {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+  return true;
+}
+
 function getGuidedMessagesAccessStatus(
   status: MessagesAccessStatus,
   options?: {
@@ -526,8 +547,9 @@ const api: OpenFolioBridge = {
         return status;
       }
 
-      const openedSettings = await openMessagesFullDiskAccessSettings();
-      const revealedInFinder = revealMessagesAccessTargetInFinder();
+      const openedGuide = openMessagesPermissionGuide();
+      const openedSettings = openedGuide || await openMessagesFullDiskAccessSettings();
+      const revealedInFinder = openedGuide ? false : revealMessagesAccessTargetInFinder();
       const status = getGuidedMessagesAccessStatus(access, { openedSettings, revealedInFinder });
       logAppDebug("messages", "requestAccessResult", status);
       return status;

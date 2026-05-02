@@ -21,6 +21,7 @@ out/
 build
 !apps/mac/build/
 dist
+apps/mac/bin/OpenFolioPermissionGuide.app/
 
 # misc
 .DS_Store
