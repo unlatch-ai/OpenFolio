@@ -49,9 +49,9 @@ final class DraggableAppIconView: NSView, NSDraggingSource {
     private func setupSubviews() {
         background.wantsLayer = true
         background.layer?.cornerRadius = 7
-        background.layer?.backgroundColor = NSColor(calibratedWhite: 0.8902, alpha: 1).cgColor
+        background.layer?.backgroundColor = NSColor(calibratedWhite: 0.94, alpha: 1).cgColor
         background.layer?.borderWidth = 1
-        background.layer?.borderColor = NSColor.black.withAlphaComponent(0.08).cgColor
+        background.layer?.borderColor = NSColor.black.withAlphaComponent(0.18).cgColor
         background.translatesAutoresizingMaskIntoConstraints = false
         addSubview(background)
 
@@ -60,7 +60,7 @@ final class DraggableAppIconView: NSView, NSDraggingSource {
         background.addSubview(iconView)
 
         nameLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        nameLabel.textColor = .labelColor
+        nameLabel.textColor = NSColor(calibratedWhite: 0.12, alpha: 1)
         nameLabel.lineBreakMode = .byTruncatingTail
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
         // Allow the label to compress if the hosting view shrinks below the

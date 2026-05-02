@@ -298,7 +298,7 @@ async function openMessagesFullDiskAccessSettings() {
 
 function getPermissionGuideAppPath() {
   const basePath = app.isPackaged ? process.resourcesPath : app.getAppPath();
-  return path.join(basePath, "bin", "OpenFolioPermissionGuide.app");
+  return path.join(basePath, "bin", "OpenFolio Setup.app");
 }
 
 function openMessagesPermissionGuide() {

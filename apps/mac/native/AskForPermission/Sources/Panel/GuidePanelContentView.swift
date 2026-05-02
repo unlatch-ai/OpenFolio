@@ -75,7 +75,7 @@ struct GuidePanelContentView: View {
 
     @ObservedObject var arrowRecoil: ArrowRecoilModel
 
-    static let contentSize = CGSize(width: 540, height: 130)
+    static let contentSize = CGSize(width: 540, height: 164)
     static let cardCornerRadius: CGFloat = 22
 
     // Initial state depends on render mode: static snapshot starts at the
@@ -125,6 +125,7 @@ struct GuidePanelContentView: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 8) {
             instructionRow
+            privacyRow
             draggableRow
                 .frame(height: 44)
         }
@@ -167,11 +168,11 @@ struct GuidePanelContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(Color(white: 0.8902))
+                    .fill(Color(white: 0.94))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(Color.black.opacity(0.18), lineWidth: 1)
             )
         } else {
             DraggableAppIconRepresentable(
@@ -206,11 +207,35 @@ struct GuidePanelContentView: View {
         }
     }
 
-    private var captionText: Text {
-        Text("Drag ")
-            + Text(appName).fontWeight(.semibold)
-            + Text(" to the list above to allow ")
-            + Text(kind.displayName).fontWeight(.semibold)
+    private var captionText: some View {
+        HStack(spacing: 0) {
+            Text("Drag ")
+            Text(appName).fontWeight(.semibold)
+            Text(" to the list above to allow ")
+            Text(kind.displayName).fontWeight(.semibold)
+        }
+    }
+
+    private var privacyRow: some View {
+        HStack(alignment: .center, spacing: 6) {
+            Text("Needed to read your local iMessage database. Messages stay on this Mac.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Button {
+                NSWorkspace.shared.open(URL(string: "https://openfolio.ai/docs/privacy")!)
+            } label: {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityLabel("Open OpenFolio privacy documentation")
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+        }
+        .opacity(arrowOpacity)
     }
 
     private func playEntranceAnimations() {

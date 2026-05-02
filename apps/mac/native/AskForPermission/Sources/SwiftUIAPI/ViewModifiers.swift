@@ -61,7 +61,7 @@ private struct AskForPermissionItemModifier: ViewModifier {
         content
             .background(ScreenRectReader(rect: $rect))
             .background(HostWindowConfigurator())
-            .onChange(of: item) { newValue in
+            .onChange(of: item) { _, newValue in
                 guard let kind = newValue else { return }
                 Task { @MainActor in
                     let result = await AskForPermission.request(

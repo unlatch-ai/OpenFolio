@@ -73,8 +73,8 @@
         "to": "bin/openfolio-contacts-bridge"
       },
       {
-        "from": "bin/OpenFolioPermissionGuide.app",
-        "to": "bin/OpenFolioPermissionGuide.app"
+        "from": "bin/OpenFolio Setup.app",
+        "to": "bin/OpenFolio Setup.app"
       }
     ],
     "artifactName": "${productName}-${version}-${arch}.${ext}",

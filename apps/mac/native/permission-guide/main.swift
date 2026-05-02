@@ -1,6 +1,8 @@
 import AppKit
 import Foundation
 
+private let privacyURL = URL(string: "https://openfolio.ai/docs/privacy")!
+
 @MainActor
 private final class PermissionGuideApp: NSObject, NSApplicationDelegate {
     private let targetAppPath: String
@@ -15,7 +17,7 @@ private final class PermissionGuideApp: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(.accessory)
         NSApp.activate(ignoringOtherApps: true)
         showWindow()
     }
@@ -43,10 +45,16 @@ private final class PermissionGuideApp: NSObject, NSApplicationDelegate {
         title.font = .systemFont(ofSize: 20, weight: .semibold)
         title.alignment = .center
 
-        let detail = NSTextField(wrappingLabelWithString: "OpenFolio needs Full Disk Access to read your local iMessage database. Drag OpenFolio from the guide card into System Settings, then relaunch OpenFolio.")
+        let detail = NSTextField(wrappingLabelWithString: "OpenFolio needs Full Disk Access to read your local iMessage database. Messages stay on this Mac.")
         detail.font = .systemFont(ofSize: 13)
         detail.textColor = .secondaryLabelColor
         detail.alignment = .center
+
+        let privacyButton = NSButton(title: "Privacy details", target: self, action: #selector(openPrivacy))
+        privacyButton.bezelStyle = .inline
+        privacyButton.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: "Privacy details")
+        privacyButton.imagePosition = .imageLeading
+        privacyButton.font = .systemFont(ofSize: 12, weight: .medium)
 
         let button = NSButton(title: "Open Guided Setup", target: self, action: #selector(startRequest))
         button.bezelStyle = .rounded
@@ -60,7 +68,7 @@ private final class PermissionGuideApp: NSObject, NSApplicationDelegate {
         status.alignment = .center
         self.statusLabel = status
 
-        let stack = NSStackView(views: [title, detail, button, status])
+        let stack = NSStackView(views: [title, detail, privacyButton, button, status])
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 14
@@ -72,6 +80,7 @@ private final class PermissionGuideApp: NSObject, NSApplicationDelegate {
             stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -28),
             stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
             detail.widthAnchor.constraint(lessThanOrEqualToConstant: 340),
+            privacyButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 120),
             button.widthAnchor.constraint(greaterThanOrEqualToConstant: 170),
         ])
 
@@ -101,6 +110,10 @@ private final class PermissionGuideApp: NSObject, NSApplicationDelegate {
             }
             requestButton?.isEnabled = true
         }
+    }
+
+    @objc private func openPrivacy() {
+        NSWorkspace.shared.open(privacyURL)
     }
 
     private static func value(after flag: String, in arguments: [String]) -> String? {

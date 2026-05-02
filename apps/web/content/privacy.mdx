@@ -14,6 +14,16 @@ OpenFolio is local-first by default.
 - local embedding cache
 - local connector credentials and BYOK AI keys
 
+## macOS permissions
+
+OpenFolio asks for Full Disk Access so it can read the local iMessage database
+that macOS stores on your Mac. The app imports that data into a local SQLite
+database and does not upload raw Messages history by default.
+
+OpenFolio asks for Contacts access so it can resolve phone numbers and email
+handles to names from Apple Contacts. Contact metadata is stored locally with
+the same local-first boundary.
+
 ## What hosted services are for
 
 - account identity
