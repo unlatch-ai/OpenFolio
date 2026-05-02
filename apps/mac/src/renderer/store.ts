@@ -4,6 +4,8 @@ import type {
   ContactsSyncSummary,
   CloudAccountStatus,
   CloudRuntimeConfig,
+  EmbeddingSyncStatus,
+  McpRuntimeStatus,
   MessagesAccessStatus,
   MessagesImportJob,
   MessagesThreadSummary,
@@ -13,6 +15,16 @@ import type {
   ThreadListItem,
   UpdateState,
 } from "@openfolio/shared-types";
+
+function readSetupDismissed() {
+  if (typeof localStorage === "undefined") return false;
+  return localStorage.getItem("openfolio.setupDismissed") === "1";
+}
+
+function writeSetupDismissed(value: boolean) {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem("openfolio.setupDismissed", value ? "1" : "0");
+}
 
 /* ─── Navigation ─── */
 
@@ -82,8 +94,12 @@ export interface AppState {
   setImportJob: (job: MessagesImportJob | null) => void;
 
   // MCP
-  mcpRunning: boolean;
-  setMcpRunning: (running: boolean) => void;
+  mcpStatus: McpRuntimeStatus | null;
+  setMcpStatus: (status: McpRuntimeStatus | null) => void;
+
+  // Embeddings
+  embeddingSync: EmbeddingSyncStatus | null;
+  setEmbeddingSync: (status: EmbeddingSyncStatus | null) => void;
 
   // Updates
   updateState: UpdateState | null;
@@ -94,6 +110,8 @@ export interface AppState {
   setBusy: (busy: boolean) => void;
   initialized: boolean;
   setInitialized: (initialized: boolean) => void;
+  setupDismissed: boolean;
+  setSetupDismissed: (dismissed: boolean) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -161,8 +179,12 @@ export const useAppStore = create<AppState>((set) => ({
   setImportJob: (importJob) => set({ importJob }),
 
   // MCP
-  mcpRunning: false,
-  setMcpRunning: (mcpRunning) => set({ mcpRunning }),
+  mcpStatus: null,
+  setMcpStatus: (mcpStatus) => set({ mcpStatus }),
+
+  // Embeddings
+  embeddingSync: null,
+  setEmbeddingSync: (embeddingSync) => set({ embeddingSync }),
 
   // Updates
   updateState: null,
@@ -173,4 +195,9 @@ export const useAppStore = create<AppState>((set) => ({
   setBusy: (busy) => set({ busy }),
   initialized: false,
   setInitialized: (initialized) => set({ initialized }),
+  setupDismissed: readSetupDismissed(),
+  setSetupDismissed: (setupDismissed) => {
+    writeSetupDismissed(setupDismissed);
+    set({ setupDismissed });
+  },
 }));

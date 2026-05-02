@@ -65,6 +65,161 @@ textarea {
   pointer-events: none;
 }
 
+/* ─── First-run setup ─── */
+
+.setup-shell {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 54px 48px 40px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--muted) 36%, transparent), var(--background) 260px);
+}
+
+.setup-main {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.setup-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 26px;
+}
+
+.setup-hero h1 {
+  margin: 0;
+  max-width: 520px;
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.setup-hero p {
+  margin: 0;
+  max-width: 480px;
+  color: var(--muted-foreground);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.setup-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.setup-progress {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 18px 70px color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.setup-progress-header {
+  min-height: 52px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.setup-steps {
+  display: flex;
+  flex-direction: column;
+}
+
+.setup-step {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.setup-step:last-child {
+  border-bottom: 0;
+}
+
+.setup-step.active {
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+}
+
+.setup-step.complete .setup-step-icon {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 13%, transparent);
+}
+
+.setup-step.blocked,
+.setup-step.waiting {
+  opacity: 0.64;
+}
+
+.setup-step-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+  background: var(--muted);
+}
+
+.setup-step-copy {
+  min-width: 0;
+}
+
+.setup-step-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setup-step h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.setup-step p {
+  margin: 4px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 920px) {
+  .setup-shell {
+    padding: 42px 24px 28px;
+  }
+
+  .setup-main {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-hero {
+    padding-top: 0;
+  }
+
+  .setup-hero h1 {
+    font-size: 34px;
+  }
+}
+
 /* ─── Inbox layout (two-panel) ─── */
 
 .inbox-layout {
@@ -416,6 +571,69 @@ textarea {
   padding-left: 10px;
 }
 
+.person-section-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.person-inline-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 180px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 8px;
+  color: var(--muted-foreground);
+}
+
+.person-inline-search input,
+.person-action-input input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.person-message-button {
+  display: block;
+  width: 100%;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.person-message-button:hover {
+  color: var(--primary);
+}
+
+.person-action-grid {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.person-action-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--muted) 30%, transparent);
+}
+
 .thread-msg.highlight .thread-msg-bubble {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
@@ -448,6 +666,15 @@ textarea {
 
 .cmd-mode-row .cmd-ask-button {
   margin-left: auto;
+}
+
+.cmd-mode-hint {
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cmd-answer {
@@ -1020,6 +1247,15 @@ textarea {
   max-height: 320px;
   overflow-y: auto;
   padding: 6px;
+}
+
+.cmd-list [cmdk-group-heading] {
+  padding: 8px 10px 4px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .cmd-empty,

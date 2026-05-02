@@ -24,7 +24,7 @@ import {
   withMessagesAccessGuidance,
 } from "./messages-access";
 import { OpenFolioUpdater } from "./updater";
-import { shouldOpenExternalUrl } from "./navigation";
+import { isAllowedExternalUrl, shouldOpenExternalUrl } from "./navigation";
 
 const core = new OpenFolioCore({ enableLocalEmbeddings: true });
 const mcpController = new LocalMcpController();
@@ -461,7 +461,9 @@ function createWindow() {
   }
 
   browserWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    if (isAllowedExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
     return { action: "deny" };
   });
 
@@ -469,7 +471,9 @@ function createWindow() {
     const currentUrl = browserWindow.webContents.getURL();
     if (shouldOpenExternalUrl(url, currentUrl)) {
       event.preventDefault();
-      void shell.openExternal(url);
+      if (isAllowedExternalUrl(url)) {
+        void shell.openExternal(url);
+      }
     }
   });
 
@@ -675,9 +679,8 @@ const api: OpenFolioBridge = {
     beginAuthSession: async () => beginAuthSession(),
     openExternal: async (url: string) => {
       logAppDebug("cloud", "openExternal", url);
-      const parsed = new URL(url);
-      if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && parsed.hostname === "127.0.0.1")) {
-        throw new Error(`Refusing to open URL with disallowed scheme: ${parsed.protocol}`);
+      if (!isAllowedExternalUrl(url)) {
+        throw new Error("Refusing to open an unsupported external URL.");
       }
       await shell.openExternal(url);
     },
@@ -766,6 +769,8 @@ const api: OpenFolioBridge = {
   people: {
     list: async (input?: { limit?: number; query?: string }) => core.listPeople(input?.limit, input?.query),
     getProfile: async (personId: string) => core.getPersonProfile(personId),
+    addNote: async (input: { personId: string; content: string }) => core.addNote("person", input.personId, input.content),
+    addReminder: async (input: { personId: string; title: string; dueAt?: number | null }) => core.addReminder(input.title, input.personId, input.dueAt ?? null),
   },
   threads: {
     list: async (input: { limit?: number; offset?: number }) => {
@@ -818,6 +823,12 @@ const api: OpenFolioBridge = {
       return core.getLocalEmbeddingStatus();
     },
     getSyncStatus: async () => core.getEmbeddingSyncStatus(),
+    syncNow: async () => {
+      void core.queueEmbeddingSync().catch((error) => {
+        console.error("[openfolio-core] Background embedding sync failed:", error);
+      });
+      return core.getEmbeddingSyncStatus();
+    },
   },
   insights: {
     getWrappedSummary: async (year?: number) => {
@@ -878,6 +889,8 @@ safeHandle("openfolio:mcp:stop", () => api.mcp.stop());
 safeHandle("openfolio:mcp:getSetup", () => api.mcp.getSetup());
 safeHandle("openfolio:people:list", (_, input?: { limit?: number; query?: string }) => api.people.list(input));
 safeHandle("openfolio:people:getProfile", (_, personId: string) => api.people.getProfile(personId));
+safeHandle("openfolio:people:addNote", (_, input: { personId: string; content: string }) => api.people.addNote(input));
+safeHandle("openfolio:people:addReminder", (_, input: { personId: string; title: string; dueAt?: number | null }) => api.people.addReminder(input));
 safeHandle("openfolio:threads:list", (_, input: { limit?: number; offset?: number }) => api.threads.list(input));
 safeHandle("openfolio:threads:getDetail", (_, threadId: string) => api.threads.getDetail(threadId));
 safeHandle("openfolio:threads:getMessages", (_, input: { threadId: string; limit?: number; offset?: number }) => api.threads.getMessages(input));
@@ -887,6 +900,7 @@ safeHandle("openfolio:sync:stopWatcher", () => api.sync.stopWatcher());
 safeHandle("openfolio:sync:triggerSync", () => api.sync.triggerSync());
 safeHandle("openfolio:embeddings:getStatus", () => api.embeddings.getStatus());
 safeHandle("openfolio:embeddings:getSyncStatus", () => api.embeddings.getSyncStatus());
+safeHandle("openfolio:embeddings:syncNow", () => api.embeddings.syncNow());
 safeHandle("openfolio:insights:getWrappedSummary", (_, year?: number) => api.insights.getWrappedSummary(year));
 safeHandle("openfolio:insights:getTopContacts", (_, limit?: number) => api.insights.getTopContacts(limit));
 safeHandle("openfolio:insights:getRelationshipStats", (_, personId: string) => api.insights.getRelationshipStats(personId));

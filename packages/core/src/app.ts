@@ -28,6 +28,10 @@ export class OpenFolioCore {
 
   private watcher: ChatDbWatcher | null = null;
 
+  private embeddingSyncInFlight: Promise<{ embedded: number; skipped: number }> | null = null;
+
+  private embeddingSyncLastError: string | null = null;
+
   constructor(options?: { dbPath?: string; aiConfig?: StoredProviderConfig | null; enableLocalEmbeddings?: boolean }) {
     this.db = new OpenFolioDatabase(options?.dbPath);
 
@@ -61,7 +65,9 @@ export class OpenFolioCore {
   async startMessagesImport(): Promise<MessagesImportJob> {
     const job = await this.messages.importFromChatDb();
     if (job.status === "completed") {
-      await this.syncAllDirtySearchDocuments();
+      void this.queueEmbeddingSync().catch((error) => {
+        console.error("[openfolio-core] Background embedding sync failed:", error);
+      });
     }
     return job;
   }
@@ -87,7 +93,7 @@ export class OpenFolioCore {
   addNote(entityType: "person" | "thread" | "group", entityId: string, content: string) {
     const note = this.db.createNote(entityType, entityId, content);
     this.db.refreshSearchDocuments({ notes: [note.id] });
-    void this.syncDirtySearchDocuments().catch((error) => {
+    void this.queueEmbeddingSync().catch((error) => {
       console.error("[openfolio-core] Background embedding sync failed:", error);
     });
     return note;
@@ -99,7 +105,7 @@ export class OpenFolioCore {
       reminders: [reminder.id],
       people: personId ? [personId] : [],
     });
-    void this.syncDirtySearchDocuments().catch((error) => {
+    void this.queueEmbeddingSync().catch((error) => {
       console.error("[openfolio-core] Background embedding sync failed:", error);
     });
     return reminder;
@@ -107,7 +113,7 @@ export class OpenFolioCore {
 
   applyConnectorSync(result: ConnectorSyncResult) {
     const summary = this.db.applyConnectorSync(result);
-    void this.syncDirtySearchDocuments().catch((error) => {
+    void this.queueEmbeddingSync().catch((error) => {
       console.error("[openfolio-core] Background embedding sync failed:", error);
     });
     return summary;
@@ -127,15 +133,17 @@ export class OpenFolioCore {
     }
     const provider = metadata.provider;
 
+    let embedded = 0;
     embeddings.forEach((embedding, index) => {
       const document = dirtyDocuments[index];
       if (!document || !embedding) {
         return;
       }
       this.db.markSearchDocumentEmbedded(document.id, embedding, provider, metadata.model);
+      embedded += 1;
     });
 
-    return { embedded: embeddings.length, skipped: dirtyDocuments.length - embeddings.length };
+    return { embedded, skipped: dirtyDocuments.length - embedded };
   }
 
   async syncAllDirtySearchDocuments(batchSize = 50, maxBatches = 200) {
@@ -154,8 +162,30 @@ export class OpenFolioCore {
     return { embedded, skipped };
   }
 
+  queueEmbeddingSync(options?: { batchSize?: number; maxBatches?: number }) {
+    if (this.embeddingSyncInFlight) {
+      return this.embeddingSyncInFlight;
+    }
+
+    this.embeddingSyncLastError = null;
+    this.embeddingSyncInFlight = this.syncAllDirtySearchDocuments(options?.batchSize, options?.maxBatches)
+      .catch((error) => {
+        this.embeddingSyncLastError = error instanceof Error ? error.message : "Embedding sync failed.";
+        throw error;
+      })
+      .finally(() => {
+        this.embeddingSyncInFlight = null;
+      });
+
+    return this.embeddingSyncInFlight;
+  }
+
   getEmbeddingSyncStatus() {
-    return this.db.getEmbeddingSyncStatus();
+    return {
+      ...this.db.getEmbeddingSyncStatus(),
+      syncing: this.embeddingSyncInFlight !== null,
+      lastError: this.embeddingSyncLastError,
+    };
   }
 
   getRelationshipDigest(personId: string): RelationshipDigest | null {

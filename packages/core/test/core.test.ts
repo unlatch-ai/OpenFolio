@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { SearchDocumentRecord } from "@openfolio/shared-types";
 import { findDuplicatePeople, OpenFolioCore } from "../src/index.js";
 
 function tempPath(name: string) {
@@ -111,6 +112,55 @@ describe("OpenFolioCore", () => {
 
     expect(results[0]?.kind).toBe("message");
     expect(results[0]?.snippet).toContain("hello ada");
+  });
+
+  it("only marks successfully embedded documents and reports skipped documents", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const dirtyDocs = core.db.getDirtySearchDocuments(2);
+    expect(dirtyDocs.length).toBeGreaterThan(1);
+
+    core.ai = {
+      embedDocuments: async () => [[1, 0, 0], null],
+      getEmbeddingMetadata: () => ({ provider: "local", model: "test" }),
+    } as unknown as OpenFolioCore["ai"];
+
+    const result = await core.syncDirtySearchDocuments(2);
+    const status = core.getEmbeddingSyncStatus();
+
+    expect(result).toEqual({ embedded: 1, skipped: 1 });
+    expect(status.embeddedDocuments).toBe(1);
+    expect(status.dirtyDocuments).toBeGreaterThanOrEqual(1);
+  });
+
+  it("tracks background embedding queue state while dirty documents drain", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    await core.queueEmbeddingSync();
+
+    let releaseEmbedding!: () => void;
+    const embeddingStarted = new Promise<void>((resolve) => {
+      core.ai = {
+        embedDocuments: async (documents: SearchDocumentRecord[]) => {
+          resolve();
+          await new Promise<void>((release) => {
+            releaseEmbedding = release;
+          });
+          return documents.map(() => [1, 0, 0]);
+        },
+        getEmbeddingMetadata: () => ({ provider: "local", model: "test" }),
+      } as unknown as OpenFolioCore["ai"];
+    });
+
+    const queued = core.queueEmbeddingSync({ batchSize: 10, maxBatches: 10 });
+    await embeddingStarted;
+    expect(core.getEmbeddingSyncStatus().syncing).toBe(true);
+    releaseEmbedding();
+    await queued;
+
+    const status = core.getEmbeddingSyncStatus();
+    expect(status.syncing).toBe(false);
+    expect(status.dirtyDocuments).toBe(0);
   });
 
   it("can fetch a thread message page around a selected search hit", async () => {

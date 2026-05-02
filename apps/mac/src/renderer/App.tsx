@@ -13,8 +13,10 @@ import { CommandPalette } from "./components/CommandPalette";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { InboxView } from "./components/InboxView";
 import { InsightsView } from "./components/InsightsView";
+import { OnboardingView } from "./components/OnboardingView";
 import { PeopleView } from "./components/PeopleView";
 import { SettingsView } from "./components/SettingsView";
+import { getOnboardingState } from "./onboarding";
 
 declare global {
   interface Window {
@@ -26,6 +28,13 @@ declare global {
 function Dashboard() {
   const view = useAppStore((s) => s.view);
   const initialized = useAppStore((s) => s.initialized);
+  const messagesStatus = useAppStore((s) => s.messagesStatus);
+  const contactsStatus = useAppStore((s) => s.contactsStatus);
+  const contactsSync = useAppStore((s) => s.contactsSync);
+  const importJob = useAppStore((s) => s.importJob);
+  const threads = useAppStore((s) => s.threads);
+  const embeddingSync = useAppStore((s) => s.embeddingSync);
+  const setupDismissed = useAppStore((s) => s.setupDismissed);
 
   // Bootstrap data
   useAppData();
@@ -46,6 +55,16 @@ function Dashboard() {
     );
   }
 
+  const onboarding = getOnboardingState({
+    messagesStatus,
+    contactsStatus,
+    contactsSync,
+    importJob,
+    threadCount: threads.length,
+    embeddingSync,
+    setupDismissed,
+  });
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className="app-shell">
@@ -55,10 +74,16 @@ function Dashboard() {
           <AppSidebar />
 
           <SidebarInset className="overflow-hidden flex flex-col">
-            {view === "inbox" && <InboxView />}
-            {view === "people" && <PeopleView />}
-            {view === "insights" && <InsightsView />}
-            {view === "settings" && <SettingsView />}
+            {onboarding.shouldShow ? (
+              <OnboardingView />
+            ) : (
+              <>
+                {view === "inbox" && <InboxView />}
+                {view === "people" && <PeopleView />}
+                {view === "insights" && <InsightsView />}
+                {view === "settings" && <SettingsView />}
+              </>
+            )}
           </SidebarInset>
         </SidebarProvider>
 

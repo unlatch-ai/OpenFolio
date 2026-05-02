@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import { LocalMcpController } from "../src/service.js";
 
 describe("LocalMcpController", () => {
-  it("tracks start and stop state", async () => {
+  it("describes stdio setup without pretending a background server is running", async () => {
     const controller = new LocalMcpController();
-    expect(controller.getStatus()).toEqual({ running: false });
-    await controller.start();
-    expect(controller.getStatus()).toEqual({ running: true });
-    await controller.stop();
-    expect(controller.getStatus()).toEqual({ running: false });
+    const status = await controller.getStatus();
+
+    expect(status.running).toBe(false);
+    expect(status.mode).toBe("stdio");
+    expect(status.details).toContain("client starts");
+
+    await expect(controller.start()).resolves.toMatchObject({ running: false, mode: "stdio" });
+    await expect(controller.stop()).resolves.toMatchObject({ running: false, mode: "stdio" });
   });
 });

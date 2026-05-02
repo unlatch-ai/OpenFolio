@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
 import { Search, MessageSquare, User, FileText, Bell, Sparkles } from "lucide-react";
 import { useAppStore } from "../store";
-import type { AskResponse, SearchResult } from "@openfolio/shared-types";
+import type { AiSettingsStatus, AskResponse, SearchResult } from "@openfolio/shared-types";
 
 const ICON_MAP: Record<string, typeof MessageSquare> = {
   thread: MessageSquare,
@@ -25,6 +25,7 @@ export function CommandPalette() {
   const [mode, setMode] = useState<"search" | "ask">("search");
   const [asking, setAsking] = useState(false);
   const [answer, setAnswer] = useState<AskResponse | null>(null);
+  const [aiSettings, setAiSettings] = useState<AiSettingsStatus | null>(null);
 
   // Cmd+K global shortcut
   useEffect(() => {
@@ -37,6 +38,11 @@ export function CommandPalette() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    void window.openfolio.ai.getSettings().then(setAiSettings).catch(() => setAiSettings(null));
+  }, [open]);
 
   const runSearch = useCallback(
     (text: string) => {
@@ -90,6 +96,12 @@ export function CommandPalette() {
     }
   }, [query, setCommandResults]);
 
+  const groupedResults = results.reduce<Record<string, SearchResult[]>>((groups, result) => {
+    const key = result.kind;
+    groups[key] = [...(groups[key] ?? []), result];
+    return groups;
+  }, {});
+
   if (!open) return null;
 
   return (
@@ -121,13 +133,18 @@ export function CommandPalette() {
           <div className="cmd-mode-row">
             <button className={mode === "search" ? "active" : ""} onClick={() => { setMode("search"); setAnswer(null); runSearch(query); }}>Search</button>
             <button className={mode === "ask" ? "active" : ""} onClick={() => { setMode("ask"); setAnswer(null); setCommandResults([], false); }}>Ask</button>
+            {mode === "ask" && (
+              <span className="cmd-mode-hint">
+                {aiSettings?.hasOpenAIKey ? "BYOK OpenAI enabled" : "Local citations only until you add an OpenAI key"}
+              </span>
+            )}
             {mode === "ask" && <button className="cmd-ask-button" onClick={() => void runAsk()} disabled={asking || !query.trim()}>{asking ? "Asking..." : "Ask"}</button>}
           </div>
 
           <Command.List className="cmd-list">
             {answer && (
               <div className="cmd-answer">
-                <strong>{answer.provider === "openai" ? "OpenAI answer" : "Local answer"}</strong>
+                <strong>{answer.provider === "openai" ? "OpenAI answer with local citations" : "Local retrieval summary"}</strong>
                 <p>{answer.answer}</p>
               </div>
             )}
@@ -144,27 +161,27 @@ export function CommandPalette() {
               </Command.Loading>
             )}
 
-            {results.length > 0 && (
-              <Command.Group heading="Results">
-                {results.map((result) => (
-                  <Command.Item
-                    key={result.id}
-                    value={result.id}
-                    onSelect={() => handleSelect(result)}
-                    className="cmd-item"
-                  >
-                    <ResultIcon kind={result.kind} />
-                    <div className="cmd-item-content">
-                      <span className="cmd-item-title">{result.title}</span>
-                      <span className="cmd-item-snippet">{result.snippet}</span>
-                    </div>
-                    <span className="cmd-item-kind">{result.kind}</span>
-                  </Command.Item>
+            {results.length > 0 && Object.entries(groupedResults).map(([kind, kindResults]) => (
+              <Command.Group key={kind} heading={mode === "ask" ? `${kind} citations` : kind}>
+                {kindResults.map((result) => (
+                <Command.Item
+                  key={result.id}
+                  value={result.id}
+                  onSelect={() => handleSelect(result)}
+                  className="cmd-item"
+                >
+                  <ResultIcon kind={result.kind} />
+                  <div className="cmd-item-content">
+                    <span className="cmd-item-title">{result.title}</span>
+                    <span className="cmd-item-snippet">{result.snippet}</span>
+                  </div>
+                  <span className="cmd-item-kind">{result.messageId ? "message" : result.kind}</span>
+                </Command.Item>
                 ))}
               </Command.Group>
-            )}
+            ))}
 
-            {!searching && query.length > 0 && results.length === 0 && (
+            {!searching && query.length > 0 && results.length === 0 && !asking && !answer && (
               <Command.Empty className="cmd-empty">
                 No results found.
               </Command.Empty>

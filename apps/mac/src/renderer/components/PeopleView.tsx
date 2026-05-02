@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Bell, Briefcase, FileText, MessageSquare, Search } from "lucide-react";
+import { Bell, Briefcase, FileText, MessageSquare, Plus, Search } from "lucide-react";
+import { toast } from "sonner";
 import type { Person, PersonProfile } from "@openfolio/shared-types";
 import { useAppStore } from "../store";
 import { ContactAvatar } from "./ContactAvatar";
+import { Button } from "./ui/button";
 
 function formatDate(value: number | null) {
   return value ? new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "No messages";
@@ -13,6 +15,9 @@ export function PeopleView() {
   const [people, setPeople] = useState<Person[]>([]);
   const [profile, setProfile] = useState<PersonProfile | null>(null);
   const [query, setQuery] = useState("");
+  const [profileQuery, setProfileQuery] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [reminderDraft, setReminderDraft] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -36,6 +41,40 @@ export function PeopleView() {
     }
     window.openfolio.people.getProfile(selectedPersonId).then(setProfile).catch(console.error);
   }, [selectedPersonId]);
+
+  const recentMessages = profile?.recentMessages.filter((message) => {
+    if (!profileQuery.trim()) return true;
+    return (message.body || "").toLowerCase().includes(profileQuery.trim().toLowerCase());
+  }) ?? [];
+
+  async function refreshProfile(personId: string) {
+    const nextProfile = await window.openfolio.people.getProfile(personId);
+    setProfile(nextProfile);
+  }
+
+  async function addNote() {
+    if (!profile || !noteDraft.trim()) return;
+    try {
+      await window.openfolio.people.addNote({ personId: profile.person.id, content: noteDraft.trim() });
+      setNoteDraft("");
+      await refreshProfile(profile.person.id);
+      toast.success("Note added");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not add note.");
+    }
+  }
+
+  async function addReminder() {
+    if (!profile || !reminderDraft.trim()) return;
+    try {
+      await window.openfolio.people.addReminder({ personId: profile.person.id, title: reminderDraft.trim(), dueAt: null });
+      setReminderDraft("");
+      await refreshProfile(profile.person.id);
+      toast.success("Reminder added");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not add reminder.");
+    }
+  }
 
   return (
     <div className="people-layout">
@@ -114,14 +153,47 @@ export function PeopleView() {
             </section>
 
             <section className="person-section">
-              <h3><FileText size={14} /> Recent messages</h3>
-              {profile.recentMessages.slice(0, 8).map((message) => (
-                <p key={message.id} className="person-message-line">{message.body || "Attachment"}</p>
+              <div className="person-section-heading-row">
+                <h3><FileText size={14} /> Recent messages</h3>
+                <div className="person-inline-search">
+                  <Search size={12} />
+                  <input value={profileQuery} onChange={(event) => setProfileQuery(event.target.value)} placeholder="Search this person" />
+                </div>
+              </div>
+              {recentMessages.slice(0, 10).map((message) => (
+                <button
+                  key={message.id}
+                  className="person-message-line person-message-button"
+                  onClick={() => {
+                    setView("inbox");
+                    selectThread(message.threadId);
+                    useAppStore.getState().selectMessage(message.id);
+                  }}
+                >
+                  {message.body || "Attachment"}
+                </button>
               ))}
+              {recentMessages.length === 0 && <p>No matching messages.</p>}
             </section>
 
             <section className="person-section">
               <h3><Bell size={14} /> Notes and reminders</h3>
+              <div className="person-action-grid">
+                <div className="person-action-input">
+                  <input value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="Add a private note" />
+                  <Button size="xs" onClick={addNote} disabled={!noteDraft.trim()}>
+                    <Plus size={12} />
+                    Note
+                  </Button>
+                </div>
+                <div className="person-action-input">
+                  <input value={reminderDraft} onChange={(event) => setReminderDraft(event.target.value)} placeholder="Add a follow-up reminder" />
+                  <Button size="xs" variant="secondary" onClick={addReminder} disabled={!reminderDraft.trim()}>
+                    <Plus size={12} />
+                    Reminder
+                  </Button>
+                </div>
+              </div>
               {[...profile.notes.map((note) => note.content), ...profile.reminders.map((reminder) => reminder.title)].length === 0 ? (
                 <p>No notes or reminders yet.</p>
               ) : (

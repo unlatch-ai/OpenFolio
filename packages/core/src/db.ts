@@ -1241,6 +1241,8 @@ export class OpenFolioDatabase {
       dirtyDocuments: Number(row.dirtyDocuments ?? 0),
       provider: (row.provider as SearchDocumentRecord["embeddingProvider"]) ?? null,
       model: (row.model as string | null) ?? null,
+      syncing: false,
+      lastError: null,
     };
   }
 

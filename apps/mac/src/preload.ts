@@ -61,6 +61,8 @@ const bridge: OpenFolioBridge = {
   people: {
     list: (input?: { limit?: number; query?: string }) => ipcRenderer.invoke("openfolio:people:list", input),
     getProfile: (personId: string) => ipcRenderer.invoke("openfolio:people:getProfile", personId),
+    addNote: (input: { personId: string; content: string }) => ipcRenderer.invoke("openfolio:people:addNote", input),
+    addReminder: (input: { personId: string; title: string; dueAt?: number | null }) => ipcRenderer.invoke("openfolio:people:addReminder", input),
   },
   threads: {
     list: (input: { limit?: number; offset?: number }) => ipcRenderer.invoke("openfolio:threads:list", input),
@@ -81,6 +83,7 @@ const bridge: OpenFolioBridge = {
   embeddings: {
     getStatus: () => ipcRenderer.invoke("openfolio:embeddings:getStatus"),
     getSyncStatus: () => ipcRenderer.invoke("openfolio:embeddings:getSyncStatus"),
+    syncNow: () => ipcRenderer.invoke("openfolio:embeddings:syncNow"),
   },
   insights: {
     getWrappedSummary: (year?: number) => ipcRenderer.invoke("openfolio:insights:getWrappedSummary", year),

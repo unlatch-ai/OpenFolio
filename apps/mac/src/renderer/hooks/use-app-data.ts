@@ -10,7 +10,8 @@ export function useAppData() {
   const {
     setMessagesStatus,
     setContactsStatus,
-    setMcpRunning,
+    setMcpStatus,
+    setEmbeddingSync,
     setThreads,
     setThreadSummaries,
     setSuggestions,
@@ -27,7 +28,7 @@ export function useAppData() {
 
     async function bootstrap() {
       try {
-        const [messagesStatus, contactsStatus, mcpStatus, threads, summaries, suggestions, watcherState] =
+        const [messagesStatus, contactsStatus, mcpStatus, threads, summaries, suggestions, watcherState, embeddingSync] =
           await Promise.all([
             window.openfolio.messages.getAccessStatus(),
             window.openfolio.contacts.getAccessStatus(),
@@ -36,15 +37,17 @@ export function useAppData() {
             window.openfolio.dashboard.getThreadSummaries(10),
             window.openfolio.dashboard.getReminderSuggestions(10),
             window.openfolio.sync.getWatcherState(),
+            window.openfolio.embeddings.getSyncStatus(),
           ]);
 
         setMessagesStatus(messagesStatus);
         setContactsStatus(contactsStatus);
-        setMcpRunning(mcpStatus.running);
+        setMcpStatus(mcpStatus);
         setThreads(threads);
         setThreadSummaries(summaries);
         setSuggestions(suggestions);
         setWatcherState(watcherState);
+        setEmbeddingSync(embeddingSync);
 
         // Auto-start watcher if messages access is granted
         if (messagesStatus.status === "granted" && !watcherState.watching) {
@@ -62,7 +65,8 @@ export function useAppData() {
   }, [
     setMessagesStatus,
     setContactsStatus,
-    setMcpRunning,
+    setMcpStatus,
+    setEmbeddingSync,
     setThreads,
     setThreadSummaries,
     setSuggestions,

@@ -16,6 +16,8 @@
 
 <p align="center">
   <a href="https://openfolio.ai">Website</a> &middot;
+  <a href="docs/current-state.md">Current State</a> &middot;
+  <a href="docs/roadmap.md">Roadmap</a> &middot;
   <a href="https://github.com/unlatch-ai/OpenFolio/issues">Report an Issue</a>
 </p>
 
@@ -31,6 +33,7 @@ OpenFolio is a native macOS app for searching and understanding your iMessage re
 - **Hybrid semantic search** — Cmd+K searches FTS and local embeddings, with optional BYOK OpenAI answers and embeddings.
 - **Relationship insights** — Response times, message volume by hour/day/month, conversation streaks, and a GitHub-style activity heatmap.
 - **Person research profiles** — Inspect contact details, related threads, recent messages, notes, and reminders in one place.
+- **Guided first run** — Walk through Messages permission, import, Contacts sync, and local semantic indexing.
 - **Beautiful design** — Warm color palette, gradient avatars, smooth Framer Motion transitions. Designed to feel like Partiful meets Apple Photos.
 - **MCP setup assistant** — Copy local stdio MCP configuration for AI/coding assistants.
 - **Open source** — AGPL-3.0. Read the code, fork it, contribute back.

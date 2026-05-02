@@ -350,6 +350,8 @@ export interface EmbeddingSyncStatus {
   dirtyDocuments: number;
   provider: EmbeddingProvider | null;
   model: string | null;
+  syncing: boolean;
+  lastError: string | null;
 }
 
 /* ─── Analytics types (mirrored from core/analytics.ts) ─── */
@@ -415,6 +417,14 @@ export interface McpSetupStatus {
   details: string;
 }
 
+export interface McpRuntimeStatus {
+  running: boolean;
+  mode: "stdio";
+  available: boolean;
+  command: string;
+  details: string;
+}
+
 export interface OpenFolioBridge {
   dashboard: {
     getThreadSummaries(limit?: number): Promise<MessagesThreadSummary[]>;
@@ -459,14 +469,16 @@ export interface OpenFolioBridge {
     onStateChange(listener: (state: UpdateState) => void): () => void;
   };
   mcp: {
-    getStatus(): Promise<{ running: boolean }>;
-    start(): Promise<{ running: boolean }>;
-    stop(): Promise<{ running: boolean }>;
+    getStatus(): Promise<McpRuntimeStatus>;
+    start(): Promise<McpRuntimeStatus>;
+    stop(): Promise<McpRuntimeStatus>;
     getSetup(): Promise<McpSetupStatus>;
   };
   people: {
     list(input?: { limit?: number; query?: string }): Promise<Person[]>;
     getProfile(personId: string): Promise<PersonProfile | null>;
+    addNote(input: { personId: string; content: string }): Promise<Note>;
+    addReminder(input: { personId: string; title: string; dueAt?: number | null }): Promise<Reminder>;
   };
   threads: {
     list(input: { limit?: number; offset?: number }): Promise<ThreadListItem[]>;
@@ -483,6 +495,7 @@ export interface OpenFolioBridge {
   embeddings: {
     getStatus(): Promise<LocalEmbeddingStatus>;
     getSyncStatus(): Promise<EmbeddingSyncStatus>;
+    syncNow(): Promise<EmbeddingSyncStatus>;
   };
   insights: {
     getWrappedSummary(year?: number): Promise<WrappedSummary>;
