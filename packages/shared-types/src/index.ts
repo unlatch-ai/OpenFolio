@@ -54,6 +54,13 @@ export interface AttachmentRef {
   transferName?: string | null;
 }
 
+export interface MessageAttachment {
+  id: LocalEntityId;
+  path: string | null;
+  mimeType: string | null;
+  transferName: string | null;
+}
+
 export interface Person {
   id: LocalEntityId;
   displayName: string;
@@ -67,6 +74,25 @@ export interface Person {
   sourceKinds?: SourceKind[];
   createdAt: number;
   updatedAt: number;
+}
+
+export interface PersonAlias {
+  id: LocalEntityId;
+  personId: LocalEntityId;
+  value: string;
+  kind: "handle" | "name" | "other";
+  createdAt: number;
+}
+
+export interface EditablePersonProfile {
+  displayName?: string;
+  primaryHandle?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  companyName?: string | null;
+  jobTitle?: string | null;
+  bio?: string | null;
+  location?: string | null;
 }
 
 export interface Company {
@@ -89,6 +115,8 @@ export interface Note {
   entityType: "person" | "thread" | "group";
   entityId: LocalEntityId;
   content: string;
+  pinned: boolean;
+  pinnedAt: number | null;
   createdAt: number;
 }
 
@@ -163,6 +191,16 @@ export interface SearchResult {
   threadId?: string | null;
   messageId?: string | null;
   personId?: string | null;
+  sourceLabel?: string | null;
+  occurredAt?: number | null;
+}
+
+export interface AskRunInput {
+  query: string;
+  useHosted?: boolean;
+  sourceScope?: "all" | "person" | "thread";
+  personId?: string | null;
+  threadId?: string | null;
 }
 
 export interface MessagesImportJob {
@@ -254,6 +292,7 @@ export interface AskResponse {
   answer: string;
   citations: SearchResult[];
   provider: "local" | LLMProvider;
+  sourceScope?: AskRunInput["sourceScope"];
 }
 
 export interface AiSettingsStatus {
@@ -330,6 +369,7 @@ export interface MessageDetail {
   occurredAt: number;
   isFromMe: boolean;
   hasAttachments: boolean;
+  attachments: MessageAttachment[];
 }
 
 export interface ThreadDetail {
@@ -407,8 +447,16 @@ export interface ThreadListItem {
 
 export interface PersonProfile {
   person: Person;
+  aliases: PersonAlias[];
   digest: RelationshipDigest;
   stats: RelationshipStats | null;
+  summary: {
+    firstContactAt: number | null;
+    lastContactAt: number | null;
+    cadenceLabel: string;
+    sentReceivedLabel: string;
+    responseLabel: string;
+  };
   threads: ThreadListItem[];
   recentMessages: MessageDetail[];
   notes: Note[];
@@ -459,7 +507,7 @@ export interface OpenFolioBridge {
     getScaleStatus(): Promise<SearchScaleStatus>;
   };
   ai: {
-    run(input: { query: string; useHosted?: boolean }): Promise<AskResponse>;
+    run(input: AskRunInput): Promise<AskResponse>;
     getSettings(): Promise<AiSettingsStatus>;
     saveOpenAIKey(input: { apiKey: string; answerModel?: string | null; embeddingModel?: string | null; useOpenAIEmbeddings?: boolean }): Promise<AiSettingsStatus>;
     deleteOpenAIKey(): Promise<AiSettingsStatus>;
@@ -490,13 +538,24 @@ export interface OpenFolioBridge {
   people: {
     list(input?: { limit?: number; query?: string }): Promise<Person[]>;
     getProfile(personId: string): Promise<PersonProfile | null>;
+    updateProfile(input: { personId: string; profile: EditablePersonProfile }): Promise<PersonProfile | null>;
+    addAlias(input: { personId: string; value: string; kind?: PersonAlias["kind"] }): Promise<PersonAlias>;
+    deleteAlias(input: { aliasId: string }): Promise<{ ok: boolean }>;
+    searchMessages(input: { personId: string; query?: string; limit?: number; offset?: number }): Promise<MessageDetail[]>;
     addNote(input: { personId: string; content: string }): Promise<Note>;
     addReminder(input: { personId: string; title: string; dueAt?: number | null }): Promise<Reminder>;
+  };
+  notes: {
+    pin(noteId: string): Promise<Note | null>;
+    unpin(noteId: string): Promise<Note | null>;
+  };
+  reminders: {
+    updateStatus(input: { reminderId: string; status: Reminder["status"] }): Promise<Reminder | null>;
   };
   threads: {
     list(input: { limit?: number; offset?: number }): Promise<ThreadListItem[]>;
     getDetail(threadId: string): Promise<ThreadDetail | null>;
-    getMessages(input: { threadId: string; limit?: number; offset?: number; aroundMessageId?: string | null }): Promise<MessageDetail[]>;
+    getMessages(input: { threadId: string; limit?: number; offset?: number; aroundMessageId?: string | null; direction?: "older" | "newer" }): Promise<MessageDetail[]>;
   };
   sync: {
     getWatcherState(): Promise<SyncWatcherState>;

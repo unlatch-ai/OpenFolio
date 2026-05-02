@@ -7,15 +7,19 @@ import path from "node:path";
 import { OpenFolioCore } from "@openfolio/core";
 import type {
   AiSettingsStatus,
+  AskRunInput,
   ConnectorAccount,
   ConnectorCredential,
   ContactsSyncSummary,
   CloudRuntimeConfig,
   ContactsAccessStatus,
+  EditablePersonProfile,
   McpSetupStatus,
   MessagesAccessStatus,
   MessagesImportJob,
   OpenFolioBridge,
+  PersonAlias,
+  Reminder,
   SearchResult,
 } from "@openfolio/shared-types";
 import { LocalMcpController } from "@openfolio/mcp";
@@ -685,9 +689,17 @@ const api: OpenFolioBridge = {
     getScaleStatus: async () => core.getSearchScaleStatus(),
   },
   ai: {
-    run: async ({ query }: { query: string; useHosted?: boolean }) => {
-      logAppDebug("ai", "run", { query });
-      const result = await core.ask(query);
+    run: async (input: AskRunInput) => {
+      logAppDebug("ai", "run", { query: input.query, sourceScope: input.sourceScope, personId: input.personId, threadId: input.threadId });
+      if (input.useHosted) {
+        return {
+          answer: "Hosted AI is not enabled in the local MVP. Add an OpenAI key to use BYOK Ask locally.",
+          citations: [],
+          provider: "local" as const,
+          sourceScope: input.sourceScope ?? "all",
+        };
+      }
+      const result = await core.ask(input);
       logAppDebug("ai", "result", { provider: result.provider, citations: result.citations.length });
       return result;
     },
@@ -806,8 +818,19 @@ const api: OpenFolioBridge = {
   people: {
     list: async (input?: { limit?: number; query?: string }) => core.listPeople(input?.limit, input?.query),
     getProfile: async (personId: string) => core.getPersonProfile(personId),
+    updateProfile: async (input: { personId: string; profile: EditablePersonProfile }) => core.updatePersonProfile(input.personId, input.profile),
+    addAlias: async (input: { personId: string; value: string; kind?: PersonAlias["kind"] }) => core.addPersonAlias(input.personId, input.value, input.kind),
+    deleteAlias: async (input: { aliasId: string }) => core.deletePersonAlias(input.aliasId),
+    searchMessages: async (input: { personId: string; query?: string; limit?: number; offset?: number }) => core.searchPersonMessages(input.personId, input.query, input.limit, input.offset),
     addNote: async (input: { personId: string; content: string }) => core.addNote("person", input.personId, input.content),
     addReminder: async (input: { personId: string; title: string; dueAt?: number | null }) => core.addReminder(input.title, input.personId, input.dueAt ?? null),
+  },
+  notes: {
+    pin: async (noteId: string) => core.pinNote(noteId),
+    unpin: async (noteId: string) => core.unpinNote(noteId),
+  },
+  reminders: {
+    updateStatus: async (input: { reminderId: string; status: Reminder["status"] }) => core.updateReminderStatus(input.reminderId, input.status),
   },
   threads: {
     list: async (input: { limit?: number; offset?: number }) => {
@@ -818,18 +841,9 @@ const api: OpenFolioBridge = {
       logAppDebug("threads", "getDetail", threadId);
       return core.getThreadDetail(threadId);
     },
-    getMessages: async (input: { threadId: string; limit?: number; offset?: number; aroundMessageId?: string | null }) => {
+    getMessages: async (input: { threadId: string; limit?: number; offset?: number; aroundMessageId?: string | null; direction?: "older" | "newer" }) => {
       logAppDebug("threads", "getMessages", input);
-      const rows = core.getThreadMessages(input.threadId, input.limit, input.offset, input.aroundMessageId);
-      return rows.map((r) => ({
-        id: r.id,
-        threadId: r.threadId,
-        personId: r.personId,
-        body: r.body,
-        occurredAt: r.occurredAt,
-        isFromMe: Boolean(r.isFromMe),
-        hasAttachments: Boolean(r.hasAttachments),
-      }));
+      return core.getThreadMessages(input.threadId, input.limit, input.offset, input.aroundMessageId, input.direction);
     },
   },
   sync: {
@@ -911,7 +925,7 @@ safeHandle("openfolio:contacts:getAccessStatus", () => api.contacts.getAccessSta
 safeHandle("openfolio:contacts:sync", () => api.contacts.sync());
 safeHandle("openfolio:search:query", (_, input: { text: string; limit?: number }) => api.search.query(input));
 safeHandle("openfolio:search:getScaleStatus", () => api.search.getScaleStatus());
-safeHandle("openfolio:ai:run", (_, input: { query: string; useHosted?: boolean }) => api.ai.run(input));
+safeHandle("openfolio:ai:run", (_, input: AskRunInput) => api.ai.run(input));
 safeHandle("openfolio:ai:getSettings", () => api.ai.getSettings());
 safeHandle("openfolio:ai:saveOpenAIKey", (_, input: { apiKey: string; answerModel?: string | null; embeddingModel?: string | null; useOpenAIEmbeddings?: boolean }) => api.ai.saveOpenAIKey(input));
 safeHandle("openfolio:ai:deleteOpenAIKey", () => api.ai.deleteOpenAIKey());
@@ -930,11 +944,18 @@ safeHandle("openfolio:mcp:stop", () => api.mcp.stop());
 safeHandle("openfolio:mcp:getSetup", () => api.mcp.getSetup());
 safeHandle("openfolio:people:list", (_, input?: { limit?: number; query?: string }) => api.people.list(input));
 safeHandle("openfolio:people:getProfile", (_, personId: string) => api.people.getProfile(personId));
+safeHandle("openfolio:people:updateProfile", (_, input: { personId: string; profile: EditablePersonProfile }) => api.people.updateProfile(input));
+safeHandle("openfolio:people:addAlias", (_, input: { personId: string; value: string; kind?: PersonAlias["kind"] }) => api.people.addAlias(input));
+safeHandle("openfolio:people:deleteAlias", (_, input: { aliasId: string }) => api.people.deleteAlias(input));
+safeHandle("openfolio:people:searchMessages", (_, input: { personId: string; query?: string; limit?: number; offset?: number }) => api.people.searchMessages(input));
 safeHandle("openfolio:people:addNote", (_, input: { personId: string; content: string }) => api.people.addNote(input));
 safeHandle("openfolio:people:addReminder", (_, input: { personId: string; title: string; dueAt?: number | null }) => api.people.addReminder(input));
+safeHandle("openfolio:notes:pin", (_, noteId: string) => api.notes.pin(noteId));
+safeHandle("openfolio:notes:unpin", (_, noteId: string) => api.notes.unpin(noteId));
+safeHandle("openfolio:reminders:updateStatus", (_, input: { reminderId: string; status: Reminder["status"] }) => api.reminders.updateStatus(input));
 safeHandle("openfolio:threads:list", (_, input: { limit?: number; offset?: number }) => api.threads.list(input));
 safeHandle("openfolio:threads:getDetail", (_, threadId: string) => api.threads.getDetail(threadId));
-safeHandle("openfolio:threads:getMessages", (_, input: { threadId: string; limit?: number; offset?: number }) => api.threads.getMessages(input));
+safeHandle("openfolio:threads:getMessages", (_, input: { threadId: string; limit?: number; offset?: number; aroundMessageId?: string | null; direction?: "older" | "newer" }) => api.threads.getMessages(input));
 safeHandle("openfolio:sync:getWatcherState", () => api.sync.getWatcherState());
 safeHandle("openfolio:sync:startWatcher", () => api.sync.startWatcher());
 safeHandle("openfolio:sync:stopWatcher", () => api.sync.stopWatcher());

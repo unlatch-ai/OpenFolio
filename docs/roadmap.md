@@ -17,7 +17,7 @@ Status: complete.
 
 ## Sprint 2: Scale and Correctness
 
-Status: in progress.
+Status: complete.
 
 - Benchmark local vector search on large imported histories.
 - Choose and integrate a local vector index if in-process vector scans become a
@@ -29,6 +29,8 @@ Status: in progress.
 - Document release hygiene, version checks, and notarization status.
 
 ## Sprint 3: Local Relationship Workspace
+
+Status: in progress.
 
 - Richer People research view with editable contact aliases, pinned notes,
   reminder completion, and stronger relationship summaries.

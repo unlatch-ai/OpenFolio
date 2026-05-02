@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
 import { Search, MessageSquare, User, FileText, Bell, Sparkles } from "lucide-react";
 import { useAppStore } from "../store";
-import type { AiSettingsStatus, AskResponse, SearchResult } from "@openfolio/shared-types";
-import { groupSearchResults } from "../search-results";
+import type { AiSettingsStatus, AskResponse, AskRunInput, SearchResult } from "@openfolio/shared-types";
+import { formatCitationMeta, groupSearchResults } from "../search-results";
 
 const ICON_MAP: Record<string, typeof MessageSquare> = {
   thread: MessageSquare,
@@ -21,12 +21,14 @@ function ResultIcon({ kind }: { kind: SearchResult["kind"] }) {
 export function CommandPalette() {
   const { commandPalette, closeCommandPalette, setCommandQuery, setCommandResults, selectThread, selectMessage, selectPerson, setView } =
     useAppStore();
+  const { selectedPersonId, selectedThreadId } = useAppStore();
   const { open, query, results, searching } = commandPalette;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [mode, setMode] = useState<"search" | "ask">("search");
   const [asking, setAsking] = useState(false);
   const [answer, setAnswer] = useState<AskResponse | null>(null);
   const [aiSettings, setAiSettings] = useState<AiSettingsStatus | null>(null);
+  const [sourceScope, setSourceScope] = useState<AskRunInput["sourceScope"]>("all");
 
   // Cmd+K global shortcut
   useEffect(() => {
@@ -87,15 +89,20 @@ export function CommandPalette() {
     setAsking(true);
     setAnswer(null);
     try {
-      const response = await window.openfolio.ai.run({ query });
+      const response = await window.openfolio.ai.run({
+        query,
+        sourceScope,
+        personId: sourceScope === "person" ? selectedPersonId : null,
+        threadId: sourceScope === "thread" ? selectedThreadId : null,
+      });
       setAnswer(response);
       setCommandResults(response.citations, false);
     } catch {
-      setAnswer({ answer: "Ask failed. Check your OpenAI key in Settings or try a narrower query.", citations: [], provider: "local" });
+      setAnswer({ answer: "Ask failed. Check your OpenAI key in Settings or try a narrower query.", citations: [], provider: "local", sourceScope });
     } finally {
       setAsking(false);
     }
-  }, [query, setCommandResults]);
+  }, [query, selectedPersonId, selectedThreadId, setCommandResults, sourceScope]);
 
   const groupedResults = groupSearchResults(results);
 
@@ -138,6 +145,14 @@ export function CommandPalette() {
             {mode === "ask" && <button className="cmd-ask-button" onClick={() => void runAsk()} disabled={asking || !query.trim()}>{asking ? "Asking..." : "Ask"}</button>}
           </div>
 
+          {mode === "ask" && (
+            <div className="cmd-source-row">
+              <button className={sourceScope === "all" ? "active" : ""} onClick={() => setSourceScope("all")}>All</button>
+              <button className={sourceScope === "person" ? "active" : ""} onClick={() => setSourceScope("person")} disabled={!selectedPersonId}>Current person</button>
+              <button className={sourceScope === "thread" ? "active" : ""} onClick={() => setSourceScope("thread")} disabled={!selectedThreadId}>Current thread</button>
+            </div>
+          )}
+
           <Command.List className="cmd-list">
             {answer && (
               <div className="cmd-answer">
@@ -170,6 +185,7 @@ export function CommandPalette() {
                   <ResultIcon kind={result.kind} />
                   <div className="cmd-item-content">
                     <span className="cmd-item-title">{result.title}</span>
+                    <span className="cmd-item-meta">{formatCitationMeta(result)}</span>
                     <span className="cmd-item-snippet">{result.snippet}</span>
                   </div>
                   <span className="cmd-item-kind">{result.messageId ? "message" : result.kind}</span>

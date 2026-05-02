@@ -392,6 +392,10 @@ textarea {
   padding-top: 36px;
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
 }
 
 /* ─── People research view ─── */
@@ -513,7 +517,7 @@ textarea {
 
 .person-stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin: 22px 0;
 }
@@ -530,8 +534,9 @@ textarea {
 }
 
 .person-stats-grid strong {
-  font-size: 20px;
+  font-size: 13px;
   font-weight: 700;
+  line-height: 1.25;
 }
 
 .person-stats-grid span {
@@ -634,6 +639,79 @@ textarea {
   background: color-mix(in srgb, var(--muted) 30%, transparent);
 }
 
+.person-action-input select,
+.person-edit-grid input {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--background);
+  color: var(--foreground);
+  padding: 6px 8px;
+  font-size: 12px;
+  outline: 0;
+}
+
+.person-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.person-aliases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.person-alias-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.person-alias-chip button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+.person-note-row,
+.person-reminder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-left: 2px solid var(--border);
+  padding: 7px 0 7px 10px;
+}
+
+.person-note-row.pinned {
+  border-left-color: var(--primary);
+}
+
+.person-note-row p,
+.person-reminder-row span {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.person-reminder-row.done span {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+}
+
+.person-reminder-row small {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
 .thread-msg.highlight .thread-msg-bubble {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
@@ -666,6 +744,33 @@ textarea {
 
 .cmd-mode-row .cmd-ask-button {
   margin-left: auto;
+}
+
+.cmd-source-row {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cmd-source-row button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted-foreground);
+  border-radius: 7px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.cmd-source-row button.active {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.cmd-source-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .cmd-mode-hint {
@@ -747,6 +852,12 @@ textarea {
   margin: 3px 0 0;
 }
 
+.thread-panel-paging {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .thread-panel-messages {
   flex: 1;
   overflow-y: auto;
@@ -772,6 +883,24 @@ textarea {
   border-radius: 50%;
   background: var(--primary);
   animation: pulse 1s ease-in-out infinite;
+}
+
+.thread-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.thread-attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 7px;
+  padding: 3px 6px;
+  font-size: 11px;
+  color: var(--muted-foreground);
 }
 
 @keyframes pulse {
@@ -1300,6 +1429,14 @@ textarea {
 
 .cmd-item-snippet {
   font-size: 11px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmd-item-meta {
+  font-size: 10px;
   color: var(--muted-foreground);
   white-space: nowrap;
   overflow: hidden;

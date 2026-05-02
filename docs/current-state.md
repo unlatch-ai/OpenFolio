@@ -16,8 +16,13 @@ iMessage history. The current product surface is focused on a stable local MVP.
 - Hybrid search over local full-text search and stored embeddings.
 - Local embeddings through Transformers.js by default.
 - BYOK OpenAI settings for Ask mode and optional OpenAI embeddings.
-- Dense People profiles with contact details, related threads, recent messages,
-  notes, reminders, and person-scoped message filtering.
+- Dense People profiles with editable identity fields, aliases, related
+  threads, paginated message search, pinned notes, reminder completion, and
+  deterministic relationship summary cards.
+- Thread reading supports stable older/newer pagination and displays imported
+  attachment filename/type metadata.
+- Ask citations include source labels, dates when available, navigation targets,
+  and optional all/person/thread source filters.
 - Local stdio MCP server and setup snippets for compatible assistants.
 - GitHub Releases based Mac updater and signed local Mac packaging.
 - Cancellable/retryable Messages import with clearer recovery state.
@@ -38,8 +43,10 @@ iMessage history. The current product surface is focused on a stable local MVP.
   embedded-document counts and includes `pnpm bench:search` for local benchmark
   runs. A vector index should be added once benchmark data shows user-visible
   latency.
-- Renderer coverage is still helper-focused. Full DOM interaction tests are the
-  next testing step once the app adopts a browser-like test environment.
+- Renderer coverage includes workflow helper behavior for profile controls,
+  navigation metadata, citations, and setup state. Full DOM interaction tests are
+  still the next testing step once the app adopts a browser-like test
+  environment.
 - Dependency audit is reduced to a remaining low-severity advisory after pinned
   transitive overrides and the Electron 39 upgrade.
 - The hosted package exists for future commercial boundaries but is not part of

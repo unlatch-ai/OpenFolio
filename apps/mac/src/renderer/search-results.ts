@@ -15,3 +15,11 @@ export function describeSearchScale(status: SearchScaleStatus) {
 
   return `${status.embeddedDocuments} embedded documents. Current local scan path is acceptable for this scale.`;
 }
+
+export function formatCitationMeta(result: SearchResult) {
+  const source = result.sourceLabel || result.title || result.kind;
+  const date = result.occurredAt
+    ? new Date(result.occurredAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+    : null;
+  return [result.kind, source, date].filter(Boolean).join(" · ");
+}

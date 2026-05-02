@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MessageSquare, RefreshCw } from "lucide-react";
+import { File, MessageSquare, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAppStore } from "../store";
 import { Button } from "./ui/button";
@@ -50,14 +50,17 @@ function ThreadRow({
 function ThreadPanel({ threadId, selectedMessageId }: { threadId: string; selectedMessageId: string | null }) {
   const [detail, setDetail] = useState<ThreadDetail | null>(null);
   const [messages, setMessages] = useState<MessageDetail[]>([]);
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const selectedMessageRef = useRef<HTMLDivElement | null>(null);
+  const pageSize = 75;
 
   useEffect(() => {
     setLoading(true);
+    const nextOffset = selectedMessageId ? 0 : offset;
     Promise.all([
       window.openfolio.threads.getDetail(threadId),
-      window.openfolio.threads.getMessages({ threadId, limit: 100, aroundMessageId: selectedMessageId }),
+      window.openfolio.threads.getMessages({ threadId, limit: pageSize, offset: nextOffset, aroundMessageId: selectedMessageId }),
     ])
       .then(([d, m]) => {
         setDetail(d);
@@ -65,6 +68,10 @@ function ThreadPanel({ threadId, selectedMessageId }: { threadId: string; select
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+  }, [threadId, selectedMessageId, offset]);
+
+  useEffect(() => {
+    setOffset(0);
   }, [threadId, selectedMessageId]);
 
   useEffect(() => {
@@ -104,6 +111,14 @@ function ThreadPanel({ threadId, selectedMessageId }: { threadId: string; select
             {detail.totalMessageCount} messages
           </p>
         </div>
+        <div className="thread-panel-paging">
+          <Button size="xs" variant="secondary" onClick={() => setOffset(Math.max(0, offset - pageSize))} disabled={offset === 0}>
+            Newer
+          </Button>
+          <Button size="xs" variant="secondary" onClick={() => setOffset(offset + pageSize)} disabled={Boolean(detail && offset + pageSize >= detail.totalMessageCount)}>
+            Older
+          </Button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -121,7 +136,18 @@ function ThreadPanel({ threadId, selectedMessageId }: { threadId: string; select
               />
             )}
             <div className="thread-msg-bubble">
-              {msg.body || <span className="text-muted-foreground italic text-xs">attachment</span>}
+              {msg.body || null}
+              {msg.attachments.length > 0 && (
+                <div className="thread-attachments">
+                  {msg.attachments.map((attachment) => (
+                    <span key={attachment.id} className="thread-attachment-chip">
+                      <File size={12} />
+                      {attachment.transferName || attachment.mimeType || "Attachment"}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {!msg.body && msg.attachments.length === 0 && <span className="text-muted-foreground italic text-xs">attachment</span>}
             </div>
             <span className="thread-msg-time">
               {new Date(msg.occurredAt).toLocaleTimeString(undefined, {

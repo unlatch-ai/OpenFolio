@@ -46,6 +46,24 @@ function appendManyMessages(chatDbPath: string, count: number) {
   db.close();
 }
 
+function appendAttachmentMessage(chatDbPath: string) {
+  const db = new DatabaseSync(chatDbPath);
+  db.prepare("INSERT INTO message(ROWID, text, handle_id, is_from_me, date, service) VALUES (200, NULL, 1, 0, 200000, 'iMessage')").run();
+  db.prepare("INSERT INTO chat_message_join(chat_id, message_id) VALUES (1, 200)").run();
+  db.prepare("INSERT INTO attachment(ROWID, filename, mime_type, transfer_name) VALUES (1, '/tmp/report.pdf', 'application/pdf', 'report.pdf')").run();
+  db.prepare("INSERT INTO message_attachment_join(message_id, attachment_id) VALUES (200, 1)").run();
+  db.close();
+}
+
+function appendSecondPersonThread(chatDbPath: string) {
+  const db = new DatabaseSync(chatDbPath);
+  db.prepare("INSERT INTO handle(ROWID, id) VALUES (2, '+15555550124')").run();
+  db.prepare("INSERT INTO chat(ROWID, chat_identifier, service_name) VALUES (2, 'Bob', 'iMessage')").run();
+  db.prepare("INSERT INTO message(ROWID, text, handle_id, is_from_me, date, service) VALUES (300, 'bob private planning', 2, 0, 300000, 'iMessage')").run();
+  db.prepare("INSERT INTO chat_message_join(chat_id, message_id) VALUES (2, 300)").run();
+  db.close();
+}
+
 describe("OpenFolioCore", () => {
   let dbPath: string;
   let chatDbPath: string;
@@ -323,6 +341,119 @@ describe("OpenFolioCore", () => {
     expect(profile?.recentMessages.length).toBeGreaterThan(0);
     expect(profile?.notes[0]?.content).toContain("math salon");
     expect(profile?.reminders[0]?.title).toBe("Follow up with Ada");
+  });
+
+  it("updates person profile fields and refreshes person search documents", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const person = core.db.listPeople()[0]!;
+
+    const profile = core.updatePersonProfile(person.id, {
+      displayName: "Ada Research",
+      companyName: "Difference Labs",
+      location: "London",
+    });
+    const results = await core.search("Difference Labs London");
+
+    expect(profile?.person.displayName).toBe("Ada Research");
+    expect(profile?.person.companyName).toBe("Difference Labs");
+    expect(results.some((result) => result.kind === "person" && result.personId === person.id)).toBe(true);
+  });
+
+  it("stores aliases and uses them for people search and profile display", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const person = core.db.listPeople()[0]!;
+
+    const alias = core.addPersonAlias(person.id, "Countess of Lovelace", "name");
+    const pickerResults = core.listPeople(10, "Countess");
+    const searchResults = await core.search("Countess of Lovelace");
+    const profile = core.getPersonProfile(person.id);
+
+    expect(alias.value).toBe("Countess of Lovelace");
+    expect(pickerResults[0]?.id).toBe(person.id);
+    expect(profile?.aliases[0]?.value).toBe("Countess of Lovelace");
+    expect(searchResults.some((result) => result.kind === "person" && result.personId === person.id)).toBe(true);
+  });
+
+  it("pins notes ahead of regular notes", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const person = core.db.listPeople()[0]!;
+    const first = core.addNote("person", person.id, "Regular note");
+    const second = core.addNote("person", person.id, "Pinned note");
+
+    core.pinNote(first.id);
+    const profile = core.getPersonProfile(person.id);
+
+    expect(second.content).toBe("Pinned note");
+    expect(profile?.notes[0]?.id).toBe(first.id);
+    expect(profile?.notes[0]?.pinned).toBe(true);
+  });
+
+  it("marks reminders done and reopens them in profile counts", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const person = core.db.listPeople()[0]!;
+    const reminder = core.addReminder("Follow up", person.id, null);
+
+    expect(core.getPersonProfile(person.id)?.digest.reminderCount).toBe(1);
+    core.updateReminderStatus(reminder.id, "done");
+    expect(core.getPersonProfile(person.id)?.digest.reminderCount).toBe(0);
+    core.updateReminderStatus(reminder.id, "open");
+    expect(core.getPersonProfile(person.id)?.digest.reminderCount).toBe(1);
+  });
+
+  it("searches person messages beyond the recent profile window with pagination", async () => {
+    appendManyMessages(chatDbPath, 40);
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const person = core.db.listPeople()[0]!;
+
+    const firstPage = core.searchPersonMessages(person.id, "bulk message", 10, 0);
+    const secondPage = core.searchPersonMessages(person.id, "bulk message", 10, 10);
+
+    expect(firstPage).toHaveLength(10);
+    expect(secondPage).toHaveLength(10);
+    expect(new Set(firstPage.map((message) => message.id)).size).toBe(10);
+    expect(secondPage.some((message) => firstPage.some((first) => first.id === message.id))).toBe(false);
+  });
+
+  it("returns stable thread pages and attachment metadata", async () => {
+    appendManyMessages(chatDbPath, 25);
+    appendAttachmentMessage(chatDbPath);
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const threadId = core.db.listThreadsPaginated(1)[0]!.threadId;
+
+    const newest = core.getThreadMessages(threadId, 10, 0);
+    const older = core.getThreadMessages(threadId, 10, 10);
+    const attachmentMessage = core.getThreadMessages(threadId, 50).find((message) => message.hasAttachments);
+
+    expect(newest.some((message) => older.some((olderMessage) => olderMessage.id === message.id))).toBe(false);
+    expect(attachmentMessage?.attachments[0]).toMatchObject({
+      transferName: "report.pdf",
+      mimeType: "application/pdf",
+      path: "/tmp/report.pdf",
+    });
+  });
+
+  it("limits Ask citations to person and thread source filters", async () => {
+    appendSecondPersonThread(chatDbPath);
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const people = core.db.listPeople();
+    const ada = people.find((item) => item.primaryHandle === "+15555550123")!;
+    const bob = people.find((item) => item.primaryHandle === "+15555550124")!;
+    const bobThread = core.getPersonProfile(bob.id)?.threads[0]!;
+
+    const personResponse = await core.ask({ query: "planning hello", sourceScope: "person", personId: ada.id });
+    const threadResponse = await core.ask({ query: "planning hello", sourceScope: "thread", threadId: bobThread.threadId });
+
+    expect(personResponse.citations.length).toBeGreaterThan(0);
+    expect(personResponse.citations.every((citation) => citation.personId === ada.id || citation.threadId !== bobThread.threadId)).toBe(true);
+    expect(threadResponse.citations.length).toBeGreaterThan(0);
+    expect(threadResponse.citations.every((citation) => citation.threadId === bobThread.threadId)).toBe(true);
   });
 
   it("does not inflate top contacts with me or unrelated group participants", async () => {

@@ -99,7 +99,7 @@ export class AIOrchestrator {
     }
   }
 
-  async answer(question: string, results: SearchResult[]): Promise<AskResponse> {
+  async answer(question: string, results: SearchResult[], sourceScope: AskResponse["sourceScope"] = "all"): Promise<AskResponse> {
     if (!this.config || !this.config.apiKey || this.config.provider !== "openai") {
       return {
         answer: results.length > 0
@@ -109,7 +109,8 @@ export class AIOrchestrator {
               .join("\n")}`
           : "Local-only mode: no matching context found yet.",
         citations: results.slice(0, 5),
-        provider: "local"
+        provider: "local",
+        sourceScope,
       };
     }
 
@@ -134,14 +135,16 @@ export class AIOrchestrator {
       return {
         answer: response.output_text || "No answer returned.",
         citations: results.slice(0, 5),
-        provider: "openai"
+        provider: "openai",
+        sourceScope,
       };
     } catch (error) {
       console.error("[openfolio-ai] Answer generation failed:", error instanceof Error ? error.message : error);
       return {
         answer: `AI query failed: ${error instanceof Error ? error.message : "Unknown error"}. Showing local results instead.`,
         citations: results.slice(0, 5),
-        provider: "local"
+        provider: "local",
+        sourceScope,
       };
     }
   }

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { OpenFolioBridge } from "@openfolio/shared-types";
+import type { AskRunInput, OpenFolioBridge } from "@openfolio/shared-types";
 
 const bridge: OpenFolioBridge = {
   dashboard: {
@@ -26,7 +26,7 @@ const bridge: OpenFolioBridge = {
     getScaleStatus: () => ipcRenderer.invoke("openfolio:search:getScaleStatus"),
   },
   ai: {
-    run: (input: { query: string; useHosted?: boolean }) => ipcRenderer.invoke("openfolio:ai:run", input),
+    run: (input: AskRunInput) => ipcRenderer.invoke("openfolio:ai:run", input),
     getSettings: () => ipcRenderer.invoke("openfolio:ai:getSettings"),
     saveOpenAIKey: (input) => ipcRenderer.invoke("openfolio:ai:saveOpenAIKey", input),
     deleteOpenAIKey: () => ipcRenderer.invoke("openfolio:ai:deleteOpenAIKey"),
@@ -65,13 +65,24 @@ const bridge: OpenFolioBridge = {
   people: {
     list: (input?: { limit?: number; query?: string }) => ipcRenderer.invoke("openfolio:people:list", input),
     getProfile: (personId: string) => ipcRenderer.invoke("openfolio:people:getProfile", personId),
+    updateProfile: (input) => ipcRenderer.invoke("openfolio:people:updateProfile", input),
+    addAlias: (input) => ipcRenderer.invoke("openfolio:people:addAlias", input),
+    deleteAlias: (input) => ipcRenderer.invoke("openfolio:people:deleteAlias", input),
+    searchMessages: (input) => ipcRenderer.invoke("openfolio:people:searchMessages", input),
     addNote: (input: { personId: string; content: string }) => ipcRenderer.invoke("openfolio:people:addNote", input),
     addReminder: (input: { personId: string; title: string; dueAt?: number | null }) => ipcRenderer.invoke("openfolio:people:addReminder", input),
+  },
+  notes: {
+    pin: (noteId: string) => ipcRenderer.invoke("openfolio:notes:pin", noteId),
+    unpin: (noteId: string) => ipcRenderer.invoke("openfolio:notes:unpin", noteId),
+  },
+  reminders: {
+    updateStatus: (input) => ipcRenderer.invoke("openfolio:reminders:updateStatus", input),
   },
   threads: {
     list: (input: { limit?: number; offset?: number }) => ipcRenderer.invoke("openfolio:threads:list", input),
     getDetail: (threadId: string) => ipcRenderer.invoke("openfolio:threads:getDetail", threadId),
-    getMessages: (input: { threadId: string; limit?: number; offset?: number; aroundMessageId?: string | null }) => ipcRenderer.invoke("openfolio:threads:getMessages", input),
+    getMessages: (input: { threadId: string; limit?: number; offset?: number; aroundMessageId?: string | null; direction?: "older" | "newer" }) => ipcRenderer.invoke("openfolio:threads:getMessages", input),
   },
   sync: {
     getWatcherState: () => ipcRenderer.invoke("openfolio:sync:getWatcherState"),

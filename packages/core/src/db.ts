@@ -4,6 +4,8 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
   ConnectorSyncResult,
+  EditablePersonProfile,
+  MessageAttachment,
   MessageThread,
   MessagesThreadSummary,
   MessageDetail,
@@ -11,6 +13,7 @@ import type {
   NormalizedConnectorPerson,
   Note,
   Person,
+  PersonAlias,
   PersonProfile,
   Reminder,
   ReminderSuggestion,
@@ -30,7 +33,7 @@ import {
 import { contentHash, cosineSimilarity, createId, normalizeHandle, normalizeQueryForFts, now } from "./utils.js";
 
 const DEFAULT_DB_DIR = path.join(os.homedir(), "Library", "Application Support", "OpenFolio");
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 
 function stringify(value: unknown) {
   return JSON.stringify(value ?? null);
@@ -84,6 +87,45 @@ function mapPerson(row: Record<string, unknown>): Person {
   };
 }
 
+function mapAlias(row: Record<string, unknown>): PersonAlias {
+  return {
+    id: String(row.id),
+    personId: String(row.personId),
+    value: String(row.value),
+    kind: row.kind === "handle" || row.kind === "name" ? row.kind : "other",
+    createdAt: Number(row.createdAt),
+  };
+}
+
+function mapNote(row: Record<string, unknown>): Note {
+  return {
+    id: String(row.id),
+    entityType: row.entityType as Note["entityType"],
+    entityId: String(row.entityId),
+    content: String(row.content),
+    pinned: Boolean(row.pinned),
+    pinnedAt: (row.pinnedAt as number | null) ?? null,
+    createdAt: Number(row.createdAt),
+  };
+}
+
+function mapReminder(row: Record<string, unknown>): Reminder {
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    personId: (row.personId as string | null) ?? null,
+    dueAt: (row.dueAt as number | null) ?? null,
+    status: row.status === "done" ? "done" : "open",
+    createdAt: Number(row.createdAt),
+  };
+}
+
+type SearchScope = {
+  sourceScope?: "all" | "person" | "thread";
+  personId?: string | null;
+  threadId?: string | null;
+};
+
 type SearchTargets = {
   people?: string[];
   threads?: string[];
@@ -128,6 +170,7 @@ export class OpenFolioDatabase {
       DROP TABLE IF EXISTS message_threads;
       DROP TABLE IF EXISTS reminders;
       DROP TABLE IF EXISTS notes;
+      DROP TABLE IF EXISTS person_aliases;
       DROP TABLE IF EXISTS tags;
       DROP TABLE IF EXISTS group_members;
       DROP TABLE IF EXISTS groups;
@@ -189,6 +232,15 @@ export class OpenFolioDatabase {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS person_aliases (
+        id TEXT PRIMARY KEY,
+        person_id TEXT NOT NULL,
+        value TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        UNIQUE(person_id, value)
+      );
+
       CREATE TABLE IF NOT EXISTS companies (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -226,6 +278,8 @@ export class OpenFolioDatabase {
         entity_type TEXT NOT NULL,
         entity_id TEXT NOT NULL,
         content TEXT NOT NULL,
+        pinned INTEGER NOT NULL DEFAULT 0,
+        pinned_at INTEGER,
         created_at INTEGER NOT NULL
       );
 
@@ -298,6 +352,9 @@ export class OpenFolioDatabase {
 
       CREATE INDEX IF NOT EXISTS mm_person_occurred_idx
       ON message_messages(person_id, occurred_at DESC);
+
+      CREATE INDEX IF NOT EXISTS person_aliases_person_idx
+      ON person_aliases(person_id);
 
       CREATE VIRTUAL TABLE IF NOT EXISTS search_documents_fts
       USING fts5(title, content, content='search_documents', content_rowid='rowid');
@@ -578,12 +635,14 @@ export class OpenFolioDatabase {
       entityType,
       entityId,
       content,
+      pinned: false,
+      pinnedAt: null,
       createdAt: now(),
     };
 
     this.db
-      .prepare("INSERT INTO notes(id, entity_type, entity_id, content, created_at) VALUES (?, ?, ?, ?, ?)")
-      .run(note.id, note.entityType, note.entityId, note.content, note.createdAt);
+      .prepare("INSERT INTO notes(id, entity_type, entity_id, content, pinned, pinned_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(note.id, note.entityType, note.entityId, note.content, note.pinned ? 1 : 0, note.pinnedAt, note.createdAt);
 
     return note;
   }
@@ -619,6 +678,94 @@ export class OpenFolioDatabase {
       `)
       .get(personId) as Record<string, unknown> | undefined;
     return row ? mapPerson(row) : undefined;
+  }
+
+  updatePersonProfile(personId: string, profile: EditablePersonProfile) {
+    const existing = this.getPerson(personId);
+    if (!existing) {
+      return null;
+    }
+
+    const normalizedPrimaryHandle = profile.primaryHandle === undefined ? existing.primaryHandle : normalizeHandle(profile.primaryHandle);
+    const updatedAt = now();
+    this.db
+      .prepare(`
+        UPDATE people SET
+          display_name = ?,
+          primary_handle = ?,
+          email = ?,
+          phone = ?,
+          company_name = ?,
+          job_title = ?,
+          bio = ?,
+          location = ?,
+          updated_at = ?
+        WHERE id = ?
+      `)
+      .run(
+        profile.displayName?.trim() || existing.displayName,
+        normalizedPrimaryHandle,
+        profile.email === undefined ? existing.email ?? null : normalizeHandle(profile.email),
+        profile.phone === undefined ? existing.phone ?? null : normalizeHandle(profile.phone),
+        profile.companyName === undefined ? existing.companyName ?? null : profile.companyName?.trim() || null,
+        profile.jobTitle === undefined ? existing.jobTitle ?? null : profile.jobTitle?.trim() || null,
+        profile.bio === undefined ? existing.bio ?? null : profile.bio?.trim() || null,
+        profile.location === undefined ? existing.location ?? null : profile.location?.trim() || null,
+        updatedAt,
+        personId,
+      );
+
+    return this.getPerson(personId) ?? null;
+  }
+
+  getPersonAliases(personId: string): PersonAlias[] {
+    const rows = this.db
+      .prepare(`
+        SELECT id, person_id AS personId, value, kind, created_at AS createdAt
+        FROM person_aliases
+        WHERE person_id = ?
+        ORDER BY created_at DESC
+      `)
+      .all(personId) as Array<Record<string, unknown>>;
+    return rows.map(mapAlias);
+  }
+
+  addPersonAlias(personId: string, value: string, kind: PersonAlias["kind"] = "other"): PersonAlias {
+    if (!this.getPerson(personId)) {
+      throw new Error("Person not found.");
+    }
+
+    const normalizedValue = kind === "handle" ? normalizeHandle(value) : value.trim();
+    if (!normalizedValue) {
+      throw new Error("Alias cannot be empty.");
+    }
+
+    const createdAt = now();
+    const id = createId("alias");
+    this.db
+      .prepare(`
+        INSERT INTO person_aliases(id, person_id, value, kind, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(person_id, value) DO UPDATE SET kind = excluded.kind
+      `)
+      .run(id, personId, normalizedValue, kind, createdAt);
+
+    const row = this.db
+      .prepare(`
+        SELECT id, person_id AS personId, value, kind, created_at AS createdAt
+        FROM person_aliases
+        WHERE person_id = ? AND value = ?
+      `)
+      .get(personId, normalizedValue) as Record<string, unknown>;
+    return mapAlias(row);
+  }
+
+  deletePersonAlias(aliasId: string) {
+    const row = this.db
+      .prepare("SELECT person_id AS personId FROM person_aliases WHERE id = ?")
+      .get(aliasId) as { personId: string } | undefined;
+    this.db.prepare("DELETE FROM person_aliases WHERE id = ?").run(aliasId);
+    return row?.personId ?? null;
   }
 
   getThreadSummaries(limit = 20) {
@@ -682,6 +829,8 @@ export class OpenFolioDatabase {
       .all(personId)
       .map((row) => String((row as { body: string }).body));
 
+    const aliases = this.getPersonAliases(personId).map((alias) => alias.value);
+
     return {
       id: createId("doc"),
       kind: "person",
@@ -691,6 +840,7 @@ export class OpenFolioDatabase {
         displayName: person.displayName,
         primaryHandle: person.primaryHandle,
         recentThreadTitles: [
+          ...aliases,
           ...threadTitles,
           person.email,
           person.phone,
@@ -1129,27 +1279,86 @@ export class OpenFolioDatabase {
 
   private getSearchNavigation(kind: string, entityId: string) {
     if (kind === "thread") {
-      return { threadId: entityId, messageId: null, personId: null };
+      const row = this.db
+        .prepare("SELECT COALESCE(display_name, 'Message Thread') AS sourceLabel, last_message_at AS occurredAt FROM message_threads WHERE id = ?")
+        .get(entityId) as { sourceLabel: string; occurredAt: number | null } | undefined;
+      return { threadId: entityId, messageId: null, personId: null, sourceLabel: row?.sourceLabel ?? "Message Thread", occurredAt: row?.occurredAt ?? null };
     }
     if (kind === "message") {
       const row = this.db
-        .prepare("SELECT thread_id AS threadId FROM message_messages WHERE id = ?")
-        .get(entityId) as { threadId: string } | undefined;
-      return { threadId: row?.threadId ?? null, messageId: entityId, personId: null };
+        .prepare(`
+          SELECT
+            mm.thread_id AS threadId,
+            mm.person_id AS personId,
+            mm.occurred_at AS occurredAt,
+            COALESCE(t.display_name, GROUP_CONCAT(mp.handle), 'Message Thread') AS sourceLabel
+          FROM message_messages mm
+          LEFT JOIN message_threads t ON t.id = mm.thread_id
+          LEFT JOIN message_participants mp ON mp.thread_id = mm.thread_id
+          WHERE mm.id = ?
+          GROUP BY mm.id
+        `)
+        .get(entityId) as { threadId: string; personId: string | null; occurredAt: number; sourceLabel: string | null } | undefined;
+      return {
+        threadId: row?.threadId ?? null,
+        messageId: entityId,
+        personId: row?.personId ?? null,
+        sourceLabel: row?.sourceLabel ?? "Message",
+        occurredAt: row?.occurredAt ?? null,
+      };
     }
     if (kind === "person") {
-      return { threadId: null, messageId: null, personId: entityId };
+      const row = this.db
+        .prepare("SELECT display_name AS sourceLabel, updated_at AS occurredAt FROM people WHERE id = ?")
+        .get(entityId) as { sourceLabel: string; occurredAt: number } | undefined;
+      return { threadId: null, messageId: null, personId: entityId, sourceLabel: row?.sourceLabel ?? "Person", occurredAt: row?.occurredAt ?? null };
     }
     if (kind === "reminder") {
       const row = this.db
-        .prepare("SELECT person_id AS personId FROM reminders WHERE id = ?")
-        .get(entityId) as { personId: string | null } | undefined;
-      return { threadId: null, messageId: null, personId: row?.personId ?? null };
+        .prepare("SELECT person_id AS personId, title AS sourceLabel, due_at AS occurredAt FROM reminders WHERE id = ?")
+        .get(entityId) as { personId: string | null; sourceLabel: string; occurredAt: number | null } | undefined;
+      return { threadId: null, messageId: null, personId: row?.personId ?? null, sourceLabel: row?.sourceLabel ?? "Reminder", occurredAt: row?.occurredAt ?? null };
     }
-    return { threadId: null, messageId: null, personId: null };
+    if (kind === "note") {
+      const row = this.db
+        .prepare("SELECT entity_type AS entityType, entity_id AS entityId, created_at AS occurredAt FROM notes WHERE id = ?")
+        .get(entityId) as { entityType: string; entityId: string; occurredAt: number } | undefined;
+      return {
+        threadId: row?.entityType === "thread" ? row.entityId : null,
+        messageId: null,
+        personId: row?.entityType === "person" ? row.entityId : null,
+        sourceLabel: "Note",
+        occurredAt: row?.occurredAt ?? null,
+      };
+    }
+    return { threadId: null, messageId: null, personId: null, sourceLabel: null, occurredAt: null };
   }
 
-  search(query: string, limit = 10, queryEmbedding?: number[]) {
+  private resultMatchesScope(result: SearchResult, scope?: SearchScope) {
+    if (!scope || !scope.sourceScope || scope.sourceScope === "all") {
+      return true;
+    }
+
+    if (scope.sourceScope === "thread") {
+      return Boolean(scope.threadId) && result.threadId === scope.threadId;
+    }
+
+    if (scope.sourceScope === "person") {
+      if (!scope.personId) return false;
+      if (result.personId === scope.personId || result.entityId === scope.personId) return true;
+      if (result.threadId) {
+        const row = this.db
+          .prepare("SELECT 1 AS ok FROM message_participants WHERE thread_id = ? AND person_id = ? LIMIT 1")
+          .get(result.threadId, scope.personId) as { ok: number } | undefined;
+        return Boolean(row);
+      }
+      return false;
+    }
+
+    return true;
+  }
+
+  search(query: string, limit = 10, queryEmbedding?: number[], scope?: SearchScope) {
     const safeQuery = normalizeQueryForFts(query);
     const textRows = safeQuery
       ? (this.db
@@ -1168,7 +1377,7 @@ export class OpenFolioDatabase {
             ORDER BY textScore
             LIMIT ?
           `)
-          .all(safeQuery, limit * 3) as Array<Record<string, unknown>>)
+          .all(safeQuery, limit * 8) as Array<Record<string, unknown>>)
       : [];
 
     const escapedQuery = query.replace(/[%_]/g, (char) => `\\${char}`);
@@ -1180,7 +1389,7 @@ export class OpenFolioDatabase {
             WHERE title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'
             LIMIT ?
           `)
-          .all(`%${escapedQuery}%`, `%${escapedQuery}%`, limit * 3) as Array<Record<string, unknown>>)
+          .all(`%${escapedQuery}%`, `%${escapedQuery}%`, limit * 8) as Array<Record<string, unknown>>)
       : textRows;
 
     const semanticRows = queryEmbedding
@@ -1219,7 +1428,10 @@ export class OpenFolioDatabase {
       } satisfies SearchResult;
     });
 
-    return ranked.sort((left, right) => right.score - left.score).slice(0, limit);
+    return ranked
+      .sort((left, right) => right.score - left.score)
+      .filter((result) => this.resultMatchesScope(result, scope))
+      .slice(0, limit);
   }
 
   getEmbeddingSyncStatus() {
@@ -1372,6 +1584,59 @@ export class OpenFolioDatabase {
     };
   }
 
+  private getMessageAttachments(messageIds: string[]) {
+    if (messageIds.length === 0) {
+      return new Map<string, MessageAttachment[]>();
+    }
+
+    const placeholders = messageIds.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(`
+        SELECT
+          id,
+          message_id AS messageId,
+          path,
+          mime_type AS mimeType,
+          transfer_name AS transferName
+        FROM attachment_refs
+        WHERE message_id IN (${placeholders})
+        ORDER BY id ASC
+      `)
+      .all(...messageIds) as Array<Record<string, unknown>>;
+
+    const attachments = new Map<string, MessageAttachment[]>();
+    for (const row of rows) {
+      const messageId = String(row.messageId);
+      const list = attachments.get(messageId) ?? [];
+      list.push({
+        id: String(row.id),
+        path: (row.path as string | null) ?? null,
+        mimeType: (row.mimeType as string | null) ?? null,
+        transferName: (row.transferName as string | null) ?? null,
+      });
+      attachments.set(messageId, list);
+    }
+
+    return attachments;
+  }
+
+  private mapMessageRows(rows: Array<Record<string, unknown>>): MessageDetail[] {
+    const attachments = this.getMessageAttachments(rows.map((row) => String(row.id)));
+    return rows.map((row) => {
+      const id = String(row.id);
+      return {
+        id,
+        threadId: String(row.threadId),
+        personId: (row.personId as string | null) ?? null,
+        body: (row.body as string | null) ?? null,
+        occurredAt: Number(row.occurredAt),
+        isFromMe: Boolean(row.isFromMe),
+        hasAttachments: Boolean(row.hasAttachments),
+        attachments: attachments.get(id) ?? [],
+      };
+    });
+  }
+
   getThreadMessages(threadId: string, limit = 50, offset = 0, aroundMessageId?: string | null) {
     let resolvedOffset = offset;
     if (aroundMessageId) {
@@ -1392,7 +1657,7 @@ export class OpenFolioDatabase {
       }
     }
 
-    return this.db
+    const rows = this.db
       .prepare(`
         SELECT
           mm.id, mm.thread_id AS threadId, mm.person_id AS personId,
@@ -1403,15 +1668,9 @@ export class OpenFolioDatabase {
         ORDER BY mm.occurred_at DESC, mm.id DESC
         LIMIT ? OFFSET ?
       `)
-      .all(threadId, limit, resolvedOffset) as Array<{
-        id: string;
-        threadId: string;
-        personId: string | null;
-        body: string | null;
-        occurredAt: number;
-        isFromMe: number;
-        hasAttachments: number;
-      }>;
+      .all(threadId, limit, resolvedOffset) as Array<Record<string, unknown>>;
+
+    return this.mapMessageRows(rows);
   }
 
   listThreadsPaginated(limit = 50, offset = 0) {
@@ -1457,10 +1716,14 @@ export class OpenFolioDatabase {
               source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
             FROM people
             WHERE display_name LIKE ? OR primary_handle LIKE ? OR email LIKE ? OR phone LIKE ?
+              OR EXISTS (
+                SELECT 1 FROM person_aliases pa
+                WHERE pa.person_id = people.id AND pa.value LIKE ?
+              )
             ORDER BY updated_at DESC
             LIMIT ?
           `)
-          .all(`%${filter}%`, `%${filter}%`, `%${filter}%`, `%${filter}%`, limit)
+          .all(`%${filter}%`, `%${filter}%`, `%${filter}%`, `%${filter}%`, `%${filter}%`, limit)
       : this.db
           .prepare(`
             SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
@@ -1509,7 +1772,7 @@ export class OpenFolioDatabase {
   }
 
   getPersonRecentMessages(personId: string, limit = 20): MessageDetail[] {
-    return this.db
+    const rows = this.db
       .prepare(`
         SELECT
           mm.id, mm.thread_id AS threadId, mm.person_id AS personId,
@@ -1530,31 +1793,132 @@ export class OpenFolioDatabase {
         ORDER BY mm.occurred_at DESC
         LIMIT ?
       `)
-      .all(personId, personId, limit)
-      .map((row) => {
-        const item = row as Record<string, unknown>;
-        return {
-          id: String(item.id),
-          threadId: String(item.threadId),
-          personId: (item.personId as string | null) ?? null,
-          body: (item.body as string | null) ?? null,
-          occurredAt: Number(item.occurredAt),
-          isFromMe: Boolean(item.isFromMe),
-          hasAttachments: Boolean(item.hasAttachments),
-        };
-      });
+      .all(personId, personId, limit) as Array<Record<string, unknown>>;
+
+    return this.mapMessageRows(rows);
+  }
+
+  searchPersonMessages(personId: string, query = "", limit = 25, offset = 0): MessageDetail[] {
+    const filter = query.trim();
+    const escaped = filter.replace(/[%_]/g, (char) => `\\${char}`);
+    const params: Array<string | number> = [personId, personId];
+    let bodyFilter = "";
+    if (filter) {
+      bodyFilter = "AND mm.body LIKE ? ESCAPE '\\'";
+      params.push(`%${escaped}%`);
+    }
+    params.push(limit, offset);
+
+    const rows = this.db
+      .prepare(`
+        SELECT
+          mm.id, mm.thread_id AS threadId, mm.person_id AS personId,
+          mm.body, mm.occurred_at AS occurredAt, mm.is_from_me AS isFromMe,
+          mm.has_attachments AS hasAttachments
+        FROM message_messages mm
+        WHERE mm.body IS NOT NULL
+          AND (
+            mm.person_id = ?
+            OR (
+              mm.is_from_me = 1
+              AND EXISTS (
+                SELECT 1 FROM message_participants mp
+                WHERE mp.thread_id = mm.thread_id AND mp.person_id = ?
+              )
+            )
+          )
+          ${bodyFilter}
+        ORDER BY mm.occurred_at DESC, mm.id DESC
+        LIMIT ? OFFSET ?
+      `)
+      .all(...params) as Array<Record<string, unknown>>;
+
+    return this.mapMessageRows(rows);
   }
 
   getPersonNotes(personId: string): Note[] {
-    return (this.db
-      .prepare("SELECT id, entity_type AS entityType, entity_id AS entityId, content, created_at AS createdAt FROM notes WHERE entity_type = 'person' AND entity_id = ? ORDER BY created_at DESC")
-      .all(personId) as unknown) as Note[];
+    const rows = this.db
+      .prepare(`
+        SELECT
+          id,
+          entity_type AS entityType,
+          entity_id AS entityId,
+          content,
+          pinned,
+          pinned_at AS pinnedAt,
+          created_at AS createdAt
+        FROM notes
+        WHERE entity_type = 'person' AND entity_id = ?
+        ORDER BY pinned DESC, COALESCE(pinned_at, created_at) DESC, created_at DESC
+      `)
+      .all(personId) as Array<Record<string, unknown>>;
+    return rows.map(mapNote);
   }
 
   getPersonReminders(personId: string): Reminder[] {
-    return (this.db
-      .prepare("SELECT id, title, person_id AS personId, due_at AS dueAt, status, created_at AS createdAt FROM reminders WHERE person_id = ? ORDER BY created_at DESC")
-      .all(personId) as unknown) as Reminder[];
+    const rows = this.db
+      .prepare("SELECT id, title, person_id AS personId, due_at AS dueAt, status, created_at AS createdAt FROM reminders WHERE person_id = ? ORDER BY status ASC, created_at DESC")
+      .all(personId) as Array<Record<string, unknown>>;
+    return rows.map(mapReminder);
+  }
+
+  getNote(noteId: string): Note | null {
+    const row = this.db
+      .prepare(`
+        SELECT id, entity_type AS entityType, entity_id AS entityId, content, pinned, pinned_at AS pinnedAt, created_at AS createdAt
+        FROM notes
+        WHERE id = ?
+      `)
+      .get(noteId) as Record<string, unknown> | undefined;
+    return row ? mapNote(row) : null;
+  }
+
+  setNotePinned(noteId: string, pinned: boolean): Note | null {
+    this.db
+      .prepare("UPDATE notes SET pinned = ?, pinned_at = ? WHERE id = ?")
+      .run(pinned ? 1 : 0, pinned ? now() : null, noteId);
+    return this.getNote(noteId);
+  }
+
+  getReminder(reminderId: string): Reminder | null {
+    const row = this.db
+      .prepare("SELECT id, title, person_id AS personId, due_at AS dueAt, status, created_at AS createdAt FROM reminders WHERE id = ?")
+      .get(reminderId) as Record<string, unknown> | undefined;
+    return row ? mapReminder(row) : null;
+  }
+
+  updateReminderStatus(reminderId: string, status: Reminder["status"]): Reminder | null {
+    this.db
+      .prepare("UPDATE reminders SET status = ? WHERE id = ?")
+      .run(status, reminderId);
+    return this.getReminder(reminderId);
+  }
+
+  private relationshipSummary(stats: PersonProfile["stats"], digest: RelationshipDigest): PersonProfile["summary"] {
+    const total = stats?.totalMessages ?? digest.messageCount;
+    const cadenceLabel = total > 0 && stats?.firstMessageAt && stats.lastMessageAt
+      ? (() => {
+          const spanDays = Math.max(1, Math.ceil((stats.lastMessageAt - stats.firstMessageAt) / 86_400_000));
+          const messagesPerWeek = total / Math.max(1, spanDays / 7);
+          if (messagesPerWeek >= 10) return "High cadence";
+          if (messagesPerWeek >= 2) return "Regular cadence";
+          return "Occasional cadence";
+        })()
+      : "No cadence yet";
+    const sentReceivedLabel = stats
+      ? `${stats.sentByMe} sent / ${stats.sentByThem} received`
+      : "No message balance yet";
+    const responseLabel = stats?.avgResponseTimeMs
+      ? `Typical response ${Math.round(stats.avgResponseTimeMs / 60_000)} min`
+      : "Response signal unavailable";
+
+    return {
+      firstContactAt: stats?.firstMessageAt ?? null,
+      lastContactAt: stats?.lastMessageAt ?? digest.lastContactAt,
+      cadenceLabel,
+      sentReceivedLabel,
+      responseLabel,
+    };
   }
 
   getPersonProfile(personId: string, stats: PersonProfile["stats"] = null): PersonProfile | null {
@@ -1566,8 +1930,10 @@ export class OpenFolioDatabase {
 
     return {
       person,
+      aliases: this.getPersonAliases(personId),
       digest,
       stats,
+      summary: this.relationshipSummary(stats, digest),
       threads: this.getPersonThreads(personId, 12),
       recentMessages: this.getPersonRecentMessages(personId, 25),
       notes: this.getPersonNotes(personId),

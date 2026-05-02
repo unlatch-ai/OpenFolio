@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { MessageDetail, SearchResult, SearchScaleStatus } from "@openfolio/shared-types";
+import type { MessageDetail, Note, Reminder, SearchResult, SearchScaleStatus } from "@openfolio/shared-types";
 import { getImportPrimaryAction, isImportTerminal } from "../src/renderer/import-jobs";
-import { filterPersonMessages } from "../src/renderer/people-profile";
-import { describeSearchScale, groupSearchResults } from "../src/renderer/search-results";
+import {
+  filterPersonMessages,
+  formatAliasLabel,
+  getReminderStatusLabel,
+  getReminderToggleLabel,
+  orderProfileNotes,
+} from "../src/renderer/people-profile";
+import { describeSearchScale, formatCitationMeta, groupSearchResults } from "../src/renderer/search-results";
 
 describe("renderer workflow helpers", () => {
   it("chooses import retry and cancel actions from concrete job state", () => {
@@ -60,8 +66,8 @@ describe("renderer workflow helpers", () => {
 
   it("filters person messages case-insensitively without matching attachments", () => {
     const messages = [
-      { id: "1", threadId: "t", personId: "p", body: "Met at the salon", occurredAt: 1, isFromMe: false, hasAttachments: false },
-      { id: "2", threadId: "t", personId: "p", body: null, occurredAt: 2, isFromMe: false, hasAttachments: true },
+      { id: "1", threadId: "t", personId: "p", body: "Met at the salon", occurredAt: 1, isFromMe: false, hasAttachments: false, attachments: [] },
+      { id: "2", threadId: "t", personId: "p", body: null, occurredAt: 2, isFromMe: false, hasAttachments: true, attachments: [] },
     ] satisfies MessageDetail[];
 
     expect(filterPersonMessages(messages, "SALON")).toEqual([messages[0]]);
@@ -79,5 +85,40 @@ describe("renderer workflow helpers", () => {
     } satisfies SearchScaleStatus;
 
     expect(describeSearchScale(status)).toContain("Run the local benchmark");
+  });
+
+  it("orders pinned notes before unpinned notes", () => {
+    const notes = [
+      { id: "old", entityType: "person", entityId: "p", content: "old", pinned: false, pinnedAt: null, createdAt: 10 },
+      { id: "pin", entityType: "person", entityId: "p", content: "pin", pinned: true, pinnedAt: 5, createdAt: 5 },
+      { id: "new", entityType: "person", entityId: "p", content: "new", pinned: false, pinnedAt: null, createdAt: 20 },
+    ] satisfies Note[];
+
+    expect(orderProfileNotes(notes).map((note) => note.id)).toEqual(["pin", "new", "old"]);
+  });
+
+  it("formats alias and reminder labels for profile controls", () => {
+    const reminder = { status: "open" } satisfies Pick<Reminder, "status">;
+
+    expect(formatAliasLabel({ value: "Ada L.", kind: "name" })).toBe("Name: Ada L.");
+    expect(getReminderStatusLabel(reminder)).toBe("Open");
+    expect(getReminderToggleLabel(reminder)).toBe("Done");
+  });
+
+  it("formats richer Ask citation metadata", () => {
+    const result = {
+      id: "doc",
+      kind: "message",
+      entityId: "m",
+      title: "Message",
+      snippet: "hello",
+      score: 1,
+      sourceLabel: "Ada",
+      occurredAt: new Date("2026-05-01T12:00:00Z").getTime(),
+    } satisfies SearchResult;
+
+    expect(formatCitationMeta(result)).toContain("message");
+    expect(formatCitationMeta(result)).toContain("Ada");
+    expect(formatCitationMeta(result)).toContain("2026");
   });
 });

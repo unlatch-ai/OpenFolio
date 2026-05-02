@@ -1,6 +1,8 @@
 import type {
   AskResponse,
+  AskRunInput,
   ConnectorSyncResult,
+  EditablePersonProfile,
   MessagesAccessStatus,
   MessagesImportJob,
   ReminderSuggestion,
@@ -88,18 +90,24 @@ export class OpenFolioCore {
     return this.startMessagesImport();
   }
 
-  async search(text: string, limit = 10): Promise<SearchResult[]> {
+  async search(text: string, limit = 10, scope?: Pick<AskRunInput, "personId" | "threadId" | "sourceScope">): Promise<SearchResult[]> {
     const embedding = await this.ai.embed(text);
-    return this.db.search(text, limit, embedding ?? undefined);
+    return this.db.search(text, limit, embedding ?? undefined, scope);
   }
 
   getSearchScaleStatus(options?: { vectorScanWarningThreshold?: number }) {
     return this.db.getSearchScaleStatus(options);
   }
 
-  async ask(query: string): Promise<AskResponse> {
-    const results = await this.search(query, 8);
-    return this.ai.answer(query, results);
+  async ask(input: string | AskRunInput): Promise<AskResponse> {
+    const request = typeof input === "string" ? { query: input, sourceScope: "all" as const } : input;
+    const sourceScope = request.sourceScope ?? "all";
+    const results = await this.search(request.query, 8, {
+      sourceScope,
+      personId: request.personId,
+      threadId: request.threadId,
+    });
+    return this.ai.answer(request.query, results, sourceScope);
   }
 
   getPerson(personId: string) {
@@ -115,6 +123,22 @@ export class OpenFolioCore {
     return note;
   }
 
+  pinNote(noteId: string) {
+    const note = this.db.setNotePinned(noteId, true);
+    if (note) {
+      this.db.refreshSearchDocuments({ notes: [note.id], people: note.entityType === "person" ? [note.entityId] : [] });
+    }
+    return note;
+  }
+
+  unpinNote(noteId: string) {
+    const note = this.db.setNotePinned(noteId, false);
+    if (note) {
+      this.db.refreshSearchDocuments({ notes: [note.id], people: note.entityType === "person" ? [note.entityId] : [] });
+    }
+    return note;
+  }
+
   addReminder(title: string, personId: string | null, dueAt: number | null) {
     const reminder = this.db.createReminder(title, personId, dueAt);
     this.db.refreshSearchDocuments({
@@ -124,6 +148,17 @@ export class OpenFolioCore {
     void this.queueEmbeddingSync().catch((error) => {
       console.error("[openfolio-core] Background embedding sync failed:", error);
     });
+    return reminder;
+  }
+
+  updateReminderStatus(reminderId: string, status: "open" | "done") {
+    const reminder = this.db.updateReminderStatus(reminderId, status);
+    if (reminder) {
+      this.db.refreshSearchDocuments({
+        reminders: [reminder.id],
+        people: reminder.personId ? [reminder.personId] : [],
+      });
+    }
     return reminder;
   }
 
@@ -212,6 +247,37 @@ export class OpenFolioCore {
     return this.db.getPersonProfile(personId, this.analytics.getRelationshipStats(personId));
   }
 
+  updatePersonProfile(personId: string, profile: EditablePersonProfile) {
+    const person = this.db.updatePersonProfile(personId, profile);
+    if (!person) return null;
+    this.db.refreshSearchDocuments({ people: [personId] });
+    void this.queueEmbeddingSync().catch((error) => {
+      console.error("[openfolio-core] Background embedding sync failed:", error);
+    });
+    return this.getPersonProfile(personId);
+  }
+
+  addPersonAlias(personId: string, value: string, kind?: "handle" | "name" | "other") {
+    const alias = this.db.addPersonAlias(personId, value, kind ?? "other");
+    this.db.refreshSearchDocuments({ people: [personId] });
+    void this.queueEmbeddingSync().catch((error) => {
+      console.error("[openfolio-core] Background embedding sync failed:", error);
+    });
+    return alias;
+  }
+
+  deletePersonAlias(aliasId: string) {
+    const personId = this.db.deletePersonAlias(aliasId);
+    if (personId) {
+      this.db.refreshSearchDocuments({ people: [personId] });
+    }
+    return { ok: Boolean(personId) };
+  }
+
+  searchPersonMessages(personId: string, query?: string, limit = 25, offset = 0) {
+    return this.db.searchPersonMessages(personId, query ?? "", limit, offset);
+  }
+
   listPeople(limit = 100, query?: string) {
     return this.db.listPeopleForPicker(limit, query);
   }
@@ -260,8 +326,13 @@ export class OpenFolioCore {
     return this.db.getThreadDetail(threadId);
   }
 
-  getThreadMessages(threadId: string, limit = 50, offset = 0, aroundMessageId?: string | null) {
-    return this.db.getThreadMessages(threadId, limit, offset, aroundMessageId);
+  getThreadMessages(threadId: string, limit = 50, offset = 0, aroundMessageId?: string | null, direction?: "older" | "newer") {
+    const resolvedOffset = direction === "older"
+      ? offset + limit
+      : direction === "newer"
+        ? Math.max(0, offset - limit)
+        : offset;
+    return this.db.getThreadMessages(threadId, limit, resolvedOffset, aroundMessageId);
   }
 
   listThreadsPaginated(limit = 50, offset = 0) {
