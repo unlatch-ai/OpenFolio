@@ -26,6 +26,8 @@ function StepIcon({ step }: { step: OnboardingStep }) {
 }
 
 function StepRow({ step, active, onAction, busy }: { step: OnboardingStep; active: boolean; onAction: () => void; busy: boolean }) {
+  const showAction = step.actionLabel && step.status !== "waiting" && (step.status !== "blocked" || step.id === "contacts");
+
   return (
     <div className={`setup-step ${active ? "active" : ""} ${step.status}`}>
       <div className="setup-step-icon">
@@ -38,7 +40,7 @@ function StepRow({ step, active, onAction, busy }: { step: OnboardingStep; activ
         </div>
         <p>{step.description}</p>
       </div>
-      {step.actionLabel && step.status !== "blocked" && step.status !== "waiting" && (
+      {showAction && (
         <Button size="xs" variant={step.status === "complete" ? "secondary" : "default"} onClick={onAction} disabled={busy}>
           {step.status === "running" ? <RefreshCw size={12} className="animate-spin" /> : null}
           {step.actionLabel}

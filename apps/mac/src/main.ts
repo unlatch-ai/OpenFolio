@@ -24,6 +24,7 @@ import type {
 } from "@openfolio/shared-types";
 import { LocalMcpController } from "@openfolio/mcp";
 import { exportAppleContacts, getContactsAccessStatus, requestContactsAccess } from "./contacts";
+import { withContactsAccessGuidance } from "./contacts-guidance";
 import {
   getMessagesAccessTarget as resolveMessagesAccessTarget,
   withMessagesAccessGuidance,
@@ -209,17 +210,6 @@ async function deleteConnectorCredential(input: { provider: ConnectorCredential[
   const remaining = readConnectorAccounts().filter((account) => !(account.provider === input.provider && account.accountId === input.accountId));
   writeConnectorAccounts(remaining);
   return { ok: true };
-}
-
-function withContactsAccessGuidance(status: ContactsAccessStatus): ContactsAccessStatus {
-  if (status.status !== "denied") {
-    return status;
-  }
-
-  return {
-    ...status,
-    details: `${status.details} Open System Settings > Privacy & Security > Contacts and enable OpenFolio, then retry the sync.`,
-  };
 }
 
 function focusWindow() {

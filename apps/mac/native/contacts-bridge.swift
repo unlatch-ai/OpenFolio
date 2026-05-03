@@ -156,24 +156,34 @@ struct ContactsBridge {
     return contacts
   }
 
-  static func writeJSON<T: Encodable>(_ value: T) throws {
+  static func writeJSON<T: Encodable>(_ value: T, to outputPath: String?) throws {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.withoutEscapingSlashes]
     let data = try encoder.encode(value)
+    if let outputPath {
+      try data.write(to: URL(fileURLWithPath: outputPath), options: [.atomic])
+      return
+    }
+
     FileHandle.standardOutput.write(data)
   }
 }
 
-let command = CommandLine.arguments.dropFirst().first ?? "status"
+let arguments = Array(CommandLine.arguments.dropFirst())
+let command = arguments.first ?? "status"
+let outputPath = arguments.firstIndex(of: "--output").flatMap { index -> String? in
+  let nextIndex = arguments.index(after: index)
+  return nextIndex < arguments.endIndex ? arguments[nextIndex] : nil
+}
 
 do {
   switch command {
   case "status":
-    try ContactsBridge.writeJSON(ContactsBridge.currentPermissionStatus())
+    try ContactsBridge.writeJSON(ContactsBridge.currentPermissionStatus(), to: outputPath)
   case "request":
-    try ContactsBridge.writeJSON(ContactsBridge.requestPermission())
+    try ContactsBridge.writeJSON(ContactsBridge.requestPermission(), to: outputPath)
   case "export":
-    try ContactsBridge.writeJSON(ExportPayload(contacts: try ContactsBridge.exportContacts()))
+    try ContactsBridge.writeJSON(ExportPayload(contacts: try ContactsBridge.exportContacts()), to: outputPath)
   default:
     fputs("Unknown command: \(command)\n", stderr)
     exit(2)
