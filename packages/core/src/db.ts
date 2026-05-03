@@ -144,46 +144,96 @@ export class OpenFolioDatabase {
     this.dbPath = dbPath;
     this.db = new DatabaseSync(dbPath);
     this.db.exec("PRAGMA journal_mode = WAL;");
-    this.resetIncompatibleSchema();
+    this.migrateSchema();
     this.bootstrap();
   }
 
-  private resetIncompatibleSchema() {
+  private migrateSchema() {
     const version = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
     const hasExistingTables = (this.db
       .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
       .get() as { count: number }).count > 0;
 
-    if (!hasExistingTables || version.user_version === CURRENT_SCHEMA_VERSION) {
+    if (!hasExistingTables) {
       return;
     }
 
+    if (version.user_version > CURRENT_SCHEMA_VERSION) {
+      throw new Error(
+        `This OpenFolio database was created by a newer version and uses schema ${version.user_version}. This app only supports schema ${CURRENT_SCHEMA_VERSION}. Update OpenFolio before opening this database.`,
+      );
+    }
+
+    if (version.user_version === CURRENT_SCHEMA_VERSION) {
+      return;
+    }
+
+    this.backupBeforeMigration(version.user_version);
+    this.runMigrations(version.user_version, CURRENT_SCHEMA_VERSION);
+  }
+
+  private backupBeforeMigration(fromVersion: number) {
+    this.db.exec("PRAGMA wal_checkpoint(FULL);");
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupDir = path.join(path.dirname(this.dbPath), "backups");
+    fs.mkdirSync(backupDir, { recursive: true });
+
+    const baseName = path.basename(this.dbPath);
+    const backupBasePath = path.join(backupDir, `${baseName}.before-schema-${fromVersion}-to-${CURRENT_SCHEMA_VERSION}.${timestamp}`);
+    for (const suffix of ["", "-wal", "-shm"]) {
+      const sourcePath = `${this.dbPath}${suffix}`;
+      if (fs.existsSync(sourcePath)) {
+        fs.copyFileSync(sourcePath, `${backupBasePath}${suffix}`);
+      }
+    }
+  }
+
+  private runMigrations(fromVersion: number, toVersion: number) {
+    let currentVersion = fromVersion;
+    this.db.exec("BEGIN;");
+    try {
+      while (currentVersion < toVersion) {
+        const nextVersion = currentVersion + 1;
+        this.runMigrationStep(currentVersion, nextVersion);
+        currentVersion = nextVersion;
+      }
+      this.db.exec(`PRAGMA user_version = ${toVersion};`);
+      this.db.exec("COMMIT;");
+    } catch (error) {
+      this.db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  private runMigrationStep(fromVersion: number, toVersion: number) {
+    if (toVersion <= CURRENT_SCHEMA_VERSION) {
+      this.resetDerivedSearchState();
+      return;
+    }
+
+    throw new Error(`No OpenFolio migration is available from schema ${fromVersion} to ${toVersion}.`);
+  }
+
+  private resetDerivedSearchState() {
     this.db.exec(`
       PRAGMA foreign_keys = OFF;
       DROP TRIGGER IF EXISTS search_documents_ai;
       DROP TRIGGER IF EXISTS search_documents_ad;
       DROP TRIGGER IF EXISTS search_documents_au;
       DROP TABLE IF EXISTS search_documents_fts;
-      DROP TABLE IF EXISTS search_documents;
-      DROP TABLE IF EXISTS attachment_refs;
-      DROP TABLE IF EXISTS message_messages;
-      DROP TABLE IF EXISTS message_participants;
-      DROP TABLE IF EXISTS message_threads;
-      DROP TABLE IF EXISTS reminders;
-      DROP TABLE IF EXISTS notes;
-      DROP TABLE IF EXISTS person_aliases;
-      DROP TABLE IF EXISTS tags;
-      DROP TABLE IF EXISTS group_members;
-      DROP TABLE IF EXISTS groups;
-      DROP TABLE IF EXISTS interactions;
-      DROP TABLE IF EXISTS companies;
-      DROP TABLE IF EXISTS people;
-      DROP TABLE IF EXISTS source_item_refs;
-      DROP TABLE IF EXISTS ingestion_cursors;
-      DROP TABLE IF EXISTS source_accounts;
-      DROP TABLE IF EXISTS settings;
       PRAGMA foreign_keys = ON;
     `);
+    if (this.tableExists("search_documents")) {
+      this.db.exec("DELETE FROM search_documents;");
+    }
+  }
+
+  private tableExists(tableName: string) {
+    const row = this.db
+      .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(tableName) as { count: number };
+    return row.count > 0;
   }
 
   bootstrap() {

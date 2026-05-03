@@ -90,6 +90,16 @@ function seedLegacyLocalDb(localDbPath: string) {
   db.close();
 }
 
+function seedFutureLocalDb(localDbPath: string) {
+  const db = new DatabaseSync(localDbPath);
+  db.exec(`
+    PRAGMA user_version = 999;
+    CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    INSERT INTO settings(key, value) VALUES ('future', 'keep');
+  `);
+  db.close();
+}
+
 describe("OpenFolioCore", () => {
   let dbPath: string;
   let chatDbPath: string;
@@ -121,12 +131,25 @@ describe("OpenFolioCore", () => {
     expect(messageHit?.messageId).toBeTruthy();
   });
 
-  it("fully resets derived local tables during incompatible schema cutover", () => {
+  it("backs up and preserves durable local data during schema migration", () => {
     seedLegacyLocalDb(dbPath);
     const core = new OpenFolioCore({ dbPath });
 
-    expect(core.db.getSetting("legacy")).toBeNull();
+    expect(core.db.getSetting("legacy")).toBe("stale");
     expect(core.db.query<{ count: number }>("SELECT COUNT(*) AS count FROM search_documents")[0]?.count).toBe(0);
+
+    const backupDir = path.join(path.dirname(dbPath), "backups");
+    expect(fs.readdirSync(backupDir).some((entry) => entry.includes("before-schema-2-to-3"))).toBe(true);
+  });
+
+  it("refuses to open a database from a newer schema without resetting it", () => {
+    seedFutureLocalDb(dbPath);
+
+    expect(() => new OpenFolioCore({ dbPath })).toThrow(/newer version/i);
+
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    expect((db.prepare("SELECT value FROM settings WHERE key = 'future'").get() as { value: string }).value).toBe("keep");
+    db.close();
   });
 
   it("imports only the delta on the next Messages sync", async () => {

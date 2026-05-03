@@ -39,7 +39,7 @@ export class OpenFolioUpdater {
     }
 
     autoUpdater.autoDownload = true;
-    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.autoInstallOnAppQuit = false;
 
     autoUpdater.on("checking-for-update", () => {
       this.log("checking-for-update");
@@ -176,7 +176,7 @@ export class OpenFolioUpdater {
       cancelId: 0,
       title: "Update Ready",
       message: `A new version of OpenFolio is available.`,
-      detail: `OpenFolio ${event.version} has finished downloading. Choose Update to quit and install it now.`,
+      detail: `OpenFolio ${event.version} has finished downloading. Choose Update to quit and install it now. OpenFolio only installs downloaded updates after you confirm.`,
     };
     const result = window
       ? await dialog.showMessageBox(window, options)
