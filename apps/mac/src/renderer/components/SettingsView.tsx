@@ -9,6 +9,7 @@ import { useTheme } from "@/lib/use-theme";
 import { useAppStore } from "../store";
 import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
 import { describeSearchScale } from "../search-results";
+import { getAppVersionLabel, getUpdateStatusLabel } from "../update-labels";
 
 export function SettingsView() {
   const { theme, setTheme } = useTheme();
@@ -25,6 +26,7 @@ export function SettingsView() {
     setContactsStatus,
     setContactsSync,
     setImportJob,
+    setUpdateState,
     setBusy,
     setThreads,
   } = useAppStore();
@@ -380,14 +382,20 @@ export function SettingsView() {
           <h3 className="settings-group-title">About</h3>
           <div className="settings-row">
             <div className="settings-row-info">
+              <p className="settings-row-label">Version</p>
+              <p className="settings-row-detail">{getAppVersionLabel(updateState)}</p>
+            </div>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
               <p className="settings-row-label">App Updates</p>
               <p className="settings-row-detail">
-                {useAppStore.getState().updateState?.message || "Checks for updates via GitHub Releases."}
+                {updateState?.message || "Checks for updates via GitHub Releases."}
               </p>
             </div>
             <div className="settings-row-actions">
-              <Badge variant={useAppStore.getState().updateState?.status === "downloaded" ? "success" : "secondary"}>
-                {useAppStore.getState().updateState?.status || "idle"}
+              <Badge variant={updateState?.status === "downloaded" ? "success" : "secondary"}>
+                {getUpdateStatusLabel(updateState)}
               </Badge>
               <Button
                 variant="secondary"
@@ -395,7 +403,7 @@ export function SettingsView() {
                 onClick={async () => {
                   try {
                     const s = await window.openfolio.updates.checkNow();
-                    useAppStore.getState().setUpdateState(s);
+                    setUpdateState(s);
                   } catch (e) {
                     toast.error(e instanceof Error ? e.message : "Failed to check.");
                   }
@@ -403,7 +411,7 @@ export function SettingsView() {
               >
                 Check
               </Button>
-              {useAppStore.getState().updateState?.status === "downloaded" && (
+              {updateState?.status === "downloaded" && (
                 <Button
                   size="xs"
                   onClick={async () => {

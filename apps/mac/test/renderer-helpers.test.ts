@@ -9,6 +9,7 @@ import {
   orderProfileNotes,
 } from "../src/renderer/people-profile";
 import { describeSearchScale, formatCitationMeta, groupSearchResults } from "../src/renderer/search-results";
+import { getAppVersionLabel, getUpdateStatusLabel } from "../src/renderer/update-labels";
 
 describe("renderer workflow helpers", () => {
   it("chooses import retry and cancel actions from concrete job state", () => {
@@ -120,5 +121,27 @@ describe("renderer workflow helpers", () => {
     expect(formatCitationMeta(result)).toContain("message");
     expect(formatCitationMeta(result)).toContain("Ada");
     expect(formatCitationMeta(result)).toContain("2026");
+  });
+
+  it("formats updater state for Settings without leaking raw status values", () => {
+    expect(getUpdateStatusLabel(null)).toBe("Not checked");
+    expect(getUpdateStatusLabel({
+      status: "not-available",
+      currentVersion: "0.3.1",
+      availableVersion: null,
+      downloadedVersion: null,
+      progress: null,
+      message: "You are on the latest version of OpenFolio.",
+      checkedAt: 1,
+    })).toBe("Up to date");
+    expect(getAppVersionLabel({
+      status: "idle",
+      currentVersion: "0.3.1",
+      availableVersion: null,
+      downloadedVersion: null,
+      progress: null,
+      message: null,
+      checkedAt: null,
+    })).toBe("OpenFolio 0.3.1");
   });
 });
