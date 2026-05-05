@@ -23,6 +23,7 @@ build
 dist
 apps/mac/bin/OpenFolioPermissionGuide.app/
 apps/mac/bin/OpenFolio Setup.app/
+apps/mac/bin/OpenFolio Contacts.app/
 
 # misc
 .DS_Store

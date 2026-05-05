@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import type { AiSettingsStatus, EmbeddingSyncStatus, McpSetupStatus, SearchScaleStatus } from "@openfolio/shared-types";
-import { Copy, Download, KeyRound, RefreshCw } from "lucide-react";
+import type { AiSettingsStatus, EmbeddingSyncStatus, LocalDataStatus, McpSetupStatus, SearchScaleStatus } from "@openfolio/shared-types";
+import { Copy, Download, FolderOpen, KeyRound, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -8,7 +8,9 @@ import { Switch } from "./ui/switch";
 import { useTheme } from "@/lib/use-theme";
 import { useAppStore } from "../store";
 import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
+import { getBackupSummaryLabel, getPathLabel } from "../local-data-labels";
 import { describeSearchScale } from "../search-results";
+import { getAppVersionLabel, getUpdateStatusLabel } from "../update-labels";
 
 export function SettingsView() {
   const { theme, setTheme } = useTheme();
@@ -25,6 +27,7 @@ export function SettingsView() {
     setContactsStatus,
     setContactsSync,
     setImportJob,
+    setUpdateState,
     setBusy,
     setThreads,
   } = useAppStore();
@@ -35,6 +38,7 @@ export function SettingsView() {
   const [mcpSetup, setMcpSetup] = useState<McpSetupStatus | null>(null);
   const [embeddingSync, setEmbeddingSync] = useState<EmbeddingSyncStatus | null>(null);
   const [searchScale, setSearchScale] = useState<SearchScaleStatus | null>(null);
+  const [localData, setLocalData] = useState<LocalDataStatus | null>(null);
 
   useEffect(() => {
     void window.openfolio.ai.getSettings().then((settings) => {
@@ -44,6 +48,7 @@ export function SettingsView() {
     void window.openfolio.mcp.getSetup().then(setMcpSetup);
     void window.openfolio.embeddings.getSyncStatus().then(setEmbeddingSync);
     void window.openfolio.search.getScaleStatus().then(setSearchScale);
+    void window.openfolio.localData.getStatus().then(setLocalData);
   }, []);
 
   const runImport = useCallback(async () => {
@@ -380,14 +385,20 @@ export function SettingsView() {
           <h3 className="settings-group-title">About</h3>
           <div className="settings-row">
             <div className="settings-row-info">
+              <p className="settings-row-label">Version</p>
+              <p className="settings-row-detail">{getAppVersionLabel(updateState)}</p>
+            </div>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
               <p className="settings-row-label">App Updates</p>
               <p className="settings-row-detail">
-                {useAppStore.getState().updateState?.message || "Checks for updates via GitHub Releases."}
+                {updateState?.message || "Checks for updates via GitHub Releases."}
               </p>
             </div>
             <div className="settings-row-actions">
-              <Badge variant={useAppStore.getState().updateState?.status === "downloaded" ? "success" : "secondary"}>
-                {useAppStore.getState().updateState?.status || "idle"}
+              <Badge variant={updateState?.status === "downloaded" ? "success" : "secondary"}>
+                {getUpdateStatusLabel(updateState)}
               </Badge>
               <Button
                 variant="secondary"
@@ -395,7 +406,7 @@ export function SettingsView() {
                 onClick={async () => {
                   try {
                     const s = await window.openfolio.updates.checkNow();
-                    useAppStore.getState().setUpdateState(s);
+                    setUpdateState(s);
                   } catch (e) {
                     toast.error(e instanceof Error ? e.message : "Failed to check.");
                   }
@@ -403,7 +414,7 @@ export function SettingsView() {
               >
                 Check
               </Button>
-              {useAppStore.getState().updateState?.status === "downloaded" && (
+              {updateState?.status === "downloaded" && (
                 <Button
                   size="xs"
                   onClick={async () => {
@@ -415,6 +426,58 @@ export function SettingsView() {
                   Install
                 </Button>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* Local Data */}
+        <div className="settings-group">
+          <h3 className="settings-group-title">Local Data</h3>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Database</p>
+              <p className="settings-row-detail">{getPathLabel(localData?.databasePath)}</p>
+            </div>
+            <div className="settings-row-actions">
+              <Button
+                variant="secondary"
+                size="xs"
+                onClick={async () => {
+                  try {
+                    await window.openfolio.localData.revealDatabase();
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Could not reveal database.");
+                  }
+                }}
+              >
+                <FolderOpen size={12} />
+                Reveal
+              </Button>
+            </div>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Migration Backups</p>
+              <p className="settings-row-detail">{getBackupSummaryLabel(localData)}</p>
+              <p className="settings-row-detail">{getPathLabel(localData?.backupDirectoryPath)}</p>
+            </div>
+            <div className="settings-row-actions">
+              <Button
+                variant="secondary"
+                size="xs"
+                onClick={async () => {
+                  try {
+                    await window.openfolio.localData.revealBackups();
+                    const status = await window.openfolio.localData.getStatus();
+                    setLocalData(status);
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Could not reveal backups.");
+                  }
+                }}
+              >
+                <FolderOpen size={12} />
+                Reveal
+              </Button>
             </div>
           </div>
         </div>

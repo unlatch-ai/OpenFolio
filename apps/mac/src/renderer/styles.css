@@ -28,7 +28,7 @@
 
 body {
   margin: 0;
-  font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: var(--background);
   color: var(--foreground);
   overflow: hidden;
@@ -71,31 +71,31 @@ textarea {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 54px 48px 40px;
+  padding: 46px 48px 40px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--muted) 36%, transparent), var(--background) 260px);
 }
 
 .setup-main {
-  width: min(980px, 100%);
+  width: min(1040px, 100%);
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.1fr);
-  gap: 28px;
+  grid-template-columns: minmax(300px, 0.82fr) minmax(460px, 1.18fr);
+  gap: 32px;
   align-items: start;
 }
 
 .setup-hero {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding-top: 26px;
+  gap: 14px;
+  padding-top: 16px;
 }
 
 .setup-hero h1 {
   margin: 0;
   max-width: 520px;
-  font-size: 44px;
-  line-height: 1;
+  font-size: 38px;
+  line-height: 1.08;
   letter-spacing: 0;
 }
 
@@ -143,7 +143,7 @@ textarea {
 
 .setup-step {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(112px, auto);
   align-items: center;
   gap: 12px;
   padding: 16px;
@@ -187,6 +187,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .setup-step h3 {
@@ -216,7 +217,16 @@ textarea {
   }
 
   .setup-hero h1 {
-    font-size: 34px;
+    font-size: 32px;
+  }
+
+  .setup-step {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .setup-step > button {
+    grid-column: 2;
+    width: fit-content;
   }
 }
 

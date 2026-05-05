@@ -13,6 +13,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "lint": "pnpm -r typecheck",
+    "qa": "pnpm typecheck && pnpm test && pnpm audit --audit-level moderate",
     "bench:search": "node scripts/benchmark-search.mjs"
   },
   "pnpm": {

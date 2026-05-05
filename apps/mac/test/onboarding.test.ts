@@ -76,6 +76,66 @@ describe("onboarding state", () => {
     expect(state.progress.totalRequired).toBe(2);
   });
 
+  it("allows entry after a successful import even when no conversations are found", () => {
+    const state = getOnboardingState({
+      messagesStatus: {
+        status: "granted",
+        chatDbPath: "/Users/me/Library/Messages/chat.db",
+        details: "Messages access granted.",
+      },
+      contactsStatus: null,
+      threadCount: 0,
+      importJob: {
+        id: "job_empty",
+        status: "completed",
+        importedMessages: 0,
+        importedPeople: 0,
+        importedThreads: 0,
+        lastCursor: null,
+        error: null,
+        startedAt: 1,
+        completedAt: 2,
+      },
+      contactsSync: null,
+      embeddingSync: null,
+      setupDismissed: false,
+    });
+
+    const importStep = state.steps.find((step) => step.id === "import");
+
+    expect(state.canEnterApp).toBe(true);
+    expect(state.progress.completedRequired).toBe(2);
+    expect(importStep?.status).toBe("complete");
+    expect(importStep?.description).toContain("No local conversations");
+  });
+
+  it("surfaces Contacts denial recovery after required setup is complete", () => {
+    const state = getOnboardingState({
+      messagesStatus: {
+        status: "granted",
+        chatDbPath: "/Users/me/Library/Messages/chat.db",
+        details: "Messages access granted.",
+      },
+      contactsStatus: {
+        status: "denied",
+        details: "Enable OpenFolio under System Settings > Privacy & Security > Contacts.",
+        canPrompt: false,
+      },
+      threadCount: 2,
+      importJob: null,
+      contactsSync: null,
+      embeddingSync: null,
+      setupDismissed: false,
+    });
+
+    const contactsStep = state.steps.find((step) => step.id === "contacts");
+
+    expect(state.canEnterApp).toBe(true);
+    expect(contactsStep?.status).toBe("blocked");
+    expect(contactsStep?.actionLabel).toBe("Open Settings");
+    expect(contactsStep?.description).toContain("System Settings");
+  });
+
   it("stays hidden once the user enters the app after required setup is done", () => {
     const state = getOnboardingState({
       messagesStatus: {

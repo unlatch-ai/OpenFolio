@@ -1,13 +1,14 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
-import { mkdir } from "node:fs/promises";
+import os from "node:os";
+import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import path from "node:path";
 import { app } from "electron";
 import type { ContactsAccessStatus } from "@openfolio/shared-types";
 
 const execFileAsync = promisify(execFile);
-const HELPER_BINARY_NAME = "openfolio-contacts-bridge";
+const HELPER_APP_NAME = "OpenFolio Contacts.app";
 
 type HelperPermissionStatus = {
   status: ContactsAccessStatus["status"];
@@ -30,45 +31,50 @@ type HelperExportPayload = {
   contacts: HelperContact[];
 };
 
-function getBinaryPath() {
+function getHelperAppPath() {
+  const relativeAppPath = path.join("bin", HELPER_APP_NAME);
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, "bin", HELPER_BINARY_NAME);
+    return path.join(process.resourcesPath, relativeAppPath);
   }
 
-  return path.join(app.getAppPath(), "bin", HELPER_BINARY_NAME);
+  return path.join(app.getAppPath(), relativeAppPath);
 }
 
-function getSourcePath() {
-  return path.join(app.getAppPath(), "native", "contacts-bridge.swift");
+function getBuildScriptPath() {
+  return path.join(app.getAppPath(), "native", "contacts-bridge.build.sh");
 }
 
 async function ensureHelperBinary() {
-  const binaryPath = getBinaryPath();
-  if (fs.existsSync(binaryPath)) {
-    return binaryPath;
+  const helperAppPath = getHelperAppPath();
+  if (fs.existsSync(helperAppPath)) {
+    return helperAppPath;
   }
 
   if (app.isPackaged) {
-    throw new Error("Packaged Contacts helper is missing from the app bundle.");
+    throw new Error("Packaged Contacts helper app is missing from the app bundle.");
   }
 
-  const sourcePath = getSourcePath();
-  if (!fs.existsSync(sourcePath)) {
-    throw new Error("Contacts helper source file is missing.");
+  const buildScriptPath = getBuildScriptPath();
+  if (!fs.existsSync(buildScriptPath)) {
+    throw new Error("Contacts helper build script is missing.");
   }
 
-  await mkdir(path.dirname(binaryPath), { recursive: true });
-  await execFileAsync("swiftc", [sourcePath, "-framework", "Contacts", "-o", binaryPath], {
+  await execFileAsync("bash", [buildScriptPath], {
     cwd: app.getAppPath(),
     maxBuffer: 8 * 1024 * 1024,
   });
 
-  return binaryPath;
+  if (!fs.existsSync(helperAppPath)) {
+    throw new Error("Contacts helper app did not build successfully.");
+  }
+
+  return helperAppPath;
 }
 
 async function runHelper<T>(command: "status" | "request" | "export"): Promise<T> {
-  const binaryPath = await ensureHelperBinary();
-  const { stdout, stderr } = await execFileAsync(binaryPath, [command], {
+  const helperAppPath = await ensureHelperBinary();
+  const outputPath = path.join(os.tmpdir(), `openfolio-contacts-${process.pid}-${Date.now()}.json`);
+  const { stderr } = await execFileAsync("open", ["-n", helperAppPath, "--args", command, "--output", outputPath], {
     cwd: app.getAppPath(),
     maxBuffer: 16 * 1024 * 1024,
   });
@@ -77,7 +83,20 @@ async function runHelper<T>(command: "status" | "request" | "export"): Promise<T
     throw new Error(stderr.trim());
   }
 
-  return JSON.parse(stdout) as T;
+  try {
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      if (fs.existsSync(outputPath)) {
+        const output = fs.readFileSync(outputPath, "utf8");
+        return JSON.parse(output) as T;
+      }
+      await delay(100);
+    }
+
+    throw new Error("Contacts helper did not return a response.");
+  } finally {
+    fs.rmSync(outputPath, { force: true });
+  }
 }
 
 export async function getContactsAccessStatus(): Promise<ContactsAccessStatus> {
@@ -109,7 +128,25 @@ export async function requestContactsAccess(): Promise<ContactsAccessStatus> {
     return currentStatus;
   }
 
-  return runHelper<HelperPermissionStatus>("request");
+  try {
+    return await runHelper<HelperPermissionStatus>("request");
+  } catch (error) {
+    const latestStatus = await getContactsAccessStatus().catch(() => null);
+    if (latestStatus && latestStatus.status !== "not-determined") {
+      return {
+        ...latestStatus,
+        details: `${latestStatus.details} Open System Settings > Privacy & Security > Contacts and enable OpenFolio, then retry the sync.`,
+        canPrompt: false,
+      };
+    }
+
+    const message = error instanceof Error ? error.message : "Contacts access request failed.";
+    return {
+      status: "denied",
+      details: `${message} Open System Settings > Privacy & Security > Contacts and enable OpenFolio, then retry the sync.`,
+      canPrompt: false,
+    };
+  }
 }
 
 export async function exportAppleContacts() {

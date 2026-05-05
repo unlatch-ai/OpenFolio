@@ -1,13 +1,13 @@
 {
   "name": "@openfolio/mac",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Local-first iMessage search and relationship memory for macOS.",
   "author": "Kevin Fang",
   "private": true,
   "type": "module",
   "main": "out/main/main.js",
   "scripts": {
-    "build:contacts-helper": "if [ \"$(uname)\" = Darwin ]; then mkdir -p bin && swiftc native/contacts-bridge.swift -framework Contacts -o bin/openfolio-contacts-bridge; else echo 'Skipping contacts-helper (not macOS)'; fi",
+    "build:contacts-helper": "if [ \"$(uname)\" = Darwin ]; then bash native/contacts-bridge.build.sh; else echo 'Skipping contacts-helper (not macOS)'; fi",
     "build:permission-guide": "if [ \"$(uname)\" = Darwin ]; then bash native/permission-guide/build.sh; else echo 'Skipping permission-guide (not macOS)'; fi",
     "build:native": "pnpm run build:contacts-helper && pnpm run build:permission-guide",
     "predev": "pnpm run build:native",
@@ -66,8 +66,8 @@
     ],
     "extraResources": [
       {
-        "from": "bin/openfolio-contacts-bridge",
-        "to": "bin/openfolio-contacts-bridge"
+        "from": "bin/OpenFolio Contacts.app",
+        "to": "bin/OpenFolio Contacts.app"
       },
       {
         "from": "bin/OpenFolio Setup.app",

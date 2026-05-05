@@ -14,6 +14,7 @@ import type {
   CloudRuntimeConfig,
   ContactsAccessStatus,
   EditablePersonProfile,
+  LocalDataStatus,
   McpSetupStatus,
   MessagesAccessStatus,
   MessagesImportJob,
@@ -24,12 +25,14 @@ import type {
 } from "@openfolio/shared-types";
 import { LocalMcpController } from "@openfolio/mcp";
 import { exportAppleContacts, getContactsAccessStatus, requestContactsAccess } from "./contacts";
+import { withContactsAccessGuidance } from "./contacts-guidance";
 import {
   getMessagesAccessTarget as resolveMessagesAccessTarget,
   withMessagesAccessGuidance,
 } from "./messages-access";
 import { OpenFolioUpdater } from "./updater";
 import { isAllowedExternalUrl, shouldOpenExternalUrl } from "./navigation";
+import { getBackupDirectoryPath, getLocalDataStatus } from "./local-data";
 
 const core = new OpenFolioCore({ enableLocalEmbeddings: true });
 const mcpController = new LocalMcpController();
@@ -209,17 +212,6 @@ async function deleteConnectorCredential(input: { provider: ConnectorCredential[
   const remaining = readConnectorAccounts().filter((account) => !(account.provider === input.provider && account.accountId === input.accountId));
   writeConnectorAccounts(remaining);
   return { ok: true };
-}
-
-function withContactsAccessGuidance(status: ContactsAccessStatus): ContactsAccessStatus {
-  if (status.status !== "denied") {
-    return status;
-  }
-
-  return {
-    ...status,
-    details: `${status.details} Open System Settings > Privacy & Security > Contacts and enable OpenFolio, then retry the sync.`,
-  };
 }
 
 function focusWindow() {
@@ -765,6 +757,17 @@ const api: OpenFolioBridge = {
     },
     onStateChange: () => () => {},
   },
+  localData: {
+    getStatus: async (): Promise<LocalDataStatus> => getLocalDataStatus(core.db.dbPath),
+    revealDatabase: async () => {
+      shell.showItemInFolder(core.db.dbPath);
+    },
+    revealBackups: async () => {
+      const backupDirectoryPath = getBackupDirectoryPath(core.db.dbPath);
+      fs.mkdirSync(backupDirectoryPath, { recursive: true });
+      shell.showItemInFolder(backupDirectoryPath);
+    },
+  },
   mcp: {
     getStatus: async () => {
       const status = await mcpController.getStatus();
@@ -937,6 +940,9 @@ safeHandle("openfolio:connectors:deleteCredential", (_, input: { provider: Conne
 safeHandle("openfolio:updates:getState", () => api.updates.getState());
 safeHandle("openfolio:updates:checkNow", () => api.updates.checkNow());
 safeHandle("openfolio:updates:installNow", () => api.updates.installNow());
+safeHandle("openfolio:localData:getStatus", () => api.localData.getStatus());
+safeHandle("openfolio:localData:revealDatabase", () => api.localData.revealDatabase());
+safeHandle("openfolio:localData:revealBackups", () => api.localData.revealBackups());
 safeHandle("openfolio:mcp:getStatus", () => api.mcp.getStatus());
 safeHandle("openfolio:mcp:start", () => api.mcp.start());
 safeHandle("openfolio:mcp:stop", () => api.mcp.stop());

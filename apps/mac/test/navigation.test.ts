@@ -17,9 +17,14 @@ describe("navigation helpers", () => {
 
   it("only allows external URL schemes and loopback http targets that OpenFolio expects", () => {
     expect(isAllowedExternalUrl("https://openfolio.ai/docs/privacy")).toBe(true);
+    expect(isAllowedExternalUrl("https://github.com/unlatch-ai/OpenFolio/releases")).toBe(true);
+    expect(isAllowedExternalUrl("https://accounts.google.com/o/oauth2/v2/auth")).toBe(true);
+    expect(isAllowedExternalUrl("https://blessed-pig-525.convex.site/api/auth/signin/google")).toBe(true);
     expect(isAllowedExternalUrl("http://127.0.0.1:1234/auth/callback")).toBe(true);
     expect(isAllowedExternalUrl("http://localhost:1234/auth/callback")).toBe(true);
+    expect(isAllowedExternalUrl("https://evil.example/login")).toBe(false);
     expect(isAllowedExternalUrl("http://evil.example/auth/callback")).toBe(false);
+    expect(isAllowedExternalUrl("http://127.0.0.1:1234/not-auth")).toBe(false);
     expect(isAllowedExternalUrl("file:///Users/me/.ssh/id_rsa")).toBe(false);
     expect(isAllowedExternalUrl("javascript:alert(1)")).toBe(false);
     expect(isAllowedExternalUrl("not a url")).toBe(false);

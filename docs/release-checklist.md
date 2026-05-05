@@ -6,13 +6,18 @@ OpenFolio currently ships the macOS app from `apps/mac` through GitHub Releases.
 
 - Run `pnpm typecheck`.
 - Run `pnpm test`.
+- Run `pnpm audit --audit-level moderate` or `pnpm qa` for the combined local
+  quality gate.
 - Run `pnpm build`.
 - Run `pnpm --filter @openfolio/mac dist:mac`.
 - Run `codesign --verify --deep --strict --verbose=1 apps/mac/dist/mac-arm64/OpenFolio.app`.
-- Run `pnpm audit --audit-level moderate`.
+- Complete the first-run QA pass in `docs/qa-checklist.md`.
 - Run `pnpm bench:search` after `pnpm build` when search or indexing code changes.
 - Confirm the packaged Mac app does not initialize hosted services unless a
   future hosted feature is explicitly enabled.
+- Confirm any schema change has an in-place migration, a pre-migration backup,
+  and a forward-version refusal test. The app must not reset local user data as
+  an update strategy.
 
 ## Version rules
 
