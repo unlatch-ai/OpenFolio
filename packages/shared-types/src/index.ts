@@ -272,6 +272,13 @@ export interface UpdateState {
   checkedAt: number | null;
 }
 
+export interface LocalDataStatus {
+  databasePath: string;
+  backupDirectoryPath: string;
+  backupCount: number;
+  latestBackupName: string | null;
+}
+
 export interface MessagesAccessStatus {
   status: "granted" | "denied" | "missing" | "unknown";
   chatDbPath: string | null;
@@ -528,6 +535,11 @@ export interface OpenFolioBridge {
     checkNow(): Promise<UpdateState>;
     installNow(): Promise<void>;
     onStateChange(listener: (state: UpdateState) => void): () => void;
+  };
+  localData: {
+    getStatus(): Promise<LocalDataStatus>;
+    revealDatabase(): Promise<void>;
+    revealBackups(): Promise<void>;
   };
   mcp: {
     getStatus(): Promise<McpRuntimeStatus>;

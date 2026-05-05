@@ -56,6 +56,11 @@ const bridge: OpenFolioBridge = {
       return () => ipcRenderer.removeListener("openfolio:updates:state", handler);
     },
   },
+  localData: {
+    getStatus: () => ipcRenderer.invoke("openfolio:localData:getStatus"),
+    revealDatabase: () => ipcRenderer.invoke("openfolio:localData:revealDatabase"),
+    revealBackups: () => ipcRenderer.invoke("openfolio:localData:revealBackups"),
+  },
   mcp: {
     getStatus: () => ipcRenderer.invoke("openfolio:mcp:getStatus"),
     start: () => ipcRenderer.invoke("openfolio:mcp:start"),

@@ -14,6 +14,7 @@ import type {
   CloudRuntimeConfig,
   ContactsAccessStatus,
   EditablePersonProfile,
+  LocalDataStatus,
   McpSetupStatus,
   MessagesAccessStatus,
   MessagesImportJob,
@@ -31,6 +32,7 @@ import {
 } from "./messages-access";
 import { OpenFolioUpdater } from "./updater";
 import { isAllowedExternalUrl, shouldOpenExternalUrl } from "./navigation";
+import { getBackupDirectoryPath, getLocalDataStatus } from "./local-data";
 
 const core = new OpenFolioCore({ enableLocalEmbeddings: true });
 const mcpController = new LocalMcpController();
@@ -755,6 +757,17 @@ const api: OpenFolioBridge = {
     },
     onStateChange: () => () => {},
   },
+  localData: {
+    getStatus: async (): Promise<LocalDataStatus> => getLocalDataStatus(core.db.dbPath),
+    revealDatabase: async () => {
+      shell.showItemInFolder(core.db.dbPath);
+    },
+    revealBackups: async () => {
+      const backupDirectoryPath = getBackupDirectoryPath(core.db.dbPath);
+      fs.mkdirSync(backupDirectoryPath, { recursive: true });
+      shell.showItemInFolder(backupDirectoryPath);
+    },
+  },
   mcp: {
     getStatus: async () => {
       const status = await mcpController.getStatus();
@@ -927,6 +940,9 @@ safeHandle("openfolio:connectors:deleteCredential", (_, input: { provider: Conne
 safeHandle("openfolio:updates:getState", () => api.updates.getState());
 safeHandle("openfolio:updates:checkNow", () => api.updates.checkNow());
 safeHandle("openfolio:updates:installNow", () => api.updates.installNow());
+safeHandle("openfolio:localData:getStatus", () => api.localData.getStatus());
+safeHandle("openfolio:localData:revealDatabase", () => api.localData.revealDatabase());
+safeHandle("openfolio:localData:revealBackups", () => api.localData.revealBackups());
 safeHandle("openfolio:mcp:getStatus", () => api.mcp.getStatus());
 safeHandle("openfolio:mcp:start", () => api.mcp.start());
 safeHandle("openfolio:mcp:stop", () => api.mcp.stop());
