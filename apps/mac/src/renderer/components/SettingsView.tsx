@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AiSettingsStatus, EmbeddingSyncStatus, LocalDataStatus, McpSetupStatus, SearchScaleStatus } from "@openfolio/shared-types";
-import { Copy, Download, FolderOpen, KeyRound, RefreshCw } from "lucide-react";
+import { Copy, Download, ExternalLink, FolderOpen, KeyRound, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
 import { useTheme } from "@/lib/use-theme";
 import { useAppStore } from "../store";
+import { formatDiagnosticsReport } from "../diagnostics";
 import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
 import { getBackupSummaryLabel, getPathLabel } from "../local-data-labels";
 import { describeSearchScale } from "../search-results";
-import { getAppVersionLabel, getUpdateStatusLabel } from "../update-labels";
+import { getAppVersionLabel, getLastCheckedLabel, getReleaseNotesUrl, getUpdateStatusLabel, getUpdateVersionLabel } from "../update-labels";
 
 export function SettingsView() {
   const { theme, setTheme } = useTheme();
@@ -393,8 +394,10 @@ export function SettingsView() {
             <div className="settings-row-info">
               <p className="settings-row-label">App Updates</p>
               <p className="settings-row-detail">
-                {updateState?.message || "Checks for updates via GitHub Releases."}
+                {updateState?.message || "Checks GitHub Releases for signed OpenFolio updates."}
               </p>
+              <p className="settings-row-detail">{getUpdateVersionLabel(updateState)}</p>
+              <p className="settings-row-detail">{getLastCheckedLabel(updateState)}</p>
             </div>
             <div className="settings-row-actions">
               <Badge variant={updateState?.status === "downloaded" ? "success" : "secondary"}>
@@ -414,6 +417,20 @@ export function SettingsView() {
               >
                 Check
               </Button>
+              <Button
+                variant="secondary"
+                size="xs"
+                onClick={async () => {
+                  try {
+                    await window.openfolio.cloud.openExternal(getReleaseNotesUrl(updateState));
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Could not open release notes.");
+                  }
+                }}
+              >
+                <ExternalLink size={12} />
+                Notes
+              </Button>
               {updateState?.status === "downloaded" && (
                 <Button
                   size="xs"
@@ -426,6 +443,30 @@ export function SettingsView() {
                   Install
                 </Button>
               )}
+            </div>
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Diagnostics</p>
+              <p className="settings-row-detail">Copy a local support report with app, permission, update, and sync status. It does not include message or contact contents.</p>
+            </div>
+            <div className="settings-row-actions">
+              <Button
+                variant="secondary"
+                size="xs"
+                onClick={async () => {
+                  try {
+                    const report = await window.openfolio.diagnostics.getReport();
+                    await navigator.clipboard.writeText(formatDiagnosticsReport(report));
+                    toast.success("Diagnostics copied");
+                  } catch (e) {
+                    toast.error(e instanceof Error ? e.message : "Could not copy diagnostics.");
+                  }
+                }}
+              >
+                <Copy size={12} />
+                Copy
+              </Button>
             </div>
           </div>
         </div>

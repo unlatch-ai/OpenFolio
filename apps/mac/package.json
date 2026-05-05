@@ -1,6 +1,6 @@
 {
   "name": "@openfolio/mac",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Local-first iMessage search and relationship memory for macOS.",
   "author": "Kevin Fang",
   "private": true,

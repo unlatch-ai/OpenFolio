@@ -279,6 +279,24 @@ export interface LocalDataStatus {
   latestBackupName: string | null;
 }
 
+export interface DiagnosticsReport {
+  generatedAt: number;
+  appVersion: string;
+  platform: string;
+  osRelease: string;
+  arch: string;
+  electronVersion: string;
+  nodeVersion: string;
+  messagesStatus: Pick<MessagesAccessStatus, "status" | "requiresFullDiskAccess" | "chatDbPath">;
+  contactsStatus: Pick<ContactsAccessStatus, "status">;
+  updateState: UpdateState;
+  localData: LocalDataStatus;
+  watcherState: SyncWatcherState;
+  activeImport: Pick<MessagesImportJob, "status" | "importedMessages" | "importedPeople" | "importedThreads" | "lastCursor" | "startedAt" | "completedAt"> | null;
+  embeddingSync: EmbeddingSyncStatus;
+  mcpStatus: McpRuntimeStatus;
+}
+
 export interface MessagesAccessStatus {
   status: "granted" | "denied" | "missing" | "unknown";
   chatDbPath: string | null;
@@ -540,6 +558,9 @@ export interface OpenFolioBridge {
     getStatus(): Promise<LocalDataStatus>;
     revealDatabase(): Promise<void>;
     revealBackups(): Promise<void>;
+  };
+  diagnostics: {
+    getReport(): Promise<DiagnosticsReport>;
   };
   mcp: {
     getStatus(): Promise<McpRuntimeStatus>;

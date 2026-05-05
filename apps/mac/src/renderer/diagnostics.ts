@@ -1,0 +1,58 @@
+import type { DiagnosticsReport } from "@openfolio/shared-types";
+
+function formatTime(value: number | null) {
+  return value ? new Date(value).toISOString() : "null";
+}
+
+export function formatDiagnosticsReport(report: DiagnosticsReport) {
+  return [
+    "OpenFolio Diagnostics",
+    `Generated: ${formatTime(report.generatedAt)}`,
+    `App version: ${report.appVersion}`,
+    `Platform: ${report.platform}`,
+    `OS release: ${report.osRelease}`,
+    `Architecture: ${report.arch}`,
+    `Electron: ${report.electronVersion}`,
+    `Node: ${report.nodeVersion}`,
+    "",
+    "Permissions",
+    `Messages: ${report.messagesStatus.status}`,
+    `Messages Full Disk Access required: ${report.messagesStatus.requiresFullDiskAccess ?? false}`,
+    `Messages database path: ${report.messagesStatus.chatDbPath ?? "unavailable"}`,
+    `Contacts: ${report.contactsStatus.status}`,
+    "",
+    "Updates",
+    `Status: ${report.updateState.status}`,
+    `Current version: ${report.updateState.currentVersion}`,
+    `Available version: ${report.updateState.availableVersion ?? "none"}`,
+    `Downloaded version: ${report.updateState.downloadedVersion ?? "none"}`,
+    `Progress: ${report.updateState.progress ?? "none"}`,
+    `Checked at: ${formatTime(report.updateState.checkedAt)}`,
+    "",
+    "Local Data",
+    `Database path: ${report.localData.databasePath}`,
+    `Backup folder: ${report.localData.backupDirectoryPath}`,
+    `Backup count: ${report.localData.backupCount}`,
+    `Latest backup: ${report.localData.latestBackupName ?? "none"}`,
+    "",
+    "Sync",
+    `Watcher running: ${report.watcherState.watching}`,
+    `Watcher pending sync: ${report.watcherState.pendingSync}`,
+    `Watcher last sync: ${formatTime(report.watcherState.lastSyncAt)}`,
+    `Active import: ${report.activeImport?.status ?? "none"}`,
+    `Imported messages: ${report.activeImport?.importedMessages ?? 0}`,
+    `Imported people: ${report.activeImport?.importedPeople ?? 0}`,
+    `Imported threads: ${report.activeImport?.importedThreads ?? 0}`,
+    "",
+    "Embeddings",
+    `Embedded documents: ${report.embeddingSync.embeddedDocuments}`,
+    `Dirty documents: ${report.embeddingSync.dirtyDocuments}`,
+    `Embedding in progress: ${report.embeddingSync.syncing}`,
+    `Embedding error: ${report.embeddingSync.lastError ?? "none"}`,
+    "",
+    "MCP",
+    `Available: ${report.mcpStatus.available}`,
+    `Running: ${report.mcpStatus.running}`,
+    `Mode: ${report.mcpStatus.mode}`,
+  ].join("\n");
+}

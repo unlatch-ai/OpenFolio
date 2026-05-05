@@ -13,6 +13,7 @@ import type {
   ContactsSyncSummary,
   CloudRuntimeConfig,
   ContactsAccessStatus,
+  DiagnosticsReport,
   EditablePersonProfile,
   LocalDataStatus,
   McpSetupStatus,
@@ -768,6 +769,46 @@ const api: OpenFolioBridge = {
       shell.showItemInFolder(backupDirectoryPath);
     },
   },
+  diagnostics: {
+    getReport: async (): Promise<DiagnosticsReport> => {
+      const messagesStatus = core.getMessagesAccessStatus();
+      const contactsStatus = withContactsAccessGuidance(await getContactsAccessStatus());
+      const activeImport = core.getActiveMessagesImport();
+      return {
+        generatedAt: Date.now(),
+        appVersion: app.getVersion(),
+        platform: process.platform,
+        osRelease: os.release(),
+        arch: process.arch,
+        electronVersion: process.versions.electron ?? "unknown",
+        nodeVersion: process.versions.node,
+        messagesStatus: {
+          status: messagesStatus.status,
+          requiresFullDiskAccess: messagesStatus.requiresFullDiskAccess,
+          chatDbPath: messagesStatus.chatDbPath,
+        },
+        contactsStatus: {
+          status: contactsStatus.status,
+        },
+        updateState: updater.getState(),
+        localData: getLocalDataStatus(core.db.dbPath),
+        watcherState: core.getWatcherState(),
+        activeImport: activeImport
+          ? {
+              status: activeImport.status,
+              importedMessages: activeImport.importedMessages,
+              importedPeople: activeImport.importedPeople,
+              importedThreads: activeImport.importedThreads,
+              lastCursor: activeImport.lastCursor,
+              startedAt: activeImport.startedAt,
+              completedAt: activeImport.completedAt,
+            }
+          : null,
+        embeddingSync: core.getEmbeddingSyncStatus(),
+        mcpStatus: await mcpController.getStatus(),
+      };
+    },
+  },
   mcp: {
     getStatus: async () => {
       const status = await mcpController.getStatus();
@@ -943,6 +984,7 @@ safeHandle("openfolio:updates:installNow", () => api.updates.installNow());
 safeHandle("openfolio:localData:getStatus", () => api.localData.getStatus());
 safeHandle("openfolio:localData:revealDatabase", () => api.localData.revealDatabase());
 safeHandle("openfolio:localData:revealBackups", () => api.localData.revealBackups());
+safeHandle("openfolio:diagnostics:getReport", () => api.diagnostics.getReport());
 safeHandle("openfolio:mcp:getStatus", () => api.mcp.getStatus());
 safeHandle("openfolio:mcp:start", () => api.mcp.start());
 safeHandle("openfolio:mcp:stop", () => api.mcp.stop());

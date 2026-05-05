@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { MessageDetail, Note, Reminder, SearchResult, SearchScaleStatus } from "@openfolio/shared-types";
+import type { DiagnosticsReport, MessageDetail, Note, Reminder, SearchResult, SearchScaleStatus } from "@openfolio/shared-types";
+import { formatDiagnosticsReport } from "../src/renderer/diagnostics";
 import { getImportPrimaryAction, isImportTerminal } from "../src/renderer/import-jobs";
 import {
   filterPersonMessages,
@@ -9,7 +10,7 @@ import {
   orderProfileNotes,
 } from "../src/renderer/people-profile";
 import { describeSearchScale, formatCitationMeta, groupSearchResults } from "../src/renderer/search-results";
-import { getAppVersionLabel, getUpdateStatusLabel } from "../src/renderer/update-labels";
+import { getAppVersionLabel, getLastCheckedLabel, getReleaseNotesUrl, getUpdateStatusLabel, getUpdateVersionLabel } from "../src/renderer/update-labels";
 
 describe("renderer workflow helpers", () => {
   it("chooses import retry and cancel actions from concrete job state", () => {
@@ -125,7 +126,7 @@ describe("renderer workflow helpers", () => {
 
   it("formats updater state for Settings without leaking raw status values", () => {
     expect(getUpdateStatusLabel(null)).toBe("Not checked");
-    expect(getUpdateStatusLabel({
+    const upToDate = {
       status: "not-available",
       currentVersion: "0.3.1",
       availableVersion: null,
@@ -133,7 +134,14 @@ describe("renderer workflow helpers", () => {
       progress: null,
       message: "You are on the latest version of OpenFolio.",
       checkedAt: 1,
-    })).toBe("Up to date");
+    } as const;
+
+    expect(getUpdateStatusLabel(upToDate)).toBe("Up to date");
+    expect(getUpdateVersionLabel(upToDate)).toBe("Installed: 0.3.1");
+    expect(getLastCheckedLabel(upToDate)).toMatch(/Last checked:/);
+    expect(getReleaseNotesUrl(upToDate)).toBe("https://github.com/unlatch-ai/OpenFolio/releases/tag/v0.3.1");
+    expect(getUpdateVersionLabel({ ...upToDate, availableVersion: "0.3.2" })).toBe("Available: 0.3.2");
+    expect(getUpdateVersionLabel({ ...upToDate, downloadedVersion: "0.3.3" })).toBe("Downloaded: 0.3.3");
     expect(getAppVersionLabel({
       status: "idle",
       currentVersion: "0.3.1",
@@ -143,5 +151,48 @@ describe("renderer workflow helpers", () => {
       message: null,
       checkedAt: null,
     })).toBe("OpenFolio 0.3.1");
+  });
+
+  it("formats diagnostics without private message, contact, key, or token fields", () => {
+    const report = {
+      generatedAt: Date.UTC(2026, 4, 5),
+      appVersion: "0.3.3",
+      platform: "darwin",
+      osRelease: "25.3.0",
+      arch: "arm64",
+      electronVersion: "39.8.1",
+      nodeVersion: "22.0.0",
+      messagesStatus: { status: "granted", requiresFullDiskAccess: false, chatDbPath: "/Users/me/Library/Messages/chat.db" },
+      contactsStatus: { status: "granted" },
+      updateState: {
+        status: "not-available",
+        currentVersion: "0.3.3",
+        availableVersion: null,
+        downloadedVersion: null,
+        progress: null,
+        message: "secret message text should not appear",
+        checkedAt: Date.UTC(2026, 4, 5),
+      },
+      localData: {
+        databasePath: "/Users/me/Library/Application Support/OpenFolio/openfolio.sqlite",
+        backupDirectoryPath: "/Users/me/Library/Application Support/OpenFolio/backups",
+        backupCount: 1,
+        latestBackupName: "openfolio.sqlite.before-schema-2-to-3.backup",
+      },
+      watcherState: { watching: true, chatDbPath: "/Users/me/Library/Messages/chat.db", lastSyncAt: null, pendingSync: false },
+      activeImport: { status: "completed", importedMessages: 10, importedPeople: 2, importedThreads: 3, lastCursor: 10, startedAt: 1, completedAt: 2 },
+      embeddingSync: { totalDocuments: 10, embeddedDocuments: 9, dirtyDocuments: 1, provider: "local", model: "test", syncing: false, lastError: null },
+      mcpStatus: { running: false, mode: "stdio", available: true, command: "secret-token-command", details: "ok" },
+    } satisfies DiagnosticsReport;
+
+    const text = formatDiagnosticsReport(report);
+
+    expect(text).toContain("App version: 0.3.3");
+    expect(text).toContain("Messages: granted");
+    expect(text).toContain("Backup count: 1");
+    expect(text).not.toContain("secret message text");
+    expect(text).not.toContain("secret-token-command");
+    expect(text).not.toContain("OpenAI");
+    expect(text).not.toContain("token");
   });
 });

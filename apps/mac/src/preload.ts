@@ -61,6 +61,9 @@ const bridge: OpenFolioBridge = {
     revealDatabase: () => ipcRenderer.invoke("openfolio:localData:revealDatabase"),
     revealBackups: () => ipcRenderer.invoke("openfolio:localData:revealBackups"),
   },
+  diagnostics: {
+    getReport: () => ipcRenderer.invoke("openfolio:diagnostics:getReport"),
+  },
   mcp: {
     getStatus: () => ipcRenderer.invoke("openfolio:mcp:getStatus"),
     start: () => ipcRenderer.invoke("openfolio:mcp:start"),
