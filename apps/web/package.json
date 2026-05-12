@@ -33,7 +33,7 @@
     "media-chrome": "^4.19.0",
     "motion": "^12.38.0",
     "nanoid": "^5.1.7",
-    "next": "^15.5.15",
+    "next": "^15.5.18",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "radix-ui": "^1.4.3",
