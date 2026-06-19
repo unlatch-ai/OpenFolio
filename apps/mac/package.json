@@ -54,7 +54,7 @@
     "electron-builder": "^26.8.1",
     "electron-vite": "^4.0.1",
     "tailwindcss": "^4.2.2",
-    "vite": "^7.3.2"
+    "vite": "^7.3.5"
   },
   "build": {
     "appId": "ai.openfolio.mac",
