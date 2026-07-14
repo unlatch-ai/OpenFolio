@@ -20,7 +20,7 @@ draft release. Use a clean macOS account or VM with other applications closed.
    process name and PID metadata. Keep it running through shutdown:
 
    ```bash
-   sudo tcpdump -i pktap -n -U -k NP -w openfolio-v0.4.0.pcap
+   sudo tcpdump -i pktap,all -n -U -k NP -w openfolio-v0.4.0.pcap
    ```
 
 3. In a second terminal, capture socket/process summaries and process-tree

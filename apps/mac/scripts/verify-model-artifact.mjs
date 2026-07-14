@@ -60,15 +60,31 @@ if (weightCopies.length !== 1) {
   errors.push(`expected exactly one quantized model copy, found ${weightCopies.length}`);
 }
 
-const targetArchitecture = path.resolve(appPath).includes("arm64") ? "arm64" : "x64";
+const appExecutable = path.join(path.resolve(appPath), "Contents", "MacOS", "OpenFolio");
+let targetArchitectures = [];
+if (process.platform === "darwin") {
+  try {
+    targetArchitectures = execFileSync("lipo", ["-archs", appExecutable], { encoding: "utf8" }).trim().split(/\s+/);
+  } catch (error) {
+    errors.push(`could not inspect app architecture: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+if (targetArchitectures.length === 0) {
+  targetArchitectures = fs.existsSync(path.join(resourcesDir, "app.asar.unpacked", "node_modules", "onnxruntime-node", "bin", "napi-v6", "darwin", "arm64"))
+    ? ["arm64"]
+    : ["x64"];
+}
 const onnxBinaryRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "onnxruntime-node", "bin", "napi-v6");
 const onnxBinaries = walk(onnxBinaryRoot);
 if (onnxBinaries.length === 0) {
-  errors.push(`ONNX Runtime binaries are missing for darwin/${targetArchitecture}`);
+  errors.push(`ONNX Runtime binaries are missing for darwin/${targetArchitectures.join(",")}`);
 } else {
   for (const binary of onnxBinaries) {
     const relative = path.relative(onnxBinaryRoot, binary);
-    if (!relative.startsWith(path.join("darwin", targetArchitecture, path.sep))) {
+    const matchesTarget = targetArchitectures.some((architecture) =>
+      relative.startsWith(path.join("darwin", architecture, path.sep)),
+    );
+    if (!matchesTarget) {
       errors.push(`unexpected cross-platform ONNX Runtime binary: ${relative}`);
     }
   }
