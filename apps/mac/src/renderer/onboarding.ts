@@ -32,10 +32,10 @@ function messagesStep(input: OnboardingInput): OnboardingStep {
   const granted = input.messagesStatus?.status === "granted";
   return {
     id: "messages",
-    title: "Allow Messages access",
+    title: "Allow read-only access to Messages",
     description: granted
-      ? "OpenFolio can read the local iMessage database."
-      : input.messagesStatus?.details || "Grant Full Disk Access so OpenFolio can read local iMessage history.",
+      ? "OpenFolio can read the Messages database already stored on this Mac."
+      : input.messagesStatus?.details || "OpenFolio needs Full Disk Access to read the Messages database already stored on this Mac.",
     status: granted ? "complete" : "active",
     required: true,
     actionLabel: granted ? "Recheck" : "Grant access",
@@ -52,7 +52,7 @@ function importStep(input: OnboardingInput, messagesGranted: boolean): Onboardin
   const importedThreadCount = input.threadCount || input.importJob?.importedThreads || 0;
   return {
     id: "import",
-    title: "Import local conversations",
+    title: "Build your private archive",
     description: failed
       ? input.importJob?.error || "Import failed. Retry after fixing the issue."
       : cancelled
@@ -61,7 +61,7 @@ function importStep(input: OnboardingInput, messagesGranted: boolean): Onboardin
       ? importedThreadCount > 0
         ? `${importedThreadCount} conversations are ready.`
         : "Import finished. No local conversations were found yet."
-      : "Build the local graph from Messages. This reads data locally and does not modify Messages.",
+      : "Read conversations, resolve participants, and prepare exact search. OpenFolio never changes Messages.",
     status: imported ? "complete" : running || cancelling ? "running" : messagesGranted ? "active" : "blocked",
     required: true,
     actionLabel: running ? "Cancel import" : cancelling ? "Cancelling..." : imported ? "Import again" : failed || cancelled ? "Retry import" : "Import messages",
@@ -74,12 +74,12 @@ function contactsStep(input: OnboardingInput, requiredDone: boolean): Onboarding
   const needsSettings = input.contactsStatus?.status === "denied" || input.contactsStatus?.status === "restricted";
   return {
     id: "contacts",
-    title: "Sync Apple Contacts",
+    title: "Put names to numbers",
     description: synced
       ? `${input.contactsSync?.importedContacts ?? 0} contacts synced locally.`
       : needsSettings || input.contactsStatus?.status === "unsupported"
         ? input.contactsStatus?.details ?? "Contacts access is unavailable."
-      : "Resolve phone numbers and emails to real names from Apple Contacts.",
+      : "Apple Contacts can match phone numbers and email addresses to names. Contact data stays on this Mac.",
     status: synced ? "complete" : granted ? "active" : needsSettings ? "blocked" : requiredDone ? "optional" : "waiting",
     required: false,
     actionLabel: granted ? "Sync contacts" : needsSettings ? "Open Settings" : "Allow and sync",
@@ -95,8 +95,8 @@ function embeddingsStep(input: OnboardingInput, imported: boolean): OnboardingSt
 
   return {
     id: "embeddings",
-    title: "Build semantic index",
-    description: complete ? "Semantic search is fully indexed." : progress,
+    title: "Prepare meaning-based search",
+    description: complete ? "Meaning-based search is ready and runs entirely on this Mac." : progress,
     status: complete ? "complete" : sync?.syncing ? "running" : imported ? "active" : "waiting",
     required: false,
     actionLabel: complete ? "Refresh" : imported ? "Build index" : null,

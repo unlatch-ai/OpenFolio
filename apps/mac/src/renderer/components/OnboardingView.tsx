@@ -202,19 +202,19 @@ export function OnboardingView() {
     <div className="setup-shell">
       <div className="setup-main">
         <div className="setup-hero">
-          <Badge variant="secondary">Local-first setup</Badge>
-          <h1>Build your private message memory.</h1>
+          <Badge variant="secondary">Private archive setup</Badge>
+          <h1>Remember who told you what.</h1>
           <p>
-            OpenFolio reads Messages and Contacts locally, builds a searchable graph on this Mac,
-            and keeps hosted features optional.
+            Search your iMessage history privately on this Mac, then verify every result in the original conversation.
           </p>
+          <p>Your messages and search index stay on this Mac.</p>
           <div className="setup-hero-actions">
             <Button
               size="sm"
               onClick={() => setSetupDismissed(true)}
               disabled={!state.canEnterApp}
             >
-              Enter OpenFolio
+              Try your first search
             </Button>
           </div>
         </div>
