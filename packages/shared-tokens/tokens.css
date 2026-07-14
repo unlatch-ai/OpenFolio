@@ -9,10 +9,10 @@
   --paper-ink: #141412;
   --shell-ink: #f5f4f0;
 
-  /* Provisional interaction accent. Swap these three values as one family. */
-  --interaction-accent: #4e5cff;
-  --interaction-accent-hover: #3e4be4;
-  --interaction-accent-soft: #e7e9ff;
+  /* Oxidized teal: quiet against warm paper, legible on graphite. */
+  --interaction-accent: #36575a;
+  --interaction-accent-hover: #294548;
+  --interaction-accent-soft: #dfe8e5;
 
   --critical: #9b353d;
   --critical-soft: #f3e3e3;
@@ -32,8 +32,8 @@
   --foreground: var(--paper-ink);
   --card: var(--chalk);
   --card-foreground: var(--paper-ink);
-  --muted: #eae7e0;
-  --muted-foreground: #6f6d67;
+  --muted: #e9e6de;
+  --muted-foreground: #686760;
   --border: rgba(20, 20, 18, 0.13);
   --input: rgba(20, 20, 18, 0.18);
   --primary: var(--interaction-accent);
@@ -42,13 +42,13 @@
   --secondary: #eae7e0;
   --secondary-foreground: var(--paper-ink);
   --accent: var(--interaction-accent-soft);
-  --accent-foreground: #2832b7;
+  --accent-foreground: #243f42;
   --ring: var(--interaction-accent);
   --destructive: var(--critical);
   --popover: var(--chalk);
   --popover-foreground: var(--paper-ink);
   --selection: var(--interaction-accent-soft);
-  --selection-foreground: #2832b7;
+  --selection-foreground: #243f42;
   --sidebar: var(--ink);
   --sidebar-background: var(--ink);
   --sidebar-foreground: var(--shell-ink);
@@ -57,8 +57,22 @@
   --sidebar-accent: rgba(255, 255, 255, 0.09);
   --sidebar-accent-foreground: var(--shell-ink);
   --sidebar-border: rgba(255, 255, 255, 0.12);
-  --sidebar-ring: #8b93ff;
-  --radius: 0.5rem;
+  --sidebar-ring: #8aa4a4;
+  --radius: 0.25rem;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
+  --space-6: 40px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  --radius-hairline: 2px;
+  --radius-control: 4px;
+  --radius-panel: 6px;
+  --radius-onboarding: 12px;
 
   --chart-1: var(--person-lilac);
   --chart-2: var(--person-rose);

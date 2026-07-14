@@ -1,4 +1,12 @@
-import { Check, Database, MessageSquare, RefreshCw, Search, ShieldCheck, Users } from "lucide-react";
+import {
+  Check,
+  Database,
+  MessageSquare,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { Badge } from "./ui/badge";
@@ -6,6 +14,7 @@ import { Button } from "./ui/button";
 import { useAppStore } from "../store";
 import { getOnboardingState, type OnboardingStep } from "../onboarding";
 import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
+import { FolioMark } from "./FolioMark";
 
 const STEP_ICONS: Record<OnboardingStep["id"], typeof MessageSquare> = {
   messages: ShieldCheck,
@@ -25,8 +34,21 @@ function StepIcon({ step }: { step: OnboardingStep }) {
   return <Icon size={16} />;
 }
 
-function StepRow({ step, active, onAction, busy }: { step: OnboardingStep; active: boolean; onAction: () => void; busy: boolean }) {
-  const showAction = step.actionLabel && step.status !== "waiting" && (step.status !== "blocked" || step.id === "contacts");
+function StepRow({
+  step,
+  active,
+  onAction,
+  busy,
+}: {
+  step: OnboardingStep;
+  active: boolean;
+  onAction: () => void;
+  busy: boolean;
+}) {
+  const showAction =
+    step.actionLabel &&
+    step.status !== "waiting" &&
+    (step.status !== "blocked" || step.id === "contacts");
 
   return (
     <div className={`setup-step ${active ? "active" : ""} ${step.status}`}>
@@ -41,8 +63,15 @@ function StepRow({ step, active, onAction, busy }: { step: OnboardingStep; activ
         <p>{step.description}</p>
       </div>
       {showAction && (
-        <Button size="xs" variant={step.status === "complete" ? "secondary" : "default"} onClick={onAction} disabled={busy}>
-          {step.status === "running" ? <RefreshCw size={12} className="animate-spin" /> : null}
+        <Button
+          size="xs"
+          variant={step.status === "complete" ? "secondary" : "default"}
+          onClick={onAction}
+          disabled={busy}
+        >
+          {step.status === "running" ? (
+            <RefreshCw size={12} className="animate-spin" />
+          ) : null}
           {step.actionLabel}
         </Button>
       )}
@@ -84,7 +113,10 @@ export function OnboardingView() {
   useEffect(() => {
     if (!embeddingSync?.syncing) return;
     const interval = window.setInterval(() => {
-      void window.openfolio.embeddings.getSyncStatus().then(setEmbeddingSync).catch(console.error);
+      void window.openfolio.embeddings
+        .getSyncStatus()
+        .then(setEmbeddingSync)
+        .catch(console.error);
     }, 1500);
     return () => window.clearInterval(interval);
   }, [embeddingSync?.syncing, setEmbeddingSync]);
@@ -109,7 +141,11 @@ export function OnboardingView() {
         toast.success("Messages access is ready");
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not check Messages access.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not check Messages access.",
+      );
     } finally {
       setBusy(false);
     }
@@ -118,23 +154,31 @@ export function OnboardingView() {
   async function runImport() {
     setBusy(true);
     try {
-      const action = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
-      if ((action.kind === "cancel") && importJob) {
-        const cancelled = await window.openfolio.messages.cancelImport(importJob.id);
+      const action = getImportPrimaryAction(
+        importJob,
+        messagesStatus?.status === "granted",
+      );
+      if (action.kind === "cancel" && importJob) {
+        const cancelled = await window.openfolio.messages.cancelImport(
+          importJob.id,
+        );
         if (cancelled) setImportJob(cancelled);
         toast("Import cancellation requested");
         return;
       }
 
-      const job = action.kind === "retry"
-        ? await window.openfolio.messages.retryImport(importJob?.id)
-        : await window.openfolio.messages.startImport();
+      const job =
+        action.kind === "retry"
+          ? await window.openfolio.messages.retryImport(importJob?.id)
+          : await window.openfolio.messages.startImport();
       setImportJob(job);
       const isRunning = job.status === "running" || job.status === "cancelling";
       if (isRunning) {
         setBusy(false);
       }
-      const finalJob = isRunning ? await waitForImportJob(job.id, setImportJob) : job;
+      const finalJob = isRunning
+        ? await waitForImportJob(job.id, setImportJob)
+        : job;
 
       if (!finalJob) {
         toast.error("Import status was lost.");
@@ -153,7 +197,9 @@ export function OnboardingView() {
       toast.success(`Imported ${finalJob.importedMessages} messages`);
       await refreshAppData();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Messages import failed.");
+      toast.error(
+        error instanceof Error ? error.message : "Messages import failed.",
+      );
     } finally {
       setBusy(false);
     }
@@ -172,7 +218,9 @@ export function OnboardingView() {
       setContactsSync(summary);
       toast.success(`Synced ${summary.importedContacts} contacts`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Contacts sync failed.");
+      toast.error(
+        error instanceof Error ? error.message : "Contacts sync failed.",
+      );
     } finally {
       setBusy(false);
     }
@@ -183,9 +231,15 @@ export function OnboardingView() {
     try {
       const status = await window.openfolio.embeddings.syncNow();
       setEmbeddingSync(status);
-      toast.success(status.syncing ? "Semantic indexing started" : "Semantic index is up to date");
+      toast.success(
+        status.syncing
+          ? "Semantic indexing started"
+          : "Semantic index is up to date",
+      );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Semantic index failed.");
+      toast.error(
+        error instanceof Error ? error.message : "Semantic index failed.",
+      );
     } finally {
       setBusy(false);
     }
@@ -202,10 +256,12 @@ export function OnboardingView() {
     <div className="setup-shell">
       <div className="setup-main">
         <div className="setup-hero">
+          <FolioMark number="00" label="ARCHIVE SETUP" />
           <Badge variant="secondary">Private archive setup</Badge>
           <h1>Remember who told you what.</h1>
           <p>
-            Search your iMessage history privately on this Mac, then verify every result in the original conversation.
+            Search your iMessage history privately on this Mac, then verify
+            every result in the original conversation.
           </p>
           <p>Your messages and search index stay on this Mac.</p>
           <div className="setup-hero-actions">
@@ -221,8 +277,15 @@ export function OnboardingView() {
 
         <div className="setup-progress">
           <div className="setup-progress-header">
-            <span>{state.progress.completedRequired}/{state.progress.totalRequired} required steps complete</span>
-            {state.canEnterApp ? <Badge variant="success">ready</Badge> : <Badge variant="default">setup needed</Badge>}
+            <span>
+              {state.progress.completedRequired}/{state.progress.totalRequired}{" "}
+              required steps complete
+            </span>
+            {state.canEnterApp ? (
+              <Badge variant="success">ready</Badge>
+            ) : (
+              <Badge variant="default">setup needed</Badge>
+            )}
           </div>
           <div className="setup-steps">
             {state.steps.map((step) => (
