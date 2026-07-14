@@ -24,6 +24,7 @@ dist
 apps/mac/bin/OpenFolioPermissionGuide.app/
 apps/mac/bin/OpenFolio Setup.app/
 apps/mac/bin/OpenFolio Contacts.app/
+apps/mac/.model-cache/
 
 # misc
 .DS_Store

@@ -1,17 +1,11 @@
 import fs from "node:fs";
 import { spawn } from "node:child_process";
-import { app, BrowserWindow, ipcMain, nativeImage, safeStorage, shell } from "electron";
-import { createServer, type Server } from "node:http";
+import { app, BrowserWindow, ipcMain, nativeImage, session, shell } from "electron";
 import os from "node:os";
 import path from "node:path";
-import { OpenFolioCore } from "@openfolio/core";
+import { installNodeNetworkLock, OpenFolioCore } from "@openfolio/core";
 import type {
-  AiSettingsStatus,
-  AskRunInput,
-  ConnectorAccount,
-  ConnectorCredential,
   ContactsSyncSummary,
-  CloudRuntimeConfig,
   ContactsAccessStatus,
   DiagnosticsReport,
   EditablePersonProfile,
@@ -22,7 +16,10 @@ import type {
   OpenFolioBridge,
   PersonAlias,
   Reminder,
-  SearchResult,
+  SearchQueryInput,
+  SearchResponse,
+  ConversationCitationInput,
+  UpdateState,
 } from "@openfolio/shared-types";
 import { LocalMcpController } from "@openfolio/mcp";
 import { exportAppleContacts, getContactsAccessStatus, requestContactsAccess } from "./contacts";
@@ -31,41 +28,27 @@ import {
   getMessagesAccessTarget as resolveMessagesAccessTarget,
   withMessagesAccessGuidance,
 } from "./messages-access";
-import { OpenFolioUpdater } from "./updater";
-import { isAllowedExternalUrl, shouldOpenExternalUrl } from "./navigation";
+import {
+  createRuntimeNetworkPolicy,
+  isIpcSenderAllowed,
+  isNavigationAllowed,
+  isRuntimeRequestAllowed,
+  isSafeSystemSettingsUrl,
+  type RuntimeNetworkPolicy,
+} from "./navigation";
 import { getBackupDirectoryPath, getLocalDataStatus } from "./local-data";
 
-const core = new OpenFolioCore({ enableLocalEmbeddings: true });
+installNodeNetworkLock();
+const core = new OpenFolioCore({ enableLocalEmbeddings: true, networkPolicy: "offline" });
 const mcpController = new LocalMcpController();
-const updater = new OpenFolioUpdater(() => mainWindow, (...args) => {
-  logAppDebug("updates", ...args);
-});
-const DEFAULT_SITE_URL = "https://openfolio.ai";
-const cloudConfig: CloudRuntimeConfig = {
-  convexUrl: process.env.CONVEX_URL || process.env.NEXT_PUBLIC_CONVEX_URL || null,
-  hostedBaseUrl: process.env.SITE_URL || process.env.OPENFOLIO_SITE_URL || DEFAULT_SITE_URL,
-  deviceName: os.hostname(),
-  platform: process.platform,
-};
+const MANUAL_UPDATE_MESSAGE = "OpenFolio does not connect to the Internet or check for updates. Download the newest version independently and replace OpenFolio.app. Your private library remains in Application Support on this Mac.";
 
 let mainWindow: BrowserWindow | null = null;
-let pendingAuthCallbackUrl: string | null = null;
-let authCallbackServer: Server | null = null;
 let messagesImportPromise: Promise<MessagesImportJob> | null = null;
 const debugLogging = process.env.OPENFOLIO_DEBUG === "1" || process.env.OPENFOLIO_DEBUG_LOGS === "1";
-const debugAuthFlow = process.env.OPENFOLIO_DEBUG_AUTH === "1";
 const enforceSingleInstance = !process.defaultApp;
 const shouldOpenDevTools = process.env.OPENFOLIO_OPEN_DEVTOOLS === "1";
-const CONNECTOR_ACCOUNTS_KEY = "connector_accounts";
-const CONNECTOR_CREDENTIAL_PREFIX = "connector_credential:";
-const AI_SETTINGS_KEY = "ai_settings";
-const AI_OPENAI_KEY = "ai_openai_key";
-
-function logAuthDebug(...args: unknown[]) {
-  if (debugAuthFlow || debugLogging) {
-    console.log("[openfolio-auth]", ...args);
-  }
-}
+let runtimeNetworkPolicy: RuntimeNetworkPolicy | null = null;
 
 function logAppDebug(scope: string, ...args: unknown[]) {
   if (debugLogging) {
@@ -73,146 +56,16 @@ function logAppDebug(scope: string, ...args: unknown[]) {
   }
 }
 
-function readConnectorAccounts(): ConnectorAccount[] {
-  const raw = core.db.getSetting(CONNECTOR_ACCOUNTS_KEY);
-  if (!raw) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed as ConnectorAccount[] : [];
-  } catch (error) {
-    console.error("[openfolio] Failed to parse connector accounts:", error);
-    return [];
-  }
-}
-
-function writeConnectorAccounts(accounts: ConnectorAccount[]) {
-  core.db.setSetting(CONNECTOR_ACCOUNTS_KEY, JSON.stringify(accounts));
-}
-
-function readEncryptedSetting(key: string) {
-  const raw = core.db.getSetting(key);
-  if (!raw) return null;
-  try {
-    if (safeStorage.isEncryptionAvailable()) {
-      return safeStorage.decryptString(Buffer.from(raw, "base64"));
-    }
-    return raw;
-  } catch (error) {
-    console.warn(`[openfolio] Failed to decrypt ${key}:`, error);
-    return null;
-  }
-}
-
-function writeEncryptedSetting(key: string, value: string | null) {
-  if (!value) {
-    core.db.setSetting(key, "");
-    return;
-  }
-  if (!safeStorage.isEncryptionAvailable()) {
-    console.warn("[openfolio] Keychain encryption unavailable — AI key will be stored in plaintext.");
-    core.db.setSetting(key, value);
-    return;
-  }
-  core.db.setSetting(key, safeStorage.encryptString(value).toString("base64"));
-}
-
-function readAiSettingsPayload() {
-  const raw = core.db.getSetting(AI_SETTINGS_KEY);
-  if (!raw) {
-    return {
-      answerModel: "gpt-5-mini",
-      embeddingModel: "text-embedding-3-small",
-      useOpenAIEmbeddings: false,
-    };
-  }
-  try {
-    const parsed = JSON.parse(raw) as Partial<AiSettingsStatus>;
-    return {
-      answerModel: parsed.answerModel || "gpt-5-mini",
-      embeddingModel: parsed.embeddingModel || "text-embedding-3-small",
-      useOpenAIEmbeddings: Boolean(parsed.useOpenAIEmbeddings),
-    };
-  } catch {
-    return {
-      answerModel: "gpt-5-mini",
-      embeddingModel: "text-embedding-3-small",
-      useOpenAIEmbeddings: false,
-    };
-  }
-}
-
-function applyStoredAiConfig() {
-  const apiKey = readEncryptedSetting(AI_OPENAI_KEY) || process.env.OPENAI_API_KEY || "";
-  const settings = readAiSettingsPayload();
-  if (!apiKey) {
-    core.configureAi({ provider: "local" });
-    return;
-  }
-  core.configureAi({
-    provider: "openai",
-    apiKey,
-    model: settings.answerModel ?? undefined,
-    embeddingModel: settings.embeddingModel ?? undefined,
-    useOpenAIEmbeddings: settings.useOpenAIEmbeddings,
-  });
-}
-
-function getAiSettingsStatus(): AiSettingsStatus {
-  const settings = readAiSettingsPayload();
-  const hasOpenAIKey = Boolean(readEncryptedSetting(AI_OPENAI_KEY) || process.env.OPENAI_API_KEY);
+function createManualUpdateState(): UpdateState {
   return {
-    provider: hasOpenAIKey ? "openai" : "local",
-    hasOpenAIKey,
-    answerModel: settings.answerModel,
-    embeddingModel: settings.embeddingModel,
-    useOpenAIEmbeddings: settings.useOpenAIEmbeddings,
+    status: "unsupported",
+    currentVersion: app.getVersion(),
+    availableVersion: null,
+    downloadedVersion: null,
+    progress: null,
+    message: MANUAL_UPDATE_MESSAGE,
+    checkedAt: null,
   };
-}
-
-async function listConnectorAccounts() {
-  return readConnectorAccounts();
-}
-
-async function saveConnectorCredential(input: ConnectorCredential) {
-  const accounts = readConnectorAccounts();
-  const nextAccount: ConnectorAccount = {
-    provider: input.provider,
-    accountId: input.accountId,
-    label: input.label,
-    scopes: input.scopes,
-    createdAt: accounts.find((account) => account.provider === input.provider && account.accountId === input.accountId)?.createdAt ?? Date.now(),
-    updatedAt: Date.now(),
-  };
-
-  const rawValue = JSON.stringify({
-    accessToken: input.accessToken ?? null,
-    refreshToken: input.refreshToken ?? null,
-    expiresAt: input.expiresAt ?? null,
-    scopes: input.scopes,
-    label: input.label,
-  });
-  if (!safeStorage.isEncryptionAvailable()) {
-    console.warn("[openfolio] Keychain encryption unavailable — credentials will be stored in plaintext.");
-  }
-  const storedValue = safeStorage.isEncryptionAvailable()
-    ? safeStorage.encryptString(rawValue).toString("base64")
-    : rawValue;
-  core.db.setSetting(`${CONNECTOR_CREDENTIAL_PREFIX}${input.provider}:${input.accountId}`, storedValue);
-
-  const remaining = accounts.filter((account) => !(account.provider === input.provider && account.accountId === input.accountId));
-  remaining.push(nextAccount);
-  writeConnectorAccounts(remaining.sort((left, right) => left.label.localeCompare(right.label)));
-  return nextAccount;
-}
-
-async function deleteConnectorCredential(input: { provider: ConnectorCredential["provider"]; accountId: string }) {
-  core.db.setSetting(`${CONNECTOR_CREDENTIAL_PREFIX}${input.provider}:${input.accountId}`, "");
-  const remaining = readConnectorAccounts().filter((account) => !(account.provider === input.provider && account.accountId === input.accountId));
-  writeConnectorAccounts(remaining);
-  return { ok: true };
 }
 
 function focusWindow() {
@@ -239,33 +92,6 @@ function setDockIcon() {
   }
 }
 
-function isValidAuthCallbackUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "openfolio:" && parsed.pathname === "//auth/callback";
-  } catch {
-    return false;
-  }
-}
-
-function dispatchAuthCallback(url: string) {
-  logAuthDebug("dispatchAuthCallback", url);
-
-  if (!isValidAuthCallbackUrl(url)) {
-    logAuthDebug("rejected invalid auth callback URL", url);
-    return;
-  }
-
-  pendingAuthCallbackUrl = url;
-  focusWindow();
-
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    logAuthDebug("sending auth callback to renderer");
-    mainWindow.webContents.send("openfolio:cloud:authCallback", url);
-    pendingAuthCallbackUrl = null;
-  }
-}
-
 function getMessagesAccessTarget() {
   return resolveMessagesAccessTarget({
     appExecutablePath: app.getPath("exe"),
@@ -285,8 +111,12 @@ function revealMessagesAccessTargetInFinder() {
 }
 
 async function openMessagesFullDiskAccessSettings() {
+  const settingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
+  if (!isSafeSystemSettingsUrl(settingsUrl)) {
+    return false;
+  }
   try {
-    await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles");
+    await shell.openExternal(settingsUrl);
     return true;
   } catch (error) {
     console.warn("[openfolio] Failed to open Full Disk Access settings:", error);
@@ -348,105 +178,23 @@ function startMessagesImportInBackground() {
   return core.getActiveMessagesImport();
 }
 
-async function stopAuthCallbackServer() {
-  if (!authCallbackServer) {
-    return;
-  }
-
-  const server = authCallbackServer;
-  authCallbackServer = null;
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
-async function beginAuthSession() {
-  await stopAuthCallbackServer();
-
-  const server = createServer((request, response) => {
-    const requestUrl = new URL(request.url || "/", "http://127.0.0.1");
-    if (requestUrl.pathname !== "/auth/callback") {
-      response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-      response.end("Not found");
-      return;
-    }
-
-    const callbackUrl = new URL("openfolio://auth/callback");
-    for (const [key, value] of requestUrl.searchParams.entries()) {
-      callbackUrl.searchParams.set(key, value);
-    }
-
-    logAuthDebug("loopback callback received", callbackUrl.toString());
-    dispatchAuthCallback(callbackUrl.toString());
-
-    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    response.end(`<!doctype html>
-<html lang="en">
-  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>OpenFolio</title></head>
-  <body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#111827;color:#f3f4f6;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;">
-    <main style="max-width:560px;padding:32px;">
-      <h1 style="font-size:28px;margin:0 0 12px;">Signed in to OpenFolio</h1>
-      <p style="color:#d1d5db;line-height:1.5;">You can close this browser tab and return to the app.</p>
-    </main>
-  </body>
-</html>`);
-
-    setTimeout(() => {
-      void stopAuthCallbackServer().catch((error) => {
-        logAuthDebug("failed to stop auth callback server", error);
-      });
-    }, 250);
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
-
-  authCallbackServer = server;
-  const address = server.address();
-  if (!address || typeof address === "string") {
-    throw new Error("OpenFolio could not start the local auth callback server.");
-  }
-
-  const redirectUri = `http://127.0.0.1:${address.port}/auth/callback`;
-  logAuthDebug("beginAuthSession", redirectUri);
-  return { redirectUri };
-}
-
 if (enforceSingleInstance && !app.requestSingleInstanceLock()) {
   app.quit();
 } else if (enforceSingleInstance) {
-  app.on("second-instance", (_event, argv) => {
-    logAuthDebug("second-instance argv", argv);
-    const callbackUrl = argv.find((value) => value.startsWith("openfolio://"));
-    if (callbackUrl) {
-      dispatchAuthCallback(callbackUrl);
-    }
+  app.on("second-instance", () => {
+    focusWindow();
   });
 }
 
-if (process.defaultApp && process.argv[1]) {
-  const registered = app.setAsDefaultProtocolClient("openfolio", process.execPath, [path.resolve(process.argv[1])]);
-  logAuthDebug("setAsDefaultProtocolClient defaultApp", registered, process.execPath, path.resolve(process.argv[1]));
-} else {
-  const registered = app.setAsDefaultProtocolClient("openfolio");
-  logAuthDebug("setAsDefaultProtocolClient packaged", registered);
+function installRuntimeNetworkPolicy(policy: RuntimeNetworkPolicy) {
+  const appSession = session.defaultSession;
+  appSession.webRequest.onBeforeRequest({ urls: ["<all_urls>"] }, (details, callback) => {
+    callback({ cancel: !isRuntimeRequestAllowed(details.url, policy) });
+  });
+  appSession.setPermissionCheckHandler(() => false);
+  appSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  appSession.on("will-download", (event) => event.preventDefault());
 }
-app.on("open-url", (event, url) => {
-  event.preventDefault();
-  logAuthDebug("open-url", url);
-  dispatchAuthCallback(url);
-});
 
 function createWindow() {
   const browserWindow = new BrowserWindow({
@@ -464,9 +212,6 @@ function createWindow() {
 
   if (process.env.ELECTRON_RENDERER_URL) {
     const rendererUrl = new URL(process.env.ELECTRON_RENDERER_URL);
-    if (debugAuthFlow) {
-      rendererUrl.searchParams.set("debugAuth", "1");
-    }
     browserWindow.loadURL(rendererUrl.toString());
   } else {
     browserWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
@@ -476,42 +221,15 @@ function createWindow() {
     browserWindow.webContents.openDevTools({ mode: "detach" });
   }
 
-  browserWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isAllowedExternalUrl(url)) {
-      void shell.openExternal(url);
-    }
-    return { action: "deny" };
-  });
+  browserWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  browserWindow.webContents.on("will-attach-webview", (event) => event.preventDefault());
 
   browserWindow.webContents.on("will-navigate", (event, url) => {
     const currentUrl = browserWindow.webContents.getURL();
-    if (shouldOpenExternalUrl(url, currentUrl)) {
+    if (!runtimeNetworkPolicy || !isNavigationAllowed(url, currentUrl, runtimeNetworkPolicy)) {
       event.preventDefault();
-      if (isAllowedExternalUrl(url)) {
-        void shell.openExternal(url);
-      }
     }
   });
-
-  browserWindow.webContents.on("did-finish-load", () => {
-    logAuthDebug("did-finish-load", browserWindow.webContents.getURL(), pendingAuthCallbackUrl);
-    if (pendingAuthCallbackUrl) {
-      browserWindow.webContents.send("openfolio:cloud:authCallback", pendingAuthCallbackUrl);
-      pendingAuthCallbackUrl = null;
-    }
-
-    if (debugAuthFlow) {
-      void browserWindow.webContents.executeJavaScript(
-        "console.log('[openfolio-auth-renderer] beginAuthSession type', typeof window.openfolio?.cloud?.beginAuthSession)",
-      );
-    }
-  });
-
-  if (debugAuthFlow) {
-    browserWindow.webContents.on("console-message", (_event, level, message) => {
-      console.log("[openfolio-renderer-console]", level, message);
-    });
-  }
 
   browserWindow.on("closed", () => {
     if (mainWindow === browserWindow) {
@@ -521,10 +239,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  applyStoredAiConfig();
+  runtimeNetworkPolicy = createRuntimeNetworkPolicy(app.isPackaged, process.env.ELECTRON_RENDERER_URL);
+  installRuntimeNetworkPolicy(runtimeNetworkPolicy);
   setDockIcon();
   createWindow();
-  updater.initialize();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -537,13 +255,6 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
-});
-
-app.on("before-quit", () => {
-  updater.dispose();
-  void stopAuthCallbackServer().catch((error) => {
-    console.warn("[openfolio] Auth callback server cleanup failed:", error);
-  });
 });
 
 const api: OpenFolioBridge = {
@@ -619,7 +330,10 @@ const api: OpenFolioBridge = {
       logAppDebug("contacts", "requestAccess");
       const status = await requestContactsAccess();
       if (status.status === "denied") {
-        await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts");
+        const settingsUrl = "x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts";
+        if (isSafeSystemSettingsUrl(settingsUrl)) {
+          await shell.openExternal(settingsUrl);
+        }
       }
       const guided = withContactsAccessGuidance(status);
       logAppDebug("contacts", "requestAccessResult", guided);
@@ -672,89 +386,26 @@ const api: OpenFolioBridge = {
     },
   },
   search: {
-    query: async ({ text, limit }: { text: string; limit?: number }): Promise<SearchResult[]> => {
-      logAppDebug("search", "query", { text, limit });
-      const results = await core.search(text, limit);
-      logAppDebug("search", "resultCount", results.length);
-      return results;
+    query: async ({ text, limit }: { text: string; limit?: number }) => core.search(text, limit),
+    queryArchive: async (input: SearchQueryInput): Promise<SearchResponse> => {
+      logAppDebug("search", "query", input);
+      const response = await core.searchArchive(input);
+      logAppDebug("search", "resultCount", response.resultCount, response.semanticStatus);
+      return response;
     },
+    getCitationContext: async (input: ConversationCitationInput) => core.getConversationCitationContext(
+      input.threadId,
+      input.messageId,
+      input.before,
+      input.after,
+    ),
     getScaleStatus: async () => core.getSearchScaleStatus(),
   },
-  ai: {
-    run: async (input: AskRunInput) => {
-      logAppDebug("ai", "run", { query: input.query, sourceScope: input.sourceScope, personId: input.personId, threadId: input.threadId });
-      if (input.useHosted) {
-        return {
-          answer: "Hosted AI is not enabled in the local MVP. Add an OpenAI key to use BYOK Ask locally.",
-          citations: [],
-          provider: "local" as const,
-          sourceScope: input.sourceScope ?? "all",
-        };
-      }
-      const result = await core.ask(input);
-      logAppDebug("ai", "result", { provider: result.provider, citations: result.citations.length });
-      return result;
-    },
-    getSettings: async () => getAiSettingsStatus(),
-    saveOpenAIKey: async (input) => {
-      writeEncryptedSetting(AI_OPENAI_KEY, input.apiKey);
-      core.db.setSetting(AI_SETTINGS_KEY, JSON.stringify({
-        answerModel: input.answerModel || "gpt-5-mini",
-        embeddingModel: input.embeddingModel || "text-embedding-3-small",
-        useOpenAIEmbeddings: Boolean(input.useOpenAIEmbeddings),
-      }));
-      applyStoredAiConfig();
-      return getAiSettingsStatus();
-    },
-    deleteOpenAIKey: async () => {
-      writeEncryptedSetting(AI_OPENAI_KEY, null);
-      applyStoredAiConfig();
-      return getAiSettingsStatus();
-    },
-  },
-  cloud: {
-    getConfig: async () => {
-      logAppDebug("cloud", "getConfig", cloudConfig);
-      return cloudConfig;
-    },
-    beginAuthSession: async () => beginAuthSession(),
-    openExternal: async (url: string) => {
-      logAppDebug("cloud", "openExternal", url);
-      if (!isAllowedExternalUrl(url)) {
-        throw new Error("Refusing to open an unsupported external URL.");
-      }
-      await shell.openExternal(url);
-    },
-    onAuthCallback: () => () => {},
-  },
-  connectorCredentials: {
-    listAccounts: async () => {
-      const accounts = await listConnectorAccounts();
-      logAppDebug("connectors", "listAccounts", accounts.length);
-      return accounts;
-    },
-    saveCredential: async (input: ConnectorCredential) => {
-      logAppDebug("connectors", "saveCredential", input.provider, input.accountId);
-      return saveConnectorCredential(input);
-    },
-    deleteCredential: async (input: { provider: ConnectorCredential["provider"]; accountId: string }) => {
-      logAppDebug("connectors", "deleteCredential", input.provider, input.accountId);
-      return deleteConnectorCredential(input);
-    },
-  },
   updates: {
-    getState: async () => {
-      const state = updater.getState();
-      logAppDebug("updates", "getState", state);
-      return state;
-    },
-    checkNow: async () => {
-      logAppDebug("updates", "checkNow");
-      return updater.checkNow();
-    },
+    getState: async () => createManualUpdateState(),
+    checkNow: async () => createManualUpdateState(),
     installNow: async () => {
-      logAppDebug("updates", "installNow");
-      updater.installNow();
+      throw new Error(MANUAL_UPDATE_MESSAGE);
     },
     onStateChange: () => () => {},
   },
@@ -790,7 +441,7 @@ const api: OpenFolioBridge = {
         contactsStatus: {
           status: contactsStatus.status,
         },
-        updateState: updater.getState(),
+        updateState: createManualUpdateState(),
         localData: getLocalDataStatus(core.db.dbPath),
         watcherState: core.getWatcherState(),
         activeImport: activeImport
@@ -832,7 +483,7 @@ const api: OpenFolioBridge = {
       return {
         available: true,
         command,
-        details: "OpenFolio MCP runs locally over stdio. Your messages stay in the local SQLite database; clients receive only tool results.",
+        details: "OpenFolio MCP itself runs offline over local stdio. Tool results can contain private library data, and the configured client may send those results to its own service.",
         clients: [
           {
             id: "claude",
@@ -943,9 +594,21 @@ const api: OpenFolioBridge = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function safeHandle(channel: string, handler: (...args: any[]) => unknown) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ipcMain.handle(channel, async (...args: any[]) => {
+  ipcMain.handle(channel, async (event, ...args: any[]) => {
     try {
-      return await handler(...args);
+      const senderFrame = event.senderFrame;
+      if (
+        !runtimeNetworkPolicy
+        || !mainWindow
+        || mainWindow.isDestroyed()
+        || event.sender !== mainWindow.webContents
+        || !senderFrame
+        || senderFrame !== event.sender.mainFrame
+        || !isIpcSenderAllowed(senderFrame.url, runtimeNetworkPolicy)
+      ) {
+        throw new Error("Rejected IPC from an untrusted renderer frame.");
+      }
+      return await handler(event, ...args);
     } catch (error) {
       console.error(`[openfolio-ipc] ${channel} failed:`, error);
       throw new Error(`${channel}: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -967,20 +630,10 @@ safeHandle("openfolio:contacts:requestAccess", () => api.contacts.requestAccess(
 safeHandle("openfolio:contacts:getAccessStatus", () => api.contacts.getAccessStatus());
 safeHandle("openfolio:contacts:sync", () => api.contacts.sync());
 safeHandle("openfolio:search:query", (_, input: { text: string; limit?: number }) => api.search.query(input));
+safeHandle("openfolio:search:queryArchive", (_, input: SearchQueryInput) => api.search.queryArchive(input));
+safeHandle("openfolio:search:getCitationContext", (_, input: ConversationCitationInput) => api.search.getCitationContext(input));
 safeHandle("openfolio:search:getScaleStatus", () => api.search.getScaleStatus());
-safeHandle("openfolio:ai:run", (_, input: AskRunInput) => api.ai.run(input));
-safeHandle("openfolio:ai:getSettings", () => api.ai.getSettings());
-safeHandle("openfolio:ai:saveOpenAIKey", (_, input: { apiKey: string; answerModel?: string | null; embeddingModel?: string | null; useOpenAIEmbeddings?: boolean }) => api.ai.saveOpenAIKey(input));
-safeHandle("openfolio:ai:deleteOpenAIKey", () => api.ai.deleteOpenAIKey());
-safeHandle("openfolio:cloud:getConfig", () => api.cloud.getConfig());
-safeHandle("openfolio:cloud:beginAuthSession", () => api.cloud.beginAuthSession());
-safeHandle("openfolio:cloud:openExternal", (_, url: string) => api.cloud.openExternal(url));
-safeHandle("openfolio:connectors:listAccounts", () => api.connectorCredentials.listAccounts());
-safeHandle("openfolio:connectors:saveCredential", (_, input: ConnectorCredential) => api.connectorCredentials.saveCredential(input));
-safeHandle("openfolio:connectors:deleteCredential", (_, input: { provider: ConnectorCredential["provider"]; accountId: string }) => api.connectorCredentials.deleteCredential(input));
 safeHandle("openfolio:updates:getState", () => api.updates.getState());
-safeHandle("openfolio:updates:checkNow", () => api.updates.checkNow());
-safeHandle("openfolio:updates:installNow", () => api.updates.installNow());
 safeHandle("openfolio:localData:getStatus", () => api.localData.getStatus());
 safeHandle("openfolio:localData:revealDatabase", () => api.localData.revealDatabase());
 safeHandle("openfolio:localData:revealBackups", () => api.localData.revealBackups());

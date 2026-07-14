@@ -14,7 +14,6 @@ export function useAppData() {
     setEmbeddingSync,
     setThreads,
     setThreadSummaries,
-    setSuggestions,
     setImportJob,
     setUpdateState,
     setWatcherState,
@@ -29,14 +28,13 @@ export function useAppData() {
 
     async function bootstrap() {
       try {
-        const [messagesStatus, contactsStatus, mcpStatus, threads, summaries, suggestions, watcherState, embeddingSync, activeImport] =
+        const [messagesStatus, contactsStatus, mcpStatus, threads, summaries, watcherState, embeddingSync, activeImport] =
           await Promise.all([
             window.openfolio.messages.getAccessStatus(),
             window.openfolio.contacts.getAccessStatus(),
             window.openfolio.mcp.getStatus(),
             window.openfolio.threads.list({ limit: 50 }),
             window.openfolio.dashboard.getThreadSummaries(10),
-            window.openfolio.dashboard.getReminderSuggestions(10),
             window.openfolio.sync.getWatcherState(),
             window.openfolio.embeddings.getSyncStatus(),
             window.openfolio.messages.getActiveImport(),
@@ -47,7 +45,6 @@ export function useAppData() {
         setMcpStatus(mcpStatus);
         setThreads(threads);
         setThreadSummaries(summaries);
-        setSuggestions(suggestions);
         setWatcherState(watcherState);
         setEmbeddingSync(embeddingSync);
         setImportJob(activeImport);
@@ -72,7 +69,6 @@ export function useAppData() {
     setEmbeddingSync,
     setThreads,
     setThreadSummaries,
-    setSuggestions,
     setImportJob,
     setUpdateState,
     setWatcherState,

@@ -1,11 +1,20 @@
-import { Check, Database, KeyRound, MessageSquare, RefreshCw, Search, ShieldCheck, Users } from "lucide-react";
-import { useEffect } from "react";
+import {
+  Check,
+  Database,
+  MessageSquare,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { useAppStore } from "../store";
 import { getOnboardingState, type OnboardingStep } from "../onboarding";
 import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
+import { FolioMark } from "./FolioMark";
 
 const STEP_ICONS: Record<OnboardingStep["id"], typeof MessageSquare> = {
   messages: ShieldCheck,
@@ -25,8 +34,23 @@ function StepIcon({ step }: { step: OnboardingStep }) {
   return <Icon size={16} />;
 }
 
-function StepRow({ step, active, onAction, busy }: { step: OnboardingStep; active: boolean; onAction: () => void; busy: boolean }) {
-  const showAction = step.actionLabel && step.status !== "waiting" && (step.status !== "blocked" || step.id === "contacts");
+function StepRow({
+  step,
+  active,
+  onAction,
+  busy,
+  onSkip,
+}: {
+  step: OnboardingStep;
+  active: boolean;
+  onAction: () => void;
+  busy: boolean;
+  onSkip?: () => void;
+}) {
+  const showAction =
+    step.actionLabel &&
+    step.status !== "waiting" &&
+    (step.status !== "blocked" || step.id === "contacts");
 
   return (
     <div className={`setup-step ${active ? "active" : ""} ${step.status}`}>
@@ -41,9 +65,21 @@ function StepRow({ step, active, onAction, busy }: { step: OnboardingStep; activ
         <p>{step.description}</p>
       </div>
       {showAction && (
-        <Button size="xs" variant={step.status === "complete" ? "secondary" : "default"} onClick={onAction} disabled={busy}>
-          {step.status === "running" ? <RefreshCw size={12} className="animate-spin" /> : null}
+        <Button
+          size="xs"
+          variant={step.status === "complete" ? "secondary" : "default"}
+          onClick={onAction}
+          disabled={busy}
+        >
+          {step.status === "running" ? (
+            <RefreshCw size={12} className="animate-spin" />
+          ) : null}
           {step.actionLabel}
+        </Button>
+      )}
+      {step.id === "contacts" && step.status !== "complete" && onSkip && (
+        <Button size="xs" variant="ghost" onClick={onSkip} disabled={busy}>
+          Skip
         </Button>
       )}
     </div>
@@ -51,6 +87,7 @@ function StepRow({ step, active, onAction, busy }: { step: OnboardingStep; activ
 }
 
 export function OnboardingView() {
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const {
     messagesStatus,
     contactsStatus,
@@ -84,10 +121,28 @@ export function OnboardingView() {
   useEffect(() => {
     if (!embeddingSync?.syncing) return;
     const interval = window.setInterval(() => {
-      void window.openfolio.embeddings.getSyncStatus().then(setEmbeddingSync).catch(console.error);
+      void window.openfolio.embeddings
+        .getSyncStatus()
+        .then(setEmbeddingSync)
+        .catch(console.error);
     }, 1500);
     return () => window.clearInterval(interval);
   }, [embeddingSync?.syncing, setEmbeddingSync]);
+
+  useEffect(() => {
+    if (messagesStatus?.status === "granted") return;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      void window.openfolio.messages.getAccessStatus().then(setMessagesStatus).catch(() => undefined);
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 1500);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [messagesStatus?.status, setMessagesStatus]);
 
   async function refreshAppData() {
     const [nextThreads, summaries, nextEmbeddingSync] = await Promise.all([
@@ -109,7 +164,11 @@ export function OnboardingView() {
         toast.success("Messages access is ready");
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not check Messages access.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not check Messages access.",
+      );
     } finally {
       setBusy(false);
     }
@@ -118,23 +177,31 @@ export function OnboardingView() {
   async function runImport() {
     setBusy(true);
     try {
-      const action = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
-      if ((action.kind === "cancel") && importJob) {
-        const cancelled = await window.openfolio.messages.cancelImport(importJob.id);
+      const action = getImportPrimaryAction(
+        importJob,
+        messagesStatus?.status === "granted",
+      );
+      if (action.kind === "cancel" && importJob) {
+        const cancelled = await window.openfolio.messages.cancelImport(
+          importJob.id,
+        );
         if (cancelled) setImportJob(cancelled);
         toast("Import cancellation requested");
         return;
       }
 
-      const job = action.kind === "retry"
-        ? await window.openfolio.messages.retryImport(importJob?.id)
-        : await window.openfolio.messages.startImport();
+      const job =
+        action.kind === "retry"
+          ? await window.openfolio.messages.retryImport(importJob?.id)
+          : await window.openfolio.messages.startImport();
       setImportJob(job);
       const isRunning = job.status === "running" || job.status === "cancelling";
       if (isRunning) {
         setBusy(false);
       }
-      const finalJob = isRunning ? await waitForImportJob(job.id, setImportJob) : job;
+      const finalJob = isRunning
+        ? await waitForImportJob(job.id, setImportJob)
+        : job;
 
       if (!finalJob) {
         toast.error("Import status was lost.");
@@ -153,7 +220,9 @@ export function OnboardingView() {
       toast.success(`Imported ${finalJob.importedMessages} messages`);
       await refreshAppData();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Messages import failed.");
+      toast.error(
+        error instanceof Error ? error.message : "Messages import failed.",
+      );
     } finally {
       setBusy(false);
     }
@@ -172,7 +241,9 @@ export function OnboardingView() {
       setContactsSync(summary);
       toast.success(`Synced ${summary.importedContacts} contacts`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Contacts sync failed.");
+      toast.error(
+        error instanceof Error ? error.message : "Contacts sync failed.",
+      );
     } finally {
       setBusy(false);
     }
@@ -183,9 +254,15 @@ export function OnboardingView() {
     try {
       const status = await window.openfolio.embeddings.syncNow();
       setEmbeddingSync(status);
-      toast.success(status.syncing ? "Semantic indexing started" : "Semantic index is up to date");
+      toast.success(
+        status.syncing
+          ? "Semantic indexing started"
+          : "Semantic index is up to date",
+      );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Semantic index failed.");
+      toast.error(
+        error instanceof Error ? error.message : "Semantic index failed.",
+      );
     } finally {
       setBusy(false);
     }
@@ -202,47 +279,66 @@ export function OnboardingView() {
     <div className="setup-shell">
       <div className="setup-main">
         <div className="setup-hero">
-          <Badge variant="secondary">Local-first setup</Badge>
-          <h1>Build your private message memory.</h1>
+          <FolioMark number="00" label="ARCHIVE SETUP" />
+          <Badge variant="secondary">Private archive setup</Badge>
+          <h1>Remember who told you what.</h1>
           <p>
-            OpenFolio reads Messages and Contacts locally, builds a searchable graph on this Mac,
-            and keeps hosted features optional.
+            Search your iMessage history privately on this Mac, then verify
+            every result in the original conversation.
           </p>
+          <p>Your messages and search index stay on this Mac.</p>
           <div className="setup-hero-actions">
             <Button
               size="sm"
               onClick={() => setSetupDismissed(true)}
               disabled={!state.canEnterApp}
             >
-              Enter OpenFolio
+              Try your first search
             </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void window.openfolio.cloud.openExternal("https://openfolio.ai/docs/privacy")}
-            >
-              <KeyRound size={14} />
-              Privacy details
+            <Button size="sm" variant="ghost" onClick={() => setPrivacyOpen((open) => !open)}>
+              How privacy works
             </Button>
           </div>
+          {privacyOpen && (
+            <div className="setup-privacy" role="note">
+              <strong>OpenFolio reads, but never changes, Messages.</strong>
+              <p>It builds a separate search index on this Mac. Message and contact data are not uploaded.</p>
+            </div>
+          )}
         </div>
 
         <div className="setup-progress">
           <div className="setup-progress-header">
-            <span>{state.progress.completedRequired}/{state.progress.totalRequired} required steps complete</span>
-            {state.canEnterApp ? <Badge variant="success">ready</Badge> : <Badge variant="default">setup needed</Badge>}
+            <span>
+              {state.progress.completedRequired}/{state.progress.totalRequired}{" "}
+              required steps complete
+            </span>
+            {state.canEnterApp ? (
+              <Badge variant="success">ready</Badge>
+            ) : (
+              <Badge variant="default">setup needed</Badge>
+            )}
           </div>
           <div className="setup-steps">
-            {state.steps.map((step) => (
+            {state.steps.filter((step) => step.id === state.activeStepId).map((step) => (
               <StepRow
                 key={step.id}
                 step={step}
                 active={state.activeStepId === step.id}
                 busy={busy}
                 onAction={actionByStep[step.id]}
+                onSkip={step.id === "contacts" && state.canEnterApp ? () => setSetupDismissed(true) : undefined}
               />
             ))}
           </div>
+          {importJob && (
+            <div className="import-activity" aria-label="Import activity">
+              <span><Check size={13} /> Reading conversations {importJob.importedThreads > 0 ? `· ${importJob.importedThreads}` : ""}</span>
+              <span><Check size={13} /> Resolving participants {importJob.importedPeople > 0 ? `· ${importJob.importedPeople}` : ""}</span>
+              <span><Check size={13} /> Preparing exact search {importJob.importedMessages > 0 ? `· ${importJob.importedMessages} messages` : ""}</span>
+              <span>{embeddingSync?.syncing ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />} Preparing semantic search</span>
+            </div>
+          )}
         </div>
       </div>
     </div>

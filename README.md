@@ -5,7 +5,11 @@
 <h1 align="center">OpenFolio</h1>
 
 <p align="center">
-  <strong>Local-first iMessage search and relationship memory for macOS</strong>
+  <strong>OpenFolio remembers who told you what.</strong>
+</p>
+
+<p align="center">
+  Private, evidence-first iMessage recall for macOS.
 </p>
 
 <p align="center">
@@ -16,61 +20,96 @@
 
 <p align="center">
   <a href="https://openfolio.ai">Website</a> &middot;
-  <a href="docs/current-state.md">Current State</a> &middot;
-  <a href="docs/roadmap.md">Roadmap</a> &middot;
+  <a href="docs/product-contract.md">Product Contract</a> &middot;
+  <a href="docs/zero-network-threat-model.md">Privacy Model</a> &middot;
   <a href="docs/release-checklist.md">Release Checklist</a> &middot;
   <a href="https://github.com/unlatch-ai/OpenFolio/issues">Report an Issue</a>
 </p>
 
 ---
 
-OpenFolio is a native macOS app for searching and understanding your iMessage relationships. Browse conversations, inspect person profiles, explore relationship stats, ask local/BYOK AI questions, and configure MCP access for coding assistants. The local graph stays on your Mac.
+OpenFolio searches your iMessage history on your Mac, helps you find the person,
+fact, or message you remember, and lets you verify it in the original
+conversation.
 
-## Highlights
+It is not a relationship-health score, personal CRM, reminder system, or AI
+answer engine. Search returns evidence from the archive rather than generated
+prose.
 
-- **Relationship memory** — See top contacts, busiest hours, messaging streaks, monthly trends, and dense person profiles.
-- **100% local** — Your messages never leave your Mac. SQLite database, local embeddings, no cloud required.
-- **Conversation browser** — Two-panel inbox with real-time thread updates via FSEvents watcher on `chat.db`.
-- **Hybrid semantic search** — Cmd+K searches FTS and local embeddings, with optional BYOK OpenAI answers and embeddings.
-- **Relationship insights** — Response times, message volume by hour/day/month, conversation streaks, and a GitHub-style activity heatmap.
-- **Person research profiles** — Edit identity fields and aliases, inspect related threads, search person-scoped history, pin notes, and track reminders.
-- **Guided first run** — Walk through Messages permission, import, Contacts sync, and local semantic indexing.
-- **Polished macOS design** — Dense local workflows with restrained styling, gradient avatars, and smooth Framer Motion transitions.
-- **MCP setup assistant** — Copy local stdio MCP configuration for AI/coding assistants.
-- **Open source** — AGPL-3.0. Read the code, fork it, contribute back.
+## What it does
 
-## How It Works
+- **Search first** — Search messages, people, and conversations with exact words
+  or meaning-based retrieval. `⌘K` returns to the full Search page.
+- **Evidence you can verify** — Message results identify their source and open
+  the exact cited message with its surrounding conversation.
+- **People dossiers** — Browse the people represented in your history and scope
+  search to one person without inferring relationship quality.
+- **Conversation archive** — Read original local records without a composer,
+  reply surface, or iMessage imitation.
+- **Wrapped** — Revisit deterministic annual totals, message rhythms, and top
+  people without generated narratives.
+- **Exact-search fallback** — Full-text search continues while the semantic
+  index is preparing or if the local model is unavailable.
+- **No account required** — Local entry does not use hosted sign-in, cloud sync,
+  provider keys, or a website connection.
 
-OpenFolio reads your local `chat.db` (macOS Messages database) in read-only mode. It indexes conversations, computes relationship stats via SQL analytics, and generates local embeddings for semantic search — all without sending a single byte to the cloud.
+## Local privacy boundary
 
-Optional hosted account, billing, managed connectors, and hosted AI are future commercial layers. The current open-source milestone is local-first and BYOK; the Mac app does not connect to hosted services by default.
+OpenFolio reads `~/Library/Messages/chat.db` in read-only mode after you grant
+Full Disk Access. It creates a separate SQLite archive and builds embeddings
+locally with a bundled q8 `all-MiniLM-L6-v2` ONNX model (about 23 MB). The model
+is pinned and hash-verified; there is no remote-model fallback.
 
-## Building from Source
+The production app implements a deny-all network policy covering Internet, LAN,
+loopback, DNS, socket, navigation, download, and external HTTP(S) handoff paths.
+It has no automatic updater, telemetry, hosted AI, or browser-based account
+flow.
 
-**Requirements:** Node.js 22+, [pnpm](https://pnpm.io/) 10+, macOS (for Messages access)
+The claim that a particular signed release makes zero network requests remains
+gated on artifact inspection and PID-attributed traffic observation of that
+exact signed build on real macOS. Source inspection, unit tests, CSP, and an
+unsigned package do not prove the signed-release claim. See the
+[zero-network threat model](docs/zero-network-threat-model.md) for the complete
+boundary and release gate.
+
+## Install and update
+
+Download the latest build from [GitHub Releases](https://github.com/unlatch-ai/OpenFolio/releases/latest),
+move `OpenFolio.app` into `/Applications`, and grant Full Disk Access when macOS
+asks.
+
+OpenFolio updates manually. Quit the app, download the new release, and replace
+the existing app in `/Applications`. Your imported archive, index, and settings
+remain in macOS Application Support outside the app bundle.
+
+## Building from source
+
+**Requirements:** Node.js 22+, [pnpm](https://pnpm.io/) 10+, macOS for Messages
+access.
 
 ```bash
 git clone https://github.com/unlatch-ai/OpenFolio.git
 cd OpenFolio
 pnpm install
-pnpm approve-builds   # Allow postinstall scripts (Electron, esbuild, etc.)
-pnpm install           # Re-run so approved scripts execute
-pnpm build             # Build workspace packages
-pnpm dev               # Run the Electron app in dev mode
+pnpm approve-builds
+pnpm install
+pnpm build
+pnpm dev
 ```
 
-> **Note:** `pnpm dev` hot-reloads changes inside `apps/mac/src/`, but if you
-> edit code in `packages/core/` you need to rebuild it
-> (`pnpm --filter @openfolio/core build`) for the changes to take effect.
+If you change `packages/core`, rebuild it before testing the Electron app:
+
+```bash
+pnpm --filter @openfolio/core build
+```
 
 <details>
-<summary><strong>All commands</strong></summary>
+<summary><strong>Common commands</strong></summary>
 
 | Command | Description |
 |---------|-------------|
 | `pnpm dev` | Run the Mac app in development mode |
-| `pnpm dev:web` | Run the website locally |
-| `pnpm dev:hosted` | Run the Convex backend locally |
+| `pnpm dev:web` | Run the public website locally |
 | `pnpm typecheck` | Type-check all packages |
 | `pnpm test` | Run all tests |
 | `pnpm build` | Build all packages |
@@ -79,34 +118,34 @@ pnpm dev               # Run the Electron app in dev mode
 
 ## Architecture
 
-```
+```text
 apps/
-  mac/          Electron app — shell, renderer, auto-updater
-  web/          Marketing site (Next.js)
+  mac/           Electron app and Editorial Archive renderer
+  web/           Public landing page and documentation
 
 packages/
-  core/         Local SQLite graph, Messages import, search, embeddings, AI,
-                analytics engine, FSEvents watcher, local embeddings (Transformers.js)
-  mcp/          CLI and MCP server for the local graph
-  hosted/       Convex backend — identity, billing, entitlements
-  shared-types/ Shared type contracts
-  shared-tokens/ Design tokens (warm color palette, gradients, shadows)
+  core/          Local SQLite archive, Messages import, search, embeddings,
+                 analytics, and the canonical behavior layer
+  shared-types/  Shared local contracts
+  shared-tokens/ Semantic visual tokens
 ```
 
-### Key Technologies
+Other experimental packages can exist in the repository, but they are not part
+of the current product pitch or required local entry path.
 
-- **Electron + React 19** — Native macOS app with modern React
-- **Tailwind v4 + shadcn/ui** — Utility-first styling with pre-built components
-- **Zustand** — Lightweight state management
-- **Recharts** — Interactive charts for insights dashboard
-- **Framer Motion** — Smooth transitions and animations
-- **Transformers.js** — Local AI embeddings via `all-MiniLM-L6-v2` ONNX model (~23MB, auto-downloads)
-- **node:sqlite** — Built-in Node 22 SQLite for the local database
-- **cmdk** — Cmd+K command palette with semantic search
+### Key technologies
+
+- **Electron + React 19** — macOS shell and renderer
+- **node:sqlite** — local archive and full-text index
+- **Transformers.js** — bundled local `all-MiniLM-L6-v2` embeddings
+- **Tailwind v4 + semantic tokens** — shared Editorial Archive visual system
+- **Zustand and Recharts** — local UI state and deterministic visualizations
 
 ## Contributing
 
-Contributions are welcome. If you find a bug or have an idea, please [open an issue](https://github.com/unlatch-ai/OpenFolio/issues/new). Pull requests are appreciated — just make sure `pnpm typecheck` and `pnpm test` pass before submitting.
+Contributions are welcome. Open an [issue](https://github.com/unlatch-ai/OpenFolio/issues/new)
+for bugs and proposals. Before submitting a pull request, run `pnpm typecheck`
+and `pnpm test`.
 
 ## License
 

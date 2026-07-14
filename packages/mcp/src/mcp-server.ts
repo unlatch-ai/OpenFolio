@@ -1,10 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { OpenFolioCore } from "@openfolio/core";
+import { installNodeNetworkLock, OpenFolioCore } from "@openfolio/core";
+
+export function createOfflineMcpCore(options?: { dbPath?: string }) {
+  return new OpenFolioCore({ dbPath: options?.dbPath, networkPolicy: "offline" });
+}
 
 export async function startOpenFolioMcpServer(options?: { dbPath?: string }) {
-  const core = new OpenFolioCore({ dbPath: options?.dbPath });
+  installNodeNetworkLock();
+  const core = createOfflineMcpCore(options);
   const server = new McpServer(
     {
       name: "openfolio",

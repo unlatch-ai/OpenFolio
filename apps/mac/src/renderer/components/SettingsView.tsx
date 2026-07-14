@@ -1,528 +1,435 @@
-import { useCallback, useEffect, useState } from "react";
-import type { AiSettingsStatus, EmbeddingSyncStatus, LocalDataStatus, McpSetupStatus, SearchScaleStatus } from "@openfolio/shared-types";
-import { Copy, Download, ExternalLink, FolderOpen, KeyRound, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Copy, FolderOpen, RefreshCw } from "lucide-react";
+import type {
+  LocalDataStatus,
+  McpSetupStatus,
+  SearchScaleStatus,
+} from "@openfolio/shared-types";
 import { toast } from "sonner";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { Switch } from "./ui/switch";
-import { useTheme } from "@/lib/use-theme";
 import { useAppStore } from "../store";
-import { formatDiagnosticsReport } from "../diagnostics";
-import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
-import { getBackupSummaryLabel, getPathLabel } from "../local-data-labels";
 import { describeSearchScale } from "../search-results";
-import { getAppVersionLabel, getLastCheckedLabel, getReleaseNotesUrl, getUpdateStatusLabel, getUpdateVersionLabel } from "../update-labels";
+import { formatDiagnosticsReport } from "../diagnostics";
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
+import { FolioMark } from "./FolioMark";
+
+const RELEASE_ADDRESS =
+  "https://github.com/unlatch-ai/OpenFolio/releases/latest";
+
+function SettingsSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="settings-section">
+      <h2>{title}</h2>
+      <div className="settings-rows">{children}</div>
+    </section>
+  );
+}
+
+function SettingsRow({
+  title,
+  detail,
+  children,
+  mono = false,
+}: {
+  title: string;
+  detail: React.ReactNode;
+  children?: React.ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <div className="settings-row">
+      <div>
+        <h3>{title}</h3>
+        <div className={mono ? "mono-detail" : undefined}>{detail}</div>
+      </div>
+      {children && <div className="settings-actions">{children}</div>}
+    </div>
+  );
+}
 
 export function SettingsView() {
-  const { theme, setTheme } = useTheme();
-
   const {
     messagesStatus,
     contactsStatus,
     contactsSync,
-    updateState,
     importJob,
-    busy,
-    cloudError,
+    embeddingSync,
+    updateState,
     setMessagesStatus,
     setContactsStatus,
     setContactsSync,
     setImportJob,
-    setUpdateState,
+    setEmbeddingSync,
     setBusy,
-    setThreads,
+    busy,
   } = useAppStore();
-
-  const [aiSettings, setAiSettings] = useState<AiSettingsStatus | null>(null);
-  const [apiKey, setApiKey] = useState("");
-  const [useOpenAIEmbeddings, setUseOpenAIEmbeddings] = useState(false);
-  const [mcpSetup, setMcpSetup] = useState<McpSetupStatus | null>(null);
-  const [embeddingSync, setEmbeddingSync] = useState<EmbeddingSyncStatus | null>(null);
-  const [searchScale, setSearchScale] = useState<SearchScaleStatus | null>(null);
   const [localData, setLocalData] = useState<LocalDataStatus | null>(null);
+  const [scale, setScale] = useState<SearchScaleStatus | null>(null);
+  const [mcp, setMcp] = useState<McpSetupStatus | null>(null);
+  const [mcpAcknowledged, setMcpAcknowledged] = useState(false);
 
   useEffect(() => {
-    void window.openfolio.ai.getSettings().then((settings) => {
-      setAiSettings(settings);
-      setUseOpenAIEmbeddings(settings.useOpenAIEmbeddings);
+    void Promise.all([
+      window.openfolio.localData.getStatus(),
+      window.openfolio.search.getScaleStatus(),
+      window.openfolio.mcp.getSetup(),
+    ]).then(([data, status, setup]) => {
+      setLocalData(data);
+      setScale(status);
+      setMcp(setup);
     });
-    void window.openfolio.mcp.getSetup().then(setMcpSetup);
-    void window.openfolio.embeddings.getSyncStatus().then(setEmbeddingSync);
-    void window.openfolio.search.getScaleStatus().then(setSearchScale);
-    void window.openfolio.localData.getStatus().then(setLocalData);
   }, []);
 
-  const runImport = useCallback(async () => {
+  const importMessages = async () => {
     setBusy(true);
     try {
-      const action = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
-      if (action.kind === "cancel" && importJob) {
-        const cancelled = await window.openfolio.messages.cancelImport(importJob.id);
-        if (cancelled) setImportJob(cancelled);
-        toast("Import cancellation requested");
-        return;
-      }
-
-      const job = action.kind === "retry"
-        ? await window.openfolio.messages.retryImport(importJob?.id)
-        : await window.openfolio.messages.startImport();
+      const job =
+        importJob?.status === "failed"
+          ? await window.openfolio.messages.retryImport(importJob.id)
+          : await window.openfolio.messages.startImport();
       setImportJob(job);
-      const isRunning = job.status === "running" || job.status === "cancelling";
-      if (isRunning) {
-        setBusy(false);
-      }
-      const finalJob = isRunning ? await waitForImportJob(job.id, setImportJob) : job;
-      if (!finalJob) {
-        toast.error("Import status was lost.");
-      } else if (finalJob.status === "completed") {
-        toast.success(`Imported ${finalJob.importedMessages} messages`);
-        const threads = await window.openfolio.threads.list({ limit: 50 });
-        setThreads(threads);
-        await window.openfolio.search.getScaleStatus().then(setSearchScale);
-      } else if (finalJob.status === "cancelled") {
-        toast("Import cancelled");
-      } else {
-        toast.error(finalJob.error || "Import failed.");
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Import failed.");
+      toast("Local import started");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Import could not start.",
+      );
     } finally {
       setBusy(false);
     }
-  }, [importJob, messagesStatus?.status, setBusy, setImportJob, setThreads]);
+  };
 
-  const syncContacts = useCallback(async () => {
+  const syncContacts = async () => {
     setBusy(true);
     try {
-      const summary = await window.openfolio.contacts.sync();
-      setContactsSync(summary);
-      toast.success(`Synced ${summary.importedContacts} contacts`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Contacts sync failed.");
-    } finally {
-      setBusy(false);
-    }
-  }, [setBusy, setContactsSync]);
-
-  const requestContactsAndSync = useCallback(async () => {
-    setBusy(true);
-    try {
-      const status = await window.openfolio.contacts.requestAccess();
-      setContactsStatus(status);
-
-      if (status.status !== "granted") {
-        toast.error(status.details || "Contacts access was not granted.");
-        return;
+      let status = contactsStatus;
+      if (status?.status !== "granted") {
+        status = await window.openfolio.contacts.requestAccess();
+        setContactsStatus(status);
       }
-
-      const summary = await window.openfolio.contacts.sync();
-      setContactsSync(summary);
-      toast.success(`Synced ${summary.importedContacts} contacts`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Contacts sync failed.");
+      if (status.status === "granted") {
+        const summary = await window.openfolio.contacts.sync();
+        setContactsSync(summary);
+        toast.success("Contacts matched locally");
+      }
     } finally {
       setBusy(false);
     }
-  }, [setBusy, setContactsStatus, setContactsSync]);
-
-  const saveAiKey = useCallback(async () => {
-    if (!apiKey.trim()) {
-      toast.error("Enter an OpenAI API key first.");
-      return;
-    }
-    try {
-      const settings = await window.openfolio.ai.saveOpenAIKey({
-        apiKey: apiKey.trim(),
-        useOpenAIEmbeddings,
-      });
-      setAiSettings(settings);
-      setApiKey("");
-      toast.success("OpenAI key saved locally");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save key.");
-    }
-  }, [apiKey, useOpenAIEmbeddings]);
-
-  const importAction = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
+  };
 
   return (
-    <div className="settings-view">
-      <div className="settings-inner">
-        {/* Appearance */}
-        <div className="settings-group">
-          <h3 className="settings-group-title">Appearance</h3>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Theme</p>
-              <p className="settings-row-detail">Choose light, dark, or match your system.</p>
-            </div>
-            <div className="settings-row-actions">
-              <div className="theme-toggle">
-                {(["light", "dark", "system"] as const).map((option) => (
-                  <button
-                    key={option}
-                    className={`theme-toggle-option ${theme === option ? "active" : ""}`}
-                    onClick={() => setTheme(option)}
-                  >
-                    {option.charAt(0).toUpperCase() + option.slice(1)}
-                  </button>
+    <main className="settings-view">
+      <header className="page-header">
+        <FolioMark number="05" label="LOCAL CONTROL" />
+        <p className="eyebrow">Trust & local control</p>
+        <h1>Settings</h1>
+      </header>
+      <div className="settings-content">
+        <SettingsSection title="Privacy & Local Data">
+          <SettingsRow
+            title="Private archive"
+            detail={
+              <p>
+                OpenFolio reads the iMessage database already stored on this Mac
+                and builds a separate local search index. The app does not
+                contact OpenFolio, OpenAI, GitHub, or any other service. It does
+                not send, edit, delete, or back up your messages.
+              </p>
+            }
+          >
+            <Badge variant="secondary">On this Mac</Badge>
+          </SettingsRow>
+          <SettingsRow
+            title="Network"
+            detail={
+              <p>
+                No app connections. OpenFolio does not open network URLs or make
+                Internet, LAN, loopback, or DNS requests.
+              </p>
+            }
+          >
+            <Badge variant="success">No connections</Badge>
+          </SettingsRow>
+          <SettingsRow
+            title="OpenFolio database"
+            mono
+            detail={
+              <>
+                <p>{localData?.databasePath || "Checking local database…"}</p>
+                <p>
+                  {localData
+                    ? `${localData.backupCount} migration backup${localData.backupCount === 1 ? "" : "s"}`
+                    : ""}
+                </p>
+              </>
+            }
+          >
+            <Button
+              variant="secondary"
+              onClick={() => void window.openfolio.localData.revealDatabase()}
+            >
+              <FolderOpen data-icon="inline-start" />
+              Reveal
+            </Button>
+          </SettingsRow>
+        </SettingsSection>
+
+        <SettingsSection title="Sources">
+          <SettingsRow
+            title="Messages"
+            detail={
+              <p>{messagesStatus?.details || "Checking read-only access…"}</p>
+            }
+          >
+            <Badge
+              variant={
+                messagesStatus?.status === "granted" ? "success" : "secondary"
+              }
+            >
+              {messagesStatus?.status === "granted"
+                ? "Read-only · Granted"
+                : "Needs access"}
+            </Badge>
+            <Button
+              variant="secondary"
+              onClick={async () =>
+                setMessagesStatus(
+                  await window.openfolio.messages.requestAccess(),
+                )
+              }
+            >
+              {messagesStatus?.status === "granted"
+                ? "Recheck"
+                : "Allow access"}
+            </Button>
+          </SettingsRow>
+          <SettingsRow
+            title="Messages import"
+            detail={
+              <p>
+                {importJob
+                  ? `${importJob.importedMessages.toLocaleString()} messages and ${importJob.importedThreads.toLocaleString()} conversations processed`
+                  : "Build or refresh the private local archive."}
+              </p>
+            }
+          >
+            <Button
+              onClick={() => void importMessages()}
+              disabled={busy || messagesStatus?.status !== "granted"}
+            >
+              <RefreshCw data-icon="inline-start" />
+              {importJob?.status === "failed" ? "Retry import" : "Import now"}
+            </Button>
+          </SettingsRow>
+          <SettingsRow
+            title="Apple Contacts"
+            detail={
+              <p>
+                Apple Contacts is optional. If enabled, OpenFolio uses it
+                locally to match handles to names.
+                {contactsSync
+                  ? ` ${contactsSync.importedContacts.toLocaleString()} contacts were read in the last sync.`
+                  : ""}
+              </p>
+            }
+          >
+            <Badge
+              variant={
+                contactsStatus?.status === "granted" ? "success" : "secondary"
+              }
+            >
+              {contactsStatus?.status === "granted" ? "Granted" : "Optional"}
+            </Badge>
+            <Button
+              variant="secondary"
+              onClick={() => void syncContacts()}
+              disabled={busy}
+            >
+              Sync locally
+            </Button>
+          </SettingsRow>
+        </SettingsSection>
+
+        <SettingsSection title="Search Index">
+          <SettingsRow
+            title="Exact search"
+            detail={
+              <p>
+                {scale
+                  ? `${scale.totalDocuments.toLocaleString()} local records are searchable.`
+                  : "Checking local index…"}
+              </p>
+            }
+          >
+            <Badge variant="success">Ready</Badge>
+          </SettingsRow>
+          <SettingsRow
+            title="Meaning-based search"
+            detail={
+              <p>
+                Meaning-based search runs with a model included in the app.
+                Search text and message text never leave this Mac.
+              </p>
+            }
+          >
+            <Badge
+              variant={
+                embeddingSync?.lastError
+                  ? "secondary"
+                  : embeddingSync?.dirtyDocuments
+                    ? "secondary"
+                    : "success"
+              }
+            >
+              {embeddingSync?.lastError
+                ? "Unavailable"
+                : embeddingSync?.dirtyDocuments
+                  ? "Partial"
+                  : "Ready"}
+            </Badge>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                void window.openfolio.embeddings
+                  .getSyncStatus()
+                  .then(setEmbeddingSync)
+              }
+            >
+              Refresh
+            </Button>
+          </SettingsRow>
+          {scale && (
+            <SettingsRow
+              title="Index scale"
+              detail={<p>{describeSearchScale(scale)}</p>}
+            />
+          )}
+        </SettingsSection>
+
+        <SettingsSection title="Appearance">
+          <SettingsRow
+            title="Content canvas"
+            detail={
+              <p>
+                Warm paper with a fixed graphite navigation shell. Additional
+                appearance modes are not enabled in this release.
+              </p>
+            }
+          >
+            <Badge variant="secondary">Warm paper</Badge>
+          </SettingsRow>
+        </SettingsSection>
+
+        <SettingsSection title="Advanced">
+          <details className="advanced-disclosure">
+            <summary>Local diagnostics and later interfaces</summary>
+            <SettingsRow
+              title="Diagnostics"
+              detail={
+                <p>
+                  Copies app, permission, index, and sync status. Message and
+                  contact contents are excluded.
+                </p>
+              }
+            >
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  const report = await window.openfolio.diagnostics.getReport();
+                  await navigator.clipboard.writeText(
+                    formatDiagnosticsReport(report),
+                  );
+                  toast.success("Diagnostics copied");
+                }}
+              >
+                <Copy data-icon="inline-start" />
+                Copy diagnostics
+              </Button>
+            </SettingsRow>
+            {mcp?.available && (
+              <div className="mcp-disclosure">
+                <h3>MCP setup</h3>
+                <p>
+                  OpenFolio&apos;s MCP server reads your local library and
+                  returns matching names, messages, notes, and relationship data
+                  to the MCP client you configure. OpenFolio uses local stdio
+                  and makes no network requests. The client may send tool
+                  requests or results to its own cloud service. Review that
+                  client&apos;s privacy and retention settings before enabling
+                  it.
+                </p>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={mcpAcknowledged}
+                    onChange={(event) =>
+                      setMcpAcknowledged(event.target.checked)
+                    }
+                  />{" "}
+                  I understand the external client receives private results.
+                </label>
+                {mcp.clients.map((client) => (
+                  <div className="mcp-client" key={client.id}>
+                    <strong>{client.name}</strong>
+                    <Button
+                      variant="secondary"
+                      disabled={!mcpAcknowledged}
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(client.config);
+                        toast.success(`${client.name} configuration copied`);
+                      }}
+                    >
+                      <Copy data-icon="inline-start" />
+                      Copy configuration
+                    </Button>
+                  </div>
                 ))}
               </div>
-            </div>
-          </div>
-        </div>
+            )}
+          </details>
+        </SettingsSection>
 
-        {/* Data Sources */}
-        <div className="settings-group">
-          <h3 className="settings-group-title">Data Sources</h3>
-
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Messages</p>
-              <p className="settings-row-detail">{messagesStatus?.details || "Checking..."}</p>
-            </div>
-            <div className="settings-row-actions">
-              <Badge variant={messagesStatus?.status === "granted" ? "success" : "default"}>
-                {messagesStatus?.status || "unknown"}
-              </Badge>
-              <Button
-                variant="secondary"
-                size="xs"
-                onClick={async () => {
-                  const s = await window.openfolio.messages.requestAccess();
-                  setMessagesStatus(s);
-                  if (s.status === "granted") toast.success("Messages access granted!");
-                }}
-              >
-                {messagesStatus?.status === "granted" ? "Recheck" : "Grant Access"}
-              </Button>
-            </div>
-          </div>
-
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Import</p>
-              <p className="settings-row-detail">
-                {importJob
-                  ? `Last: ${importJob.importedMessages} messages, ${importJob.importedPeople} people`
-                  : "Import iMessage history into local graph."}
+        <SettingsSection title="About">
+          <SettingsRow
+            title="Version"
+            mono
+            detail={<p>OpenFolio {updateState?.currentVersion || "0.3.3"}</p>}
+          />
+          <SettingsRow
+            title="Manual updates"
+            detail={
+              <p>
+                OpenFolio does not check for updates or connect to the Internet.
+                To update, quit OpenFolio, independently open a browser, go to
+                the release address shown below, download the signed release,
+                and replace OpenFolio.app in Applications. Your library in
+                Application Support remains in place.
               </p>
-            </div>
-            <div className="settings-row-actions">
-              <Button size="xs" onClick={runImport} disabled={busy || messagesStatus?.status !== "granted"}>
-                <RefreshCw size={12} className={importJob?.status === "running" || importJob?.status === "cancelling" ? "animate-spin" : ""} />
-                {importAction.label}
-              </Button>
-            </div>
-          </div>
-
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Contacts</p>
-              <p className="settings-row-detail">
-                {contactsSync
-                  ? `Last sync: ${contactsSync.importedContacts} contacts`
-                  : "Resolve handles to real names."}
-              </p>
-            </div>
-            <div className="settings-row-actions">
-              <Badge variant={contactsStatus?.status === "granted" ? "success" : "default"}>
-                {contactsStatus?.status || "unknown"}
-              </Badge>
-              {contactsStatus?.status !== "granted" ? (
-                <Button
-                  variant="secondary"
-                  size="xs"
-                  onClick={requestContactsAndSync}
-                  disabled={busy}
-                >
-                  Allow & Sync
-                </Button>
-              ) : (
-                <Button size="xs" onClick={syncContacts} disabled={busy}>
-                  Sync
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Account */}
-        <div className="settings-group">
-          <h3 className="settings-group-title">Account</h3>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Hosted account</p>
-              <p className="settings-row-detail">Deferred. The Mac app currently runs local-first without account sign-in or hosted AI.</p>
-            </div>
-            <div className="settings-row-actions">
-              <Badge variant="secondary">future</Badge>
-            </div>
-          </div>
-          {cloudError && <p className="text-sm text-destructive mt-2">{cloudError}</p>}
-        </div>
-
-        {/* AI */}
-        <div className="settings-group">
-          <h3 className="settings-group-title">AI</h3>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Bring your own OpenAI key</p>
-              <p className="settings-row-detail">
-                {aiSettings?.hasOpenAIKey
-                  ? "OpenAI answers are enabled. Your key is stored locally on this Mac."
-                  : "Optional. Enables Ask mode without an OpenFolio hosted plan."}
-              </p>
-            </div>
-            <div className="settings-row-actions settings-key-actions">
-              <input
-                className="settings-key-input"
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-                placeholder="sk-..."
-                type="password"
-              />
-              <Button size="xs" onClick={saveAiKey}>
-                <KeyRound size={12} />
-                Save
-              </Button>
-              {aiSettings?.hasOpenAIKey && (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={async () => {
-                    const settings = await window.openfolio.ai.deleteOpenAIKey();
-                    setAiSettings(settings);
-                    toast("OpenAI key removed");
-                  }}
-                >
-                  Remove
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Use OpenAI embeddings</p>
-              <p className="settings-row-detail">Off keeps semantic indexing local with Transformers.js. On uses your OpenAI key for embeddings.</p>
-            </div>
-            <div className="settings-row-actions">
-              <Switch checked={useOpenAIEmbeddings} onCheckedChange={setUseOpenAIEmbeddings} />
-            </div>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Embedding index</p>
-              <p className="settings-row-detail">
-                {embeddingSync
-                  ? `${embeddingSync.embeddedDocuments}/${embeddingSync.totalDocuments} documents embedded, ${embeddingSync.dirtyDocuments} pending${embeddingSync.syncing ? ", indexing now" : ""}`
-                  : "Checking local search index..."}
-              </p>
-            </div>
-            <div className="settings-row-actions">
-              <Button
-                variant="secondary"
-                size="xs"
-                onClick={() => void window.openfolio.embeddings.getSyncStatus().then(setEmbeddingSync)}
-              >
-                Refresh
-              </Button>
-            </div>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Search scale</p>
-              <p className="settings-row-detail">
-                {searchScale
-                  ? describeSearchScale(searchScale)
-                  : "Checking search scale..."}
-              </p>
-            </div>
-            <div className="settings-row-actions">
-              <Badge variant={searchScale?.recommendVectorIndex ? "default" : "secondary"}>
-                {searchScale?.recommendVectorIndex ? "benchmark" : "ok"}
-              </Badge>
-            </div>
-          </div>
-        </div>
-
-        {/* Integrations */}
-        <div className="settings-group">
-          <h3 className="settings-group-title">Integrations</h3>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">MCP setup</p>
-              <p className="settings-row-detail">{mcpSetup?.details || "Loading local MCP setup..."}</p>
-            </div>
-            <div className="settings-row-actions">
-              <Badge variant={mcpSetup?.available ? "success" : "default"}>{mcpSetup?.available ? "available" : "checking"}</Badge>
-            </div>
-          </div>
-          {mcpSetup?.clients.map((client) => (
-            <div className="settings-row settings-code-row" key={client.id}>
-              <div className="settings-row-info">
-                <p className="settings-row-label">{client.name}</p>
-                <pre className="settings-code-block">{client.config}</pre>
-              </div>
-              <div className="settings-row-actions">
-                <Button
-                  variant="secondary"
-                  size="xs"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(client.config);
-                    toast("Copied MCP config");
-                  }}
-                >
-                  <Copy size={12} />
-                  Copy
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Updates */}
-        <div className="settings-group">
-          <h3 className="settings-group-title">About</h3>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Version</p>
-              <p className="settings-row-detail">{getAppVersionLabel(updateState)}</p>
-            </div>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">App Updates</p>
-              <p className="settings-row-detail">
-                {updateState?.message || "Checks GitHub Releases for signed OpenFolio updates."}
-              </p>
-              <p className="settings-row-detail">{getUpdateVersionLabel(updateState)}</p>
-              <p className="settings-row-detail">{getLastCheckedLabel(updateState)}</p>
-            </div>
-            <div className="settings-row-actions">
-              <Badge variant={updateState?.status === "downloaded" ? "success" : "secondary"}>
-                {getUpdateStatusLabel(updateState)}
-              </Badge>
-              <Button
-                variant="secondary"
-                size="xs"
-                onClick={async () => {
-                  try {
-                    const s = await window.openfolio.updates.checkNow();
-                    setUpdateState(s);
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : "Failed to check.");
-                  }
-                }}
-              >
-                Check
-              </Button>
-              <Button
-                variant="secondary"
-                size="xs"
-                onClick={async () => {
-                  try {
-                    await window.openfolio.cloud.openExternal(getReleaseNotesUrl(updateState));
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : "Could not open release notes.");
-                  }
-                }}
-              >
-                <ExternalLink size={12} />
-                Notes
-              </Button>
-              {updateState?.status === "downloaded" && (
-                <Button
-                  size="xs"
-                  onClick={async () => {
-                    try { await window.openfolio.updates.installNow(); }
-                    catch (e) { toast.error(e instanceof Error ? e.message : "Install failed."); }
-                  }}
-                >
-                  <Download size={12} />
-                  Install
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Diagnostics</p>
-              <p className="settings-row-detail">Copy a local support report with app, permission, update, and sync status. It does not include message or contact contents.</p>
-            </div>
-            <div className="settings-row-actions">
-              <Button
-                variant="secondary"
-                size="xs"
-                onClick={async () => {
-                  try {
-                    const report = await window.openfolio.diagnostics.getReport();
-                    await navigator.clipboard.writeText(formatDiagnosticsReport(report));
-                    toast.success("Diagnostics copied");
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : "Could not copy diagnostics.");
-                  }
-                }}
-              >
-                <Copy size={12} />
-                Copy
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Local Data */}
-        <div className="settings-group">
-          <h3 className="settings-group-title">Local Data</h3>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Database</p>
-              <p className="settings-row-detail">{getPathLabel(localData?.databasePath)}</p>
-            </div>
-            <div className="settings-row-actions">
-              <Button
-                variant="secondary"
-                size="xs"
-                onClick={async () => {
-                  try {
-                    await window.openfolio.localData.revealDatabase();
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : "Could not reveal database.");
-                  }
-                }}
-              >
-                <FolderOpen size={12} />
-                Reveal
-              </Button>
-            </div>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Migration Backups</p>
-              <p className="settings-row-detail">{getBackupSummaryLabel(localData)}</p>
-              <p className="settings-row-detail">{getPathLabel(localData?.backupDirectoryPath)}</p>
-            </div>
-            <div className="settings-row-actions">
-              <Button
-                variant="secondary"
-                size="xs"
-                onClick={async () => {
-                  try {
-                    await window.openfolio.localData.revealBackups();
-                    const status = await window.openfolio.localData.getStatus();
-                    setLocalData(status);
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : "Could not reveal backups.");
-                  }
-                }}
-              >
-                <FolderOpen size={12} />
-                Reveal
-              </Button>
-            </div>
-          </div>
-        </div>
+            }
+          />
+          <SettingsRow
+            title="Release address"
+            mono
+            detail={<p className="selectable-address">{RELEASE_ADDRESS}</p>}
+          >
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                await navigator.clipboard.writeText(RELEASE_ADDRESS);
+                toast.success("Release address copied");
+              }}
+            >
+              <Copy data-icon="inline-start" />
+              Copy address
+            </Button>
+          </SettingsRow>
+        </SettingsSection>
       </div>
-    </div>
+    </main>
   );
 }

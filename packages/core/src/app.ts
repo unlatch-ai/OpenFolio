@@ -1,12 +1,12 @@
 import type {
-  AskResponse,
-  AskRunInput,
   ConnectorSyncResult,
   EditablePersonProfile,
   MessagesAccessStatus,
   MessagesImportJob,
   ReminderSuggestion,
   RelationshipDigest,
+  SearchQueryInput,
+  SearchResponse,
   SearchResult,
 } from "@openfolio/shared-types";
 import { OpenFolioDatabase } from "./db.js";
@@ -15,7 +15,12 @@ import { MessagesImporter, getMessagesAccessStatus, DEFAULT_MESSAGES_DB_PATH } f
 import { LocalEmbeddingEngine } from "./local-embeddings.js";
 import { AnalyticsEngine } from "./analytics.js";
 import { ChatDbWatcher, type SyncWatcherState } from "./watcher.js";
-import type { StoredProviderConfig } from "./types.js";
+
+type SearchScope = {
+  sourceScope?: "all" | "person" | "thread";
+  personId?: string | null;
+  threadId?: string | null;
+};
 
 export class OpenFolioCore {
   readonly db: OpenFolioDatabase;
@@ -34,30 +39,22 @@ export class OpenFolioCore {
 
   private embeddingSyncLastError: string | null = null;
 
-  constructor(options?: { dbPath?: string; aiConfig?: StoredProviderConfig | null; enableLocalEmbeddings?: boolean }) {
+  constructor(options?: {
+    dbPath?: string;
+    enableLocalEmbeddings?: boolean;
+    networkPolicy?: "offline";
+  }) {
     this.db = new OpenFolioDatabase(options?.dbPath);
 
     // Local embeddings enabled when explicitly requested, or in the Electron app (no API key).
-    // Disabled when aiConfig is explicitly null (test/CI environments).
     const shouldUseLocal = options?.enableLocalEmbeddings === true;
     this.localEmbeddings = shouldUseLocal ? new LocalEmbeddingEngine() : new LocalEmbeddingEngine({ modelId: "__disabled__" });
 
-    const aiConfig = options?.aiConfig ?? (process.env.OPENAI_API_KEY
-      ? {
-          provider: "openai" as const,
-          apiKey: process.env.OPENAI_API_KEY,
-          model: process.env.OPENAI_MODEL,
-          embeddingModel: process.env.OPENAI_EMBEDDING_MODEL,
-        }
-      : shouldUseLocal ? { provider: "local" as const } : null);
-
-    this.ai = new AIOrchestrator(aiConfig, shouldUseLocal ? this.localEmbeddings : null);
+    // Network Lock is the only supported core runtime policy.
+    void options?.networkPolicy;
+    this.ai = new AIOrchestrator(shouldUseLocal ? this.localEmbeddings : null);
     this.messages = new MessagesImporter(this.db);
     this.analytics = new AnalyticsEngine(this.db);
-  }
-
-  configureAi(aiConfig: StoredProviderConfig | null) {
-    this.ai = new AIOrchestrator(aiConfig, this.localEmbeddings);
   }
 
   getMessagesAccessStatus(): MessagesAccessStatus {
@@ -90,24 +87,102 @@ export class OpenFolioCore {
     return this.startMessagesImport();
   }
 
-  async search(text: string, limit = 10, scope?: Pick<AskRunInput, "personId" | "threadId" | "sourceScope">): Promise<SearchResult[]> {
+  async search(text: string, limit = 10, scope?: SearchScope): Promise<SearchResult[]> {
     const embedding = await this.ai.embed(text);
     return this.db.search(text, limit, embedding ?? undefined, scope);
   }
 
-  getSearchScaleStatus(options?: { vectorScanWarningThreshold?: number }) {
-    return this.db.getSearchScaleStatus(options);
+  async searchArchive(input: SearchQueryInput): Promise<SearchResponse> {
+    if (
+      input.dateRange?.startAt != null
+      && input.dateRange?.endAt != null
+      && input.dateRange.startAt >= input.dateRange.endAt
+    ) {
+      return {
+        state: "error",
+        results: [],
+        resultCount: 0,
+        retrievalMode: "exact",
+        semanticStatus: "unavailable",
+        semanticMessage: null,
+        error: {
+          code: "invalid_filters",
+          message: "Search could not use that date range.",
+          details: "endAt must be later than startAt.",
+        },
+      };
+    }
+
+    const text = input.text.trim();
+    if (!text) {
+      return {
+        state: "empty",
+        results: [],
+        resultCount: 0,
+        retrievalMode: "exact",
+        semanticStatus: "unavailable",
+        semanticMessage: null,
+        error: null,
+      };
+    }
+
+    const embedding = await this.ai.embed(text);
+    let results: SearchResult[];
+    try {
+      results = this.db.searchRecords({ ...input, text }, embedding ?? undefined);
+    } catch (error) {
+      return {
+        state: "error",
+        results: [],
+        resultCount: 0,
+        retrievalMode: "exact",
+        semanticStatus: "unavailable",
+        semanticMessage: null,
+        error: {
+          code: "local_index_unavailable",
+          message: "Search could not read the local index. Try again.",
+          details: error instanceof Error ? error.message : "Unknown local index error.",
+        },
+      };
+    }
+    const [localStatus, syncStatus] = await Promise.all([
+      this.localEmbeddings.getStatus(),
+      Promise.resolve(this.getEmbeddingSyncStatus()),
+    ]);
+
+    let semanticStatus: SearchResponse["semanticStatus"];
+    let semanticMessage: string | null = null;
+    if (!embedding) {
+      semanticStatus = "unavailable";
+      semanticMessage = localStatus.error ?? "Semantic search is unavailable. Exact search is still available.";
+    } else if (syncStatus.syncing || syncStatus.dirtyDocuments > 0 || syncStatus.embeddedDocuments === 0) {
+      semanticStatus = "indexing";
+      semanticMessage = "Search is ready. Meaning-based matches will improve as indexing finishes.";
+    } else {
+      semanticStatus = "ready";
+    }
+
+    return {
+      state: results.length > 0 ? "results" : "empty",
+      results,
+      resultCount: results.length,
+      retrievalMode: embedding && syncStatus.embeddedDocuments > 0 ? "hybrid" : "exact",
+      semanticStatus,
+      semanticMessage,
+      error: null,
+    };
   }
 
-  async ask(input: string | AskRunInput): Promise<AskResponse> {
-    const request = typeof input === "string" ? { query: input, sourceScope: "all" as const } : input;
-    const sourceScope = request.sourceScope ?? "all";
-    const results = await this.search(request.query, 8, {
-      sourceScope,
-      personId: request.personId,
-      threadId: request.threadId,
-    });
-    return this.ai.answer(request.query, results, sourceScope);
+  getConversationCitationContext(threadId: string, messageId: string, before?: number, after?: number) {
+    const context = this.db.getConversationCitationContext(threadId, messageId, before, after);
+    if (!context) {
+      throw new Error("The cited message is not available in that local conversation.");
+    }
+    return context;
+  }
+
+  getSearchScaleStatus(options?: { vectorScanWarningThreshold?: number }) {
+    return this.db.getSearchScaleStatus(options);
   }
 
   getPerson(personId: string) {

@@ -1,346 +1,341 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { File, MessageSquare, RefreshCw } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, File, Search } from "lucide-react";
+import type {
+  MessageDetail,
+  ThreadDetail,
+  ThreadListItem,
+} from "@openfolio/shared-types";
 import { useAppStore } from "../store";
-import { Button } from "./ui/button";
 import { ContactAvatar } from "./ContactAvatar";
-import { toast } from "sonner";
-import type { MessageDetail, ThreadDetail } from "@openfolio/shared-types";
-import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
+import { Button } from "./ui/button";
+import { Skeleton } from "./ui/skeleton";
+import { FolioMark } from "./FolioMark";
 
-/* ─── Thread list item ─── */
-function ThreadRow({
+function exactDate(value: number) {
+  return new Date(value).toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function ConversationRow({
   thread,
-  isActive,
-  onSelect,
+  selected,
+  onClick,
 }: {
-  thread: { threadId: string; title: string; participantHandles: string[]; lastMessagePreview: string | null; lastMessageAt: number | null };
-  isActive: boolean;
-  onSelect: () => void;
+  thread: ThreadListItem;
+  selected: boolean;
+  onClick: () => void;
 }) {
-  const timeLabel = thread.lastMessageAt
-    ? new Date(thread.lastMessageAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })
-    : "";
-
   return (
     <button
-      className={`thread-row ${isActive ? "active" : ""}`}
-      onClick={onSelect}
+      className={`archive-thread-row ${selected ? "selected" : ""}`}
+      onClick={onClick}
+      aria-pressed={selected}
     >
       <ContactAvatar
         name={thread.title}
-        size={36}
-        isGroup={thread.participantHandles.length > 1}
+        isGroup={thread.participantCount > 1}
       />
-
-      <div className="thread-row-content">
-        <div className="thread-row-header">
-          <span className="thread-row-name">{thread.title}</span>
-          <span className="thread-row-time">{timeLabel}</span>
-        </div>
-        {thread.lastMessagePreview && (
-          <p className="thread-row-preview">{thread.lastMessagePreview}</p>
-        )}
-      </div>
+      <span>
+        <strong>{thread.title}</strong>
+        <small>
+          {thread.lastMessagePreview || thread.participantHandles.join(", ")}
+        </small>
+      </span>
+      {thread.lastMessageAt && (
+        <time dateTime={new Date(thread.lastMessageAt).toISOString()}>
+          {new Date(thread.lastMessageAt).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          })}
+        </time>
+      )}
     </button>
   );
 }
 
-/* ─── Thread detail panel ─── */
-function ThreadPanel({ threadId, selectedMessageId }: { threadId: string; selectedMessageId: string | null }) {
+function ConversationArchive({
+  threadId,
+  citationId,
+  onBack,
+}: {
+  threadId: string;
+  citationId: string | null;
+  onBack: () => void;
+}) {
   const [detail, setDetail] = useState<ThreadDetail | null>(null);
   const [messages, setMessages] = useState<MessageDetail[]>([]);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
-  const selectedMessageRef = useRef<HTMLDivElement | null>(null);
+  const [showSourceEducation, setShowSourceEducation] = useState(false);
+  const citationRef = useRef<HTMLElement | null>(null);
   const pageSize = 75;
 
   useEffect(() => {
+    if (!citationId || localStorage.getItem("openfolio.sourceEducationSeen") === "1") return;
+    setShowSourceEducation(true);
+    localStorage.setItem("openfolio.sourceEducationSeen", "1");
+  }, [citationId]);
+
+  useEffect(() => {
     setLoading(true);
-    const nextOffset = selectedMessageId ? 0 : offset;
     Promise.all([
       window.openfolio.threads.getDetail(threadId),
-      window.openfolio.threads.getMessages({ threadId, limit: pageSize, offset: nextOffset, aroundMessageId: selectedMessageId }),
+      window.openfolio.threads.getMessages({
+        threadId,
+        limit: pageSize,
+        offset: citationId ? 0 : offset,
+        aroundMessageId: citationId,
+      }),
     ])
-      .then(([d, m]) => {
-        setDetail(d);
-        setMessages(m);
+      .then(([nextDetail, nextMessages]) => {
+        setDetail(nextDetail);
+        setMessages(nextMessages);
       })
-      .catch(console.error)
       .finally(() => setLoading(false));
-  }, [threadId, selectedMessageId, offset]);
-
+  }, [citationId, offset, threadId]);
   useEffect(() => {
     setOffset(0);
-  }, [threadId, selectedMessageId]);
-
+  }, [threadId, citationId]);
   useEffect(() => {
-    if (!loading && selectedMessageId) {
-      selectedMessageRef.current?.scrollIntoView({ block: "center" });
-    }
-  }, [loading, selectedMessageId, messages]);
+    if (!loading && citationId)
+      citationRef.current?.scrollIntoView({
+        block: "center",
+        behavior: "smooth",
+      });
+  }, [citationId, loading, messages]);
 
-  if (loading) {
+  if (loading)
     return (
-      <div className="thread-panel-loading">
-        <div className="thread-panel-loading-dot" />
-        <span>Loading conversation...</span>
+      <div className="conversation-loading">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <Skeleton key={index} className="message-skeleton" />
+        ))}
       </div>
     );
-  }
-
-  if (!detail) {
+  if (!detail)
     return (
-      <div className="thread-panel-empty">
-        <p>Thread not found.</p>
+      <div className="archive-empty">
+        <h2>Conversation not found.</h2>
+        <Button variant="secondary" onClick={onBack}>
+          Back to conversations
+        </Button>
       </div>
     );
-  }
 
+  let previousDate = "";
   return (
-    <div className="thread-panel">
-      {/* Header */}
-      <div className="thread-panel-header">
+    <article className="conversation-archive">
+      <header className="conversation-header">
+        <button
+          className="mobile-back icon-button"
+          onClick={onBack}
+          aria-label="Back to conversation list"
+        >
+          <ArrowLeft />
+        </button>
         <div>
-          <h2 className="thread-panel-title">
-            {detail.thread.displayName || "Conversation"}
-          </h2>
-          <p className="thread-panel-meta">
-            {detail.participants.map((p) => p.displayName || p.handle).join(", ")}
-            {" \u00b7 "}
-            {detail.totalMessageCount} messages
+          <FolioMark number="03A" label="SOURCE THREAD" />
+          <p className="eyebrow">Evidence archive</p>
+          <h1>{detail.thread.displayName || "Conversation"}</h1>
+          <p>
+            {detail.participants
+              .map(
+                (participant) => participant.displayName || participant.handle,
+              )
+              .join(", ")}{" "}
+            · {detail.totalMessageCount.toLocaleString()} messages
           </p>
         </div>
-        <div className="thread-panel-paging">
-          <Button size="xs" variant="secondary" onClick={() => setOffset(Math.max(0, offset - pageSize))} disabled={offset === 0}>
+        <div className="archive-paging">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setOffset(Math.max(0, offset - pageSize))}
+            disabled={offset === 0}
+          >
             Newer
           </Button>
-          <Button size="xs" variant="secondary" onClick={() => setOffset(offset + pageSize)} disabled={Boolean(detail && offset + pageSize >= detail.totalMessageCount)}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setOffset(offset + pageSize)}
+            disabled={offset + pageSize >= detail.totalMessageCount}
+          >
             Older
           </Button>
         </div>
-      </div>
-
-      {/* Messages */}
-      <div className="thread-panel-messages">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            ref={selectedMessageId === msg.id ? selectedMessageRef : null}
-            className={`thread-msg ${msg.isFromMe ? "from-me" : "from-them"} ${selectedMessageId === msg.id ? "highlight" : ""}`}
-          >
-            {!msg.isFromMe && (
-              <ContactAvatar
-                name={detail.participants.find((p) => p.personId === msg.personId)?.displayName ?? "?"}
-                size={28}
-              />
-            )}
-            <div className="thread-msg-bubble">
-              {msg.body || null}
-              {msg.attachments.length > 0 && (
-                <div className="thread-attachments">
-                  {msg.attachments.map((attachment) => (
-                    <span key={attachment.id} className="thread-attachment-chip">
-                      <File size={12} />
-                      {attachment.transferName || attachment.mimeType || "Attachment"}
-                    </span>
-                  ))}
+      </header>
+      <div className="message-archive">
+        {showSourceEducation && (
+          <div className="source-education" role="status">
+            <span>This is the original message. Search always brings you back to the source.</span>
+            <button type="button" onClick={() => setShowSourceEducation(false)} aria-label="Dismiss source explanation">×</button>
+          </div>
+        )}
+        {messages.map((message) => {
+          const date = exactDate(message.occurredAt);
+          const showDate = date !== previousDate;
+          previousDate = date;
+          const sender = message.isFromMe
+            ? "You"
+            : detail.participants.find(
+                (participant) => participant.personId === message.personId,
+              )?.displayName || "Participant";
+          return (
+            <div key={message.id} className="message-entry-wrap">
+              {showDate && (
+                <div className="date-rule">
+                  <span>{date}</span>
                 </div>
               )}
-              {!msg.body && msg.attachments.length === 0 && <span className="text-muted-foreground italic text-xs">attachment</span>}
+              <section
+                ref={message.id === citationId ? citationRef : undefined}
+                className={`archive-message ${message.isFromMe ? "outgoing" : "incoming"} ${message.id === citationId ? "citation" : ""}`}
+                aria-current={message.id === citationId ? "true" : undefined}
+              >
+                {message.id === citationId && (
+                  <span className="source-label">Source match</span>
+                )}
+                <span className="message-sender">{sender}</span>
+                {message.body && <p>{message.body}</p>}
+                {message.attachments.map((attachment) => (
+                  <div className="attachment-row" key={attachment.id}>
+                    <File />
+                    <span>
+                      <strong>Attachment</strong>
+                      <small>{attachment.mimeType || "Attachment"}</small>
+                    </span>
+                  </div>
+                ))}
+                {!message.body && !message.attachments.length && (
+                  <p>Message without text</p>
+                )}
+                <time dateTime={new Date(message.occurredAt).toISOString()}>
+                  {new Date(message.occurredAt).toLocaleTimeString(undefined, {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </time>
+              </section>
             </div>
-            <span className="thread-msg-time">
-              {new Date(msg.occurredAt).toLocaleTimeString(undefined, {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
-    </div>
+    </article>
   );
 }
 
-/* ─── Empty state ─── */
-function EmptyInbox() {
-  const { messagesStatus, importJob, setBusy, setThreads, setMessagesStatus, setImportJob } = useAppStore();
-  const [importing, setImporting] = useState(false);
-
-  const handleImport = useCallback(async () => {
-    setImporting(true);
-    setBusy(true);
-    try {
-      const action = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
-      if (action.kind === "cancel" && importJob) {
-        const cancelled = await window.openfolio.messages.cancelImport(importJob.id);
-        if (cancelled) setImportJob(cancelled);
-        toast("Import cancellation requested");
-        return;
-      }
-
-      const job = action.kind === "retry"
-        ? await window.openfolio.messages.retryImport(importJob?.id)
-        : await window.openfolio.messages.startImport();
-      setImportJob(job);
-      const isRunning = job.status === "running" || job.status === "cancelling";
-      if (isRunning) {
-        setBusy(false);
-        setImporting(false);
-      }
-      const finalJob = isRunning ? await waitForImportJob(job.id, setImportJob) : job;
-      if (finalJob?.status === "completed") {
-        toast.success(`Imported ${finalJob.importedMessages} messages across ${finalJob.importedThreads} threads`);
-        const threads = await window.openfolio.threads.list({ limit: 50 });
-        setThreads(threads);
-      } else if (finalJob?.status === "cancelled") {
-        toast("Import cancelled");
-      } else {
-        toast.error(finalJob?.error || "Import failed.");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Import failed.");
-    } finally {
-      setImporting(false);
-      setBusy(false);
-    }
-  }, [importJob, messagesStatus?.status, setBusy, setImportJob, setThreads]);
-
-  const handleRequestAccess = useCallback(async () => {
-    try {
-      const status = await window.openfolio.messages.requestAccess();
-      setMessagesStatus(status);
-      if (status.status === "granted") {
-        toast.success("Messages access granted!");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to check access.");
-    }
-  }, [setMessagesStatus]);
-
-  const importAction = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
-
-  return (
-    <div className="inbox-empty">
-      <div className="inbox-empty-card">
-        <div className="inbox-empty-icon">
-          <MessageSquare size={32} />
-        </div>
-        <h2>Your conversations</h2>
-        <p>
-          Import your iMessage history to see your conversations here.
-          Everything stays on this Mac — nothing leaves your device.
-        </p>
-        <div className="inbox-empty-actions">
-          {messagesStatus?.status !== "granted" ? (
-            <Button onClick={handleRequestAccess} variant="default" size="sm">
-              Grant Messages Access
-            </Button>
-          ) : (
-            <Button onClick={handleImport} disabled={importing} size="sm">
-              <RefreshCw size={14} className={importing || importJob?.status === "running" || importJob?.status === "cancelling" ? "animate-spin" : ""} />
-              {importAction.label}
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Main inbox view ─── */
 export function InboxView() {
-  const { threads, selectedThreadId, selectedMessageId, selectThread } = useAppStore();
-  const listRef = useRef<HTMLDivElement>(null);
+  const { threads, selectedThreadId, selectedMessageId, selectThread } =
+    useAppStore();
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(
+    () =>
+      threads.filter((thread) =>
+        `${thread.title} ${thread.participantHandles.join(" ")}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
+      ),
+    [query, threads],
+  );
 
-  // Keyboard navigation: arrow keys to move, Escape to deselect
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      // Don't capture if command palette is open or focus is in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (useAppStore.getState().commandPalette.open) return;
-
-      if (e.key === "Escape" && selectedThreadId) {
-        selectThread(null);
+    function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement
+      )
         return;
-      }
-
-      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && threads.length > 0) {
-        e.preventDefault();
-        const currentIndex = selectedThreadId
-          ? threads.findIndex((t) => t.threadId === selectedThreadId)
-          : -1;
-
-        let nextIndex: number;
-        if (e.key === "ArrowDown") {
-          nextIndex = currentIndex < threads.length - 1 ? currentIndex + 1 : 0;
-        } else {
-          nextIndex = currentIndex > 0 ? currentIndex - 1 : threads.length - 1;
-        }
-
-        selectThread(threads[nextIndex].threadId);
-
-        // Scroll into view
-        const row = listRef.current?.children[nextIndex] as HTMLElement | undefined;
-        row?.scrollIntoView({ block: "nearest" });
+      if (event.key === "Escape" && selectedThreadId) selectThread(null);
+      if (
+        (event.key === "ArrowDown" || event.key === "ArrowUp") &&
+        filtered.length
+      ) {
+        event.preventDefault();
+        const current = filtered.findIndex(
+          (thread) => thread.threadId === selectedThreadId,
+        );
+        const next =
+          event.key === "ArrowDown"
+            ? (current + 1) % filtered.length
+            : current <= 0
+              ? filtered.length - 1
+              : current - 1;
+        selectThread(filtered[next].threadId);
       }
     }
-
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [threads, selectedThreadId, selectThread]);
-
-  if (threads.length === 0) {
-    return <EmptyInbox />;
-  }
+  }, [filtered, selectThread, selectedThreadId]);
 
   return (
-    <div className="inbox-layout">
-      {/* Thread list */}
-      <div className="inbox-list">
-        <div className="inbox-list-header">
-          <h2>Messages</h2>
-          <span className="inbox-list-count">{threads.length}</span>
-        </div>
-        <div className="inbox-list-scroll" ref={listRef}>
-          {threads.map((thread) => (
-            <ThreadRow
+    <main
+      className={`conversations-view ${selectedThreadId ? "has-selection" : ""}`}
+    >
+      <aside className="conversation-index">
+        <header>
+          <FolioMark number="03" label="THREAD INDEX" />
+          <p className="eyebrow">Original records</p>
+          <h1>Conversations</h1>
+          <label className="compact-search">
+            <Search />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search conversations"
+              aria-label="Search conversations"
+            />
+          </label>
+        </header>
+        <div className="conversation-list">
+          {filtered.map((thread) => (
+            <ConversationRow
               key={thread.threadId}
               thread={thread}
-              isActive={selectedThreadId === thread.threadId}
-              onSelect={() => selectThread(thread.threadId)}
+              selected={selectedThreadId === thread.threadId}
+              onClick={() => selectThread(thread.threadId)}
             />
           ))}
-        </div>
-      </div>
-
-      {/* Detail panel */}
-      <div className="inbox-detail">
-        <AnimatePresence mode="wait">
-          {selectedThreadId ? (
-            <motion.div
-              key={selectedThreadId}
-              initial={{ opacity: 0, x: 12 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -12 }}
-              transition={{ duration: 0.15, ease: "easeOut" }}
-              className="inbox-detail-inner"
-            >
-              <ThreadPanel threadId={selectedThreadId} selectedMessageId={selectedMessageId} />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="inbox-detail-empty"
-            >
-              <MessageSquare size={24} className="text-muted-foreground/40" />
-              <p>Select a conversation</p>
-            </motion.div>
+          {!filtered.length && (
+            <p className="list-empty">No conversations found.</p>
           )}
-        </AnimatePresence>
-      </div>
-    </div>
+        </div>
+      </aside>
+      <section className="conversation-reader">
+        {selectedThreadId ? (
+          <ConversationArchive
+            threadId={selectedThreadId}
+            citationId={selectedMessageId}
+            onBack={() => selectThread(null)}
+          />
+        ) : (
+          <div className="archive-empty">
+            <Archive />
+            <h2>Select a conversation</h2>
+            <p>
+              Read the original archive. There is no composer and nothing can be
+              sent from OpenFolio.
+            </p>
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function Archive(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
+      <path
+        d="M4 7h16v13H4zM3 3h18v4H3zm5 8h8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+    </svg>
   );
 }

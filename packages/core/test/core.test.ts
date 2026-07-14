@@ -46,6 +46,17 @@ function appendManyMessages(chatDbPath: string, count: number) {
   db.close();
 }
 
+function appendManyMatchingMessages(chatDbPath: string, count: number, text: string) {
+  const db = new DatabaseSync(chatDbPath);
+  const insertMessage = db.prepare("INSERT INTO message(ROWID, text, handle_id, is_from_me, date, service) VALUES (?, ?, 1, 0, ?, 'iMessage')");
+  const insertJoin = db.prepare("INSERT INTO chat_message_join(chat_id, message_id) VALUES (1, ?)");
+  for (let index = 2; index < count + 2; index += 1) {
+    insertMessage.run(index, `${text} ${index}`, index * 1000);
+    insertJoin.run(index);
+  }
+  db.close();
+}
+
 function appendAttachmentMessage(chatDbPath: string) {
   const db = new DatabaseSync(chatDbPath);
   db.prepare("INSERT INTO message(ROWID, text, handle_id, is_from_me, date, service) VALUES (200, NULL, 1, 0, 200000, 'iMessage')").run();
@@ -215,6 +226,8 @@ describe("OpenFolioCore", () => {
 
     expect(results[0]?.kind).toBe("message");
     expect(results[0]?.snippet).toContain("hello ada");
+    expect(results[0]?.matchReason).toBe("related_wording");
+    expect(results[0]?.scoreComponents).toMatchObject({ exact: false, semantic: true });
   });
 
   it("only marks successfully embedded documents and reports skipped documents", async () => {
@@ -495,7 +508,7 @@ describe("OpenFolioCore", () => {
     });
   });
 
-  it("limits Ask citations to person and thread source filters", async () => {
+  it("limits local retrieval to person and thread source filters", async () => {
     appendSecondPersonThread(chatDbPath);
     const core = new OpenFolioCore({ dbPath });
     await core.startMessagesImport();
@@ -504,13 +517,120 @@ describe("OpenFolioCore", () => {
     const bob = people.find((item) => item.primaryHandle === "+15555550124")!;
     const bobThread = core.getPersonProfile(bob.id)?.threads[0]!;
 
-    const personResponse = await core.ask({ query: "planning hello", sourceScope: "person", personId: ada.id });
-    const threadResponse = await core.ask({ query: "planning hello", sourceScope: "thread", threadId: bobThread.threadId });
+    const personResults = await core.search("planning hello", 8, { sourceScope: "person", personId: ada.id });
+    const threadResults = await core.search("planning hello", 8, { sourceScope: "thread", threadId: bobThread.threadId });
 
-    expect(personResponse.citations.length).toBeGreaterThan(0);
-    expect(personResponse.citations.every((citation) => citation.personId === ada.id || citation.threadId !== bobThread.threadId)).toBe(true);
-    expect(threadResponse.citations.length).toBeGreaterThan(0);
-    expect(threadResponse.citations.every((citation) => citation.threadId === bobThread.threadId)).toBe(true);
+    expect(personResults.length).toBeGreaterThan(0);
+    expect(personResults.every((result) => result.personId === ada.id || result.threadId !== bobThread.threadId)).toBe(true);
+    expect(threadResults.length).toBeGreaterThan(0);
+    expect(threadResults.every((result) => result.threadId === bobThread.threadId)).toBe(true);
+  });
+
+  it("returns typed exact results with stable citation and local navigation identity", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+
+    const response = await core.searchArchive({ text: "hello ada", resultTypes: ["message"] });
+    const hit = response.results[0];
+
+    expect(response).toMatchObject({ state: "results", retrievalMode: "exact", semanticStatus: "unavailable" });
+    expect(hit).toMatchObject({
+      resultType: "message",
+      matchReason: "exact_words",
+      direction: "incoming",
+      senderLabel: "+15555550123",
+      scoreComponents: { exact: true },
+    });
+    expect(hit?.sourceEntityId).toBe(hit?.messageId);
+    expect(hit?.citation).toMatchObject({
+      sourceEntityId: hit?.messageId,
+      threadId: hit?.threadId,
+      messageId: hit?.messageId,
+      occurredAt: hit?.occurredAt,
+    });
+    expect(hit?.navigationTarget).toEqual({ view: "conversations", threadId: hit?.threadId, messageId: hit?.messageId });
+  });
+
+  it("applies type, person, conversation, and date filters before ranking and limiting", async () => {
+    appendManyMatchingMessages(chatDbPath, 120, "shared planning");
+    appendSecondPersonThread(chatDbPath);
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const bob = core.db.listPeople().find((person) => person.primaryHandle === "+15555550124")!;
+    const bobThreadId = core.getPersonProfile(bob.id)!.threads[0]!.threadId;
+    const unfiltered = await core.searchArchive({ text: "planning", resultTypes: ["message"], limit: 5 });
+    const repeated = await core.searchArchive({ text: "planning", resultTypes: ["message"], limit: 5 });
+    const scoped = await core.searchArchive({
+      text: "planning",
+      resultTypes: ["message"],
+      personIds: [bob.id],
+      threadId: bobThreadId,
+      limit: 1,
+    });
+    const bobOccurredAt = scoped.results[0]!.occurredAt!;
+    const dated = await core.searchArchive({
+      text: "planning",
+      resultTypes: ["message"],
+      dateRange: { startAt: bobOccurredAt, endAt: bobOccurredAt + 1 },
+      limit: 10,
+    });
+    const peopleOnly = await core.searchArchive({ text: "Bob", resultTypes: ["person"] });
+    const conversationsOnly = await core.searchArchive({ text: "Bob", resultTypes: ["conversation"] });
+
+    expect(unfiltered.results).toHaveLength(5);
+    expect(repeated.results.map((result) => result.id)).toEqual(unfiltered.results.map((result) => result.id));
+    expect(scoped.results).toHaveLength(1);
+    expect(scoped.results[0]).toMatchObject({ threadId: bobThreadId, personId: bob.id });
+    expect(dated.results).toHaveLength(1);
+    expect(dated.results.every((result) => result.occurredAt === bobOccurredAt)).toBe(true);
+    expect(peopleOnly.results.length).toBeGreaterThan(0);
+    expect(peopleOnly.results.every((result) => result.resultType === "person")).toBe(true);
+    expect(conversationsOnly.results.length).toBeGreaterThan(0);
+    expect(conversationsOnly.results.every((result) => result.resultType === "conversation")).toBe(true);
+  });
+
+  it("returns chronological evidence around a validated cited message", async () => {
+    appendManyMessages(chatDbPath, 12);
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const response = await core.searchArchive({ text: "bulk message 7", resultTypes: ["message"] });
+    const hit = response.results.find((result) => result.snippet.includes("bulk message 7"))!;
+
+    const context = core.getConversationCitationContext(hit.threadId!, hit.messageId!, 2, 2);
+
+    expect(context.messages).toHaveLength(5);
+    expect(context.citedMessageIndex).toBe(2);
+    expect(context.messages[context.citedMessageIndex]?.id).toBe(hit.messageId);
+    expect(context.messages.map((message) => message.occurredAt)).toEqual(
+      [...context.messages].map((message) => message.occurredAt).sort((left, right) => left - right),
+    );
+    expect(() => core.getConversationCitationContext(hit.threadId!, "message_missing")).toThrow(/not available/i);
+  });
+
+  it("returns a typed error state for invalid search filters", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    const response = await core.searchArchive({ text: "hello", dateRange: { startAt: 2, endAt: 1 } });
+
+    expect(response).toMatchObject({
+      state: "error",
+      results: [],
+      error: { code: "invalid_filters" },
+    });
+  });
+
+  it("reports partial semantic indexing while exact results remain available", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    core.ai = { embed: async () => [1, 0, 0] } as unknown as OpenFolioCore["ai"];
+
+    const response = await core.searchArchive({ text: "hello", resultTypes: ["message"] });
+
+    expect(response).toMatchObject({
+      state: "results",
+      retrievalMode: "exact",
+      semanticStatus: "indexing",
+      error: null,
+    });
   });
 
   it("does not inflate top contacts with me or unrelated group participants", async () => {

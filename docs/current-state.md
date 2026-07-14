@@ -1,57 +1,49 @@
 # OpenFolio Current State
 
-Last updated: May 2026
+Last updated: July 2026
 
-OpenFolio is a macOS-first, local-first app for searching and understanding
-iMessage history. The current product surface is focused on a stable local MVP.
+OpenFolio is a macOS app for finding a remembered detail in iMessage history,
+checking the surrounding evidence, and returning to the original conversation.
+Its installed app is designed to work without network access.
 
-## Working local MVP surface
+## Working product surface
 
-- Guided first-run setup for Messages access, local import, Apple Contacts sync,
-  and semantic indexing.
-- Read-only iMessage import from the local Messages database.
-- Apple Contacts sync for resolving phone numbers and email handles to people.
-- Local SQLite graph for people, threads, messages, notes, reminders, search
-  documents, and derived analytics.
-- Hybrid search over local full-text search and stored embeddings.
-- Local embeddings through Transformers.js by default.
-- BYOK OpenAI settings for Ask mode and optional OpenAI embeddings.
-- Dense People profiles with editable identity fields, aliases, related
-  threads, paginated message search, pinned notes, reminder completion, and
-  deterministic relationship summary cards.
-- Thread reading supports stable older/newer pagination and displays imported
-  attachment filename/type metadata.
-- Ask citations include source labels, dates when available, navigation targets,
-  and optional all/person/thread source filters.
-- Hosted account sign-in is deferred in the Mac app. The renderer does not
-  initialize a hosted Convex client by default.
-- Local stdio MCP server and setup snippets for compatible assistants.
-- GitHub Releases based Mac updater and signed local Mac packaging.
-- Cancellable/retryable Messages import with clearer recovery state.
-- Search scale reporting and a repeatable local benchmark command.
+- Search is the default route. It blends local full-text and semantic retrieval
+  and supports person, conversation, date, and result-type filters.
+- Every result exposes its match reason, surrounding messages, and an exact
+  handoff to the cited message in Conversations.
+- Exact search keeps working while semantic indexing is incomplete or the
+  bundled model is unavailable.
+- People are evidence dossiers, not relationship-health scores or CRM records.
+- Conversations are the source archive. Wrapped is a deterministic annual
+  reflection, not an engagement dashboard.
+- First run covers Messages permission, read-only import, Contacts resolution,
+  local indexing, and a first successful search.
+- The pinned `all-MiniLM-L6-v2` ONNX model, tokenizer, configuration, hashes,
+  and license files ship inside the Mac app. Runtime model download is denied.
+- Production applies a deny-all network policy to the app process and blocks
+  external HTTP(S) navigation. Automatic updates, hosted auth, BYOK AI, and
+  remote connector controls are absent from the product UI.
+- Updates are manual: quit the app and replace it in `/Applications`. The local
+  library remains in `~/Library/Application Support/OpenFolio`.
 
-## Boundaries
+## Product boundaries
 
-- Raw Messages history stays local by default.
-- Hosted account creation is optional and is not required for the local app.
-- The local app should not open hosted connections unless a future hosted
-  feature is explicitly enabled by the user.
-- Hosted AI, billing, managed Google/Gmail connectors, cloud graph sync, and
-  hosted/remote MCP are future work.
-- No legacy local schema compatibility is required yet because there are no
-  current users.
+- Search returns records and citations, never generated advice or an uncited
+  answer.
+- Obsidian is a possible later local source. MCP is a possible later local
+  interface. Neither is part of the initial pitch.
+- The marketing website and GitHub Releases are ordinary networked surfaces;
+  the installed Mac app has the zero-network boundary.
+- Hosted accounts, billing, cloud sync, managed connectors, and remote AI are
+  outside this open-source milestone.
 
-## Known gaps
+## Release gates still open
 
-- Search currently scans stored vectors in-process. The app now warns at larger
-  embedded-document counts and includes `pnpm bench:search` for local benchmark
-  runs. A vector index should be added once benchmark data shows user-visible
-  latency.
-- Renderer coverage includes workflow helper behavior for profile controls,
-  navigation metadata, citations, and setup state. Full DOM interaction tests are
-  still the next testing step once the app adopts a browser-like test
-  environment.
-- Dependency audit is reduced to a remaining low-severity advisory after pinned
-  transitive overrides and the Electron 39 upgrade.
-- The hosted package exists for future commercial boundaries but is not part of
-  the local MVP path.
+- Build the exact release with Developer ID signing and notarization.
+- Inspect the final app, DMG, helpers, native libraries, entitlements, model
+  manifest, licenses, and production dependency closure.
+- Run PID-attributed traffic capture against the signed/notarized app and every
+  helper. Source review and socket denial tests support the design but do not
+  replace this proof.
+- Run the full first-run and query-to-citation QA pass on a clean macOS account.

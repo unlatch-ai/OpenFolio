@@ -181,18 +181,98 @@ export interface SearchDocumentRecord extends SearchDocument {
   updatedAt: number;
 }
 
+export type SearchResultType = "message" | "person" | "conversation";
+
+export interface SearchDateRange {
+  /** Inclusive Unix timestamp in milliseconds. */
+  startAt?: number | null;
+  /** Exclusive Unix timestamp in milliseconds. */
+  endAt?: number | null;
+}
+
+export interface SearchQueryInput {
+  text: string;
+  limit?: number;
+  resultTypes?: SearchResultType[];
+  personIds?: string[];
+  threadId?: string | null;
+  dateRange?: SearchDateRange | null;
+}
+
+export type SearchMatchReason = "exact_words" | "related_wording" | "person" | "conversation_title";
+
+export interface SearchScoreComponents {
+  exact: boolean;
+  semantic: boolean;
+  textScore: number;
+  semanticScore: number;
+}
+
+export type SearchNavigationTarget =
+  | { view: "conversations"; threadId: string; messageId: string | null }
+  | { view: "people"; personId: string };
+
+export interface SearchCitation {
+  sourceEntityId: string;
+  personId: string | null;
+  personLabel: string | null;
+  threadId: string | null;
+  conversationLabel: string | null;
+  messageId: string | null;
+  occurredAt: number | null;
+}
+
 export interface SearchResult {
   id: string;
   kind: SearchDocument["kind"];
+  resultType: SearchResultType;
   entityId: string;
+  sourceEntityId: string;
   title: string;
+  primaryLabel: string;
   snippet: string;
   score: number;
+  scoreComponents: SearchScoreComponents;
+  matchReason: SearchMatchReason;
+  direction: "incoming" | "outgoing" | null;
+  senderLabel: string | null;
+  citation: SearchCitation;
+  navigationTarget: SearchNavigationTarget;
   threadId?: string | null;
   messageId?: string | null;
   personId?: string | null;
   sourceLabel?: string | null;
   occurredAt?: number | null;
+}
+
+export interface SearchResponse {
+  state: "results" | "empty" | "error";
+  results: SearchResult[];
+  resultCount: number;
+  retrievalMode: "hybrid" | "exact";
+  semanticStatus: "ready" | "indexing" | "unavailable";
+  semanticMessage: string | null;
+  error: {
+    code: "invalid_filters" | "local_index_unavailable";
+    message: string;
+    details: string | null;
+  } | null;
+}
+
+export interface ConversationCitationInput {
+  threadId: string;
+  messageId: string;
+  before?: number;
+  after?: number;
+}
+
+export interface ConversationCitationContext {
+  thread: ThreadDetail;
+  citedMessageId: string;
+  messages: MessageDetail[];
+  citedMessageIndex: number;
+  hasOlder: boolean;
+  hasNewer: boolean;
 }
 
 export interface AskRunInput {
@@ -529,24 +609,9 @@ export interface OpenFolioBridge {
   };
   search: {
     query(input: { text: string; limit?: number }): Promise<SearchResult[]>;
+    queryArchive(input: SearchQueryInput): Promise<SearchResponse>;
+    getCitationContext(input: ConversationCitationInput): Promise<ConversationCitationContext>;
     getScaleStatus(): Promise<SearchScaleStatus>;
-  };
-  ai: {
-    run(input: AskRunInput): Promise<AskResponse>;
-    getSettings(): Promise<AiSettingsStatus>;
-    saveOpenAIKey(input: { apiKey: string; answerModel?: string | null; embeddingModel?: string | null; useOpenAIEmbeddings?: boolean }): Promise<AiSettingsStatus>;
-    deleteOpenAIKey(): Promise<AiSettingsStatus>;
-  };
-  cloud: {
-    getConfig(): Promise<CloudRuntimeConfig>;
-    beginAuthSession(): Promise<{ redirectUri: string }>;
-    openExternal(url: string): Promise<void>;
-    onAuthCallback(listener: (url: string) => void): () => void;
-  };
-  connectorCredentials: {
-    listAccounts(): Promise<ConnectorAccount[]>;
-    saveCredential(input: ConnectorCredential): Promise<ConnectorAccount>;
-    deleteCredential(input: { provider: ConnectorProvider; accountId: string }): Promise<{ ok: boolean }>;
   };
   updates: {
     getState(): Promise<UpdateState>;

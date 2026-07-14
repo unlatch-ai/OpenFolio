@@ -6,22 +6,28 @@ title: Deployment
 
 ## Mac app
 
-- Build with `pnpm --filter @openfolio/mac build`
-- Package with `pnpm --filter @openfolio/mac dist:mac`
-- Release signed artifacts with `pnpm --filter @openfolio/mac release:mac`
-- Ship both `.dmg` and `.zip` so GitHub Releases exposes `latest-mac.yml` for auto-updates
+- Build and test the Mac app from a clean checkout.
+- Package the q8 local model and verify every pinned asset hash.
+- Sign and notarize the `.app` and disk image.
+- Inspect the final artifact, entitlements, resources, helper processes, and
+  generated metadata.
+- Run the signed app on supported macOS versions with PID-attributed traffic
+  instrumentation across its full process tree.
+- Verify first launch, Messages and Contacts permissions, exact-search fallback,
+  manual app replacement, archive preservation, rollback, and migration failure
+  recovery.
+
+Do not publish a signed-release zero-network claim based only on source review,
+unit tests, CSP, or an unsigned package. The claim ships only with archived
+artifact inspection and traffic evidence for that exact release.
+
+## Manual updates
+
+Releases are downloaded manually from GitHub. Users quit the app and replace it
+in `/Applications`; data stays in macOS Application Support. OpenFolio does not
+ship an automatic update check or browser handoff.
 
 ## Website and docs
 
-- Deploy `apps/web` on Vercel
-- Keep `apps/web` as the only public web surface
-
-## Hosted services
-
-- Deploy `packages/hosted` with Convex
-- Configure Google auth and Convex env through the hosted package
-- Use the hosted account page for sign-in, billing, and future entitlement management
-
-## Auth redirect
-
-The packaged Mac app still registers the `openfolio://` protocol, but the primary browser completion path is a localhost loopback callback that returns the user to the app.
+`apps/web` is a marketing and documentation surface. It does not receive
+Messages data and is not a runtime dependency of the Mac app.

@@ -20,7 +20,10 @@ import type {
   RelationshipDigest,
   SearchDocument,
   SearchDocumentRecord,
+  SearchQueryInput,
   SearchResult,
+  SearchResultType,
+  ConversationCitationContext,
   SourceKind,
 } from "@openfolio/shared-types";
 import {
@@ -126,12 +129,34 @@ type SearchScope = {
   threadId?: string | null;
 };
 
+const PRIMARY_SEARCH_RESULT_TYPES: SearchResultType[] = ["message", "person", "conversation"];
+
+function resultTypeForKind(kind: SearchResult["kind"]): SearchResultType | null {
+  if (kind === "thread") return "conversation";
+  if (kind === "person") return "person";
+  if (kind === "message") return "message";
+  return null;
+}
+
 type SearchTargets = {
   people?: string[];
   threads?: string[];
   messages?: string[];
   notes?: string[];
   reminders?: string[];
+};
+
+type SearchNavigation = {
+  threadId: string | null;
+  messageId: string | null;
+  personId: string | null;
+  personLabel: string | null;
+  senderLabel: string | null;
+  direction: SearchResult["direction"];
+  sourceLabel: string | null;
+  primaryLabel: string;
+  occurredAt: number | null;
+  snippet: string | null;
 };
 
 export class OpenFolioDatabase {
@@ -1328,12 +1353,33 @@ export class OpenFolioDatabase {
     this.refreshSearchDocuments();
   }
 
-  private getSearchNavigation(kind: string, entityId: string) {
+  private getSearchNavigation(kind: SearchResult["kind"], entityId: string): SearchNavigation {
     if (kind === "thread") {
       const row = this.db
-        .prepare("SELECT COALESCE(display_name, 'Message Thread') AS sourceLabel, last_message_at AS occurredAt FROM message_threads WHERE id = ?")
+        .prepare(`
+          SELECT
+            COALESCE(t.display_name, GROUP_CONCAT(DISTINCT COALESCE(p.display_name, mp.handle)), 'Message Thread') AS sourceLabel,
+            t.last_message_at AS occurredAt
+          FROM message_threads t
+          LEFT JOIN message_participants mp ON mp.thread_id = t.id
+          LEFT JOIN people p ON p.id = mp.person_id
+          WHERE t.id = ?
+          GROUP BY t.id
+        `)
         .get(entityId) as { sourceLabel: string; occurredAt: number | null } | undefined;
-      return { threadId: entityId, messageId: null, personId: null, sourceLabel: row?.sourceLabel ?? "Message Thread", occurredAt: row?.occurredAt ?? null };
+      const sourceLabel = row?.sourceLabel ?? "Message Thread";
+      return {
+        threadId: entityId,
+        messageId: null,
+        personId: null,
+        personLabel: null,
+        senderLabel: null,
+        direction: null,
+        sourceLabel,
+        primaryLabel: sourceLabel,
+        occurredAt: row?.occurredAt ?? null,
+        snippet: null,
+      };
     }
     if (kind === "message") {
       const row = this.db
@@ -1342,74 +1388,153 @@ export class OpenFolioDatabase {
             mm.thread_id AS threadId,
             mm.person_id AS personId,
             mm.occurred_at AS occurredAt,
-            COALESCE(t.display_name, GROUP_CONCAT(mp.handle), 'Message Thread') AS sourceLabel
+            mm.body AS body,
+            mm.is_from_me AS isFromMe,
+            COALESCE(sender.display_name, sender.primary_handle) AS senderLabel,
+            COALESCE(t.display_name, GROUP_CONCAT(DISTINCT COALESCE(participant.display_name, mp.handle)), 'Message Thread') AS sourceLabel
           FROM message_messages mm
           LEFT JOIN message_threads t ON t.id = mm.thread_id
           LEFT JOIN message_participants mp ON mp.thread_id = mm.thread_id
+          LEFT JOIN people participant ON participant.id = mp.person_id
+          LEFT JOIN people sender ON sender.id = mm.person_id
           WHERE mm.id = ?
           GROUP BY mm.id
         `)
-        .get(entityId) as { threadId: string; personId: string | null; occurredAt: number; sourceLabel: string | null } | undefined;
+        .get(entityId) as {
+          threadId: string;
+          personId: string | null;
+          occurredAt: number;
+          body: string | null;
+          isFromMe: number;
+          senderLabel: string | null;
+          sourceLabel: string | null;
+        } | undefined;
+      const direction = row ? (row.isFromMe ? "outgoing" : "incoming") : null;
+      const senderLabel = direction === "outgoing" ? "You" : row?.senderLabel ?? "Unknown contact";
       return {
         threadId: row?.threadId ?? null,
         messageId: entityId,
         personId: row?.personId ?? null,
+        personLabel: senderLabel,
+        senderLabel,
+        direction,
         sourceLabel: row?.sourceLabel ?? "Message",
+        primaryLabel: senderLabel,
         occurredAt: row?.occurredAt ?? null,
+        snippet: row?.body ?? null,
       };
     }
     if (kind === "person") {
       const row = this.db
         .prepare("SELECT display_name AS sourceLabel, updated_at AS occurredAt FROM people WHERE id = ?")
         .get(entityId) as { sourceLabel: string; occurredAt: number } | undefined;
-      return { threadId: null, messageId: null, personId: entityId, sourceLabel: row?.sourceLabel ?? "Person", occurredAt: row?.occurredAt ?? null };
-    }
-    if (kind === "reminder") {
-      const row = this.db
-        .prepare("SELECT person_id AS personId, title AS sourceLabel, due_at AS occurredAt FROM reminders WHERE id = ?")
-        .get(entityId) as { personId: string | null; sourceLabel: string; occurredAt: number | null } | undefined;
-      return { threadId: null, messageId: null, personId: row?.personId ?? null, sourceLabel: row?.sourceLabel ?? "Reminder", occurredAt: row?.occurredAt ?? null };
-    }
-    if (kind === "note") {
-      const row = this.db
-        .prepare("SELECT entity_type AS entityType, entity_id AS entityId, created_at AS occurredAt FROM notes WHERE id = ?")
-        .get(entityId) as { entityType: string; entityId: string; occurredAt: number } | undefined;
+      const sourceLabel = row?.sourceLabel ?? "Person";
       return {
-        threadId: row?.entityType === "thread" ? row.entityId : null,
+        threadId: null,
         messageId: null,
-        personId: row?.entityType === "person" ? row.entityId : null,
-        sourceLabel: "Note",
-        occurredAt: row?.occurredAt ?? null,
+        personId: entityId,
+        personLabel: sourceLabel,
+        senderLabel: null,
+        direction: null,
+        sourceLabel,
+        primaryLabel: sourceLabel,
+        occurredAt: null,
+        snippet: null,
       };
     }
-    return { threadId: null, messageId: null, personId: null, sourceLabel: null, occurredAt: null };
+    return {
+      threadId: null,
+      messageId: null,
+      personId: null,
+      personLabel: null,
+      senderLabel: null,
+      direction: null,
+      sourceLabel: null,
+      primaryLabel: "Local record",
+      occurredAt: null,
+      snippet: null,
+    };
   }
 
-  private resultMatchesScope(result: SearchResult, scope?: SearchScope) {
-    if (!scope || !scope.sourceScope || scope.sourceScope === "all") {
-      return true;
+  private buildSearchDocumentFilter(input: SearchQueryInput) {
+    const clauses: string[] = [];
+    const params: Array<string | number> = [];
+    const resultTypes = input.resultTypes?.length ? input.resultTypes : PRIMARY_SEARCH_RESULT_TYPES;
+    const kinds = resultTypes.map((type) => type === "conversation" ? "thread" : type);
+    clauses.push(`d.kind IN (${kinds.map(() => "?").join(", ")})`);
+    params.push(...kinds);
+
+    if (input.threadId) {
+      clauses.push(`(
+        (d.kind = 'thread' AND d.entity_id = ?)
+        OR (d.kind = 'message' AND EXISTS (
+          SELECT 1 FROM message_messages scoped_message
+          WHERE scoped_message.id = d.entity_id AND scoped_message.thread_id = ?
+        ))
+        OR (d.kind = 'person' AND EXISTS (
+          SELECT 1 FROM message_participants scoped_person
+          WHERE scoped_person.thread_id = ? AND scoped_person.person_id = d.entity_id
+        ))
+      )`);
+      params.push(input.threadId, input.threadId, input.threadId);
     }
 
-    if (scope.sourceScope === "thread") {
-      return Boolean(scope.threadId) && result.threadId === scope.threadId;
+    const personIds = [...new Set((input.personIds ?? []).filter(Boolean))];
+    if (personIds.length > 0) {
+      const placeholders = personIds.map(() => "?").join(", ");
+      clauses.push(`(
+        (d.kind = 'person' AND d.entity_id IN (${placeholders}))
+        OR (d.kind IN ('thread', 'message') AND EXISTS (
+          SELECT 1 FROM message_participants scoped_participant
+          WHERE scoped_participant.person_id IN (${placeholders})
+            AND scoped_participant.thread_id = CASE
+              WHEN d.kind = 'thread' THEN d.entity_id
+              ELSE (SELECT scoped_message.thread_id FROM message_messages scoped_message WHERE scoped_message.id = d.entity_id)
+            END
+        ))
+      )`);
+      params.push(...personIds, ...personIds);
     }
 
-    if (scope.sourceScope === "person") {
-      if (!scope.personId) return false;
-      if (result.personId === scope.personId || result.entityId === scope.personId) return true;
-      if (result.threadId) {
-        const row = this.db
-          .prepare("SELECT 1 AS ok FROM message_participants WHERE thread_id = ? AND person_id = ? LIMIT 1")
-          .get(result.threadId, scope.personId) as { ok: number } | undefined;
-        return Boolean(row);
+    if (input.dateRange?.startAt != null || input.dateRange?.endAt != null) {
+      const dateClauses: string[] = [];
+      const dateParams: number[] = [];
+      if (input.dateRange.startAt != null) {
+        dateClauses.push("dated_message.occurred_at >= ?");
+        dateParams.push(input.dateRange.startAt);
       }
-      return false;
+      if (input.dateRange.endAt != null) {
+        dateClauses.push("dated_message.occurred_at < ?");
+        dateParams.push(input.dateRange.endAt);
+      }
+      clauses.push(`EXISTS (
+        SELECT 1 FROM message_messages dated_message
+        WHERE ${dateClauses.join(" AND ")}
+          AND (
+            (d.kind = 'message' AND dated_message.id = d.entity_id)
+            OR (d.kind = 'thread' AND dated_message.thread_id = d.entity_id)
+            OR (d.kind = 'person' AND (
+              dated_message.person_id = d.entity_id
+              OR EXISTS (
+                SELECT 1 FROM message_participants dated_participant
+                WHERE dated_participant.thread_id = dated_message.thread_id
+                  AND dated_participant.person_id = d.entity_id
+              )
+            ))
+          )
+      )`);
+      params.push(...dateParams);
     }
 
-    return true;
+    return { sql: clauses.join(" AND "), params };
   }
 
-  search(query: string, limit = 10, queryEmbedding?: number[], scope?: SearchScope) {
+  searchRecords(input: SearchQueryInput, queryEmbedding?: number[]) {
+    const query = input.text.trim();
+    const limit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 20)));
+    if (!query) return [];
+    const candidateLimit = Math.min(2_000, Math.max(80, limit * 8));
+    const documentFilter = this.buildSearchDocumentFilter(input);
     const safeQuery = normalizeQueryForFts(query);
     const textRows = safeQuery
       ? (this.db
@@ -1424,11 +1549,11 @@ export class OpenFolioDatabase {
               bm25(search_documents_fts) AS textScore
             FROM search_documents_fts
             JOIN search_documents d ON d.rowid = search_documents_fts.rowid
-            WHERE search_documents_fts MATCH ?
-            ORDER BY textScore
+            WHERE search_documents_fts MATCH ? AND ${documentFilter.sql}
+            ORDER BY textScore, d.id ASC
             LIMIT ?
           `)
-          .all(safeQuery, limit * 8) as Array<Record<string, unknown>>)
+          .all(safeQuery, ...documentFilter.params, candidateLimit) as Array<Record<string, unknown>>)
       : [];
 
     const escapedQuery = query.replace(/[%_]/g, (char) => `\\${char}`);
@@ -1436,53 +1561,112 @@ export class OpenFolioDatabase {
       ? (this.db
           .prepare(`
             SELECT id, kind, entity_id AS entityId, title, content, embedding, 0 AS textScore
-            FROM search_documents
-            WHERE title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'
+            FROM search_documents d
+            WHERE (d.title LIKE ? ESCAPE '\\' OR d.content LIKE ? ESCAPE '\\')
+              AND ${documentFilter.sql}
+            ORDER BY d.id ASC
             LIMIT ?
           `)
-          .all(`%${escapedQuery}%`, `%${escapedQuery}%`, limit * 8) as Array<Record<string, unknown>>)
+          .all(`%${escapedQuery}%`, `%${escapedQuery}%`, ...documentFilter.params, candidateLimit) as Array<Record<string, unknown>>)
       : textRows;
 
     const semanticRows = queryEmbedding
       ? (this.db
           .prepare(`
             SELECT id, kind, entity_id AS entityId, title, content, embedding, NULL AS textScore
-            FROM search_documents
-            WHERE embedding IS NOT NULL AND embedding != ''
+            FROM search_documents d
+            WHERE d.embedding IS NOT NULL AND d.embedding != '' AND ${documentFilter.sql}
           `)
-          .all() as Array<Record<string, unknown>>)
+          .all(...documentFilter.params) as Array<Record<string, unknown>>)
       : [];
 
-    const byId = new Map<string, Record<string, unknown>>();
-    for (const row of [...fallbackRows, ...semanticRows]) {
-      byId.set(String(row.id), row);
+    const byId = new Map<string, Record<string, unknown> & { exactMatch?: boolean }>();
+    for (const row of fallbackRows) {
+      byId.set(String(row.id), { ...row, exactMatch: true });
+    }
+    for (const row of semanticRows) {
+      if (!byId.has(String(row.id))) byId.set(String(row.id), { ...row, exactMatch: false });
     }
 
-    const ranked = [...byId.values()].map((row) => {
+    const ranked = [...byId.values()].flatMap((row) => {
       const embedding = parseEmbedding(row.embedding);
       const semanticScore = queryEmbedding && embedding ? cosineSimilarity(queryEmbedding, embedding) : 0;
       const keywordScore = Number(row.textScore ?? 0);
       const textScore = Number.isFinite(keywordScore) ? Math.max(0, -keywordScore) : 0;
-      const combinedScore = semanticScore + textScore;
+      const exact = row.exactMatch === true;
+      const semantic = Boolean(queryEmbedding && embedding);
+      if (!exact && semanticScore <= 0) return [];
+      const combinedScore = (exact ? 2 : 0) + textScore + Math.max(0, semanticScore);
       const kind = String(row.kind) as SearchResult["kind"];
       const entityId = String(row.entityId);
       const navigation = this.getSearchNavigation(kind, entityId);
+      const resultType = resultTypeForKind(kind);
+      if (!resultType) return [];
+      const title = String(row.title);
+      const titleHasLiteralQuery = title.toLocaleLowerCase().includes(query.toLocaleLowerCase());
+      const matchReason = exact
+        ? kind === "person"
+          ? "person"
+          : kind === "thread" && titleHasLiteralQuery
+            ? "conversation_title"
+            : "exact_words"
+        : "related_wording";
+      if (!navigation.sourceLabel) return [];
 
-      return {
+      const result = {
         id: String(row.id),
         kind,
+        resultType,
         entityId,
-        title: String(row.title),
-        snippet: String(row.content).slice(0, 240),
+        sourceEntityId: entityId,
+        title,
+        primaryLabel: navigation.primaryLabel,
+        snippet: String(navigation.snippet ?? row.content).slice(0, 360),
         score: combinedScore,
-        ...navigation,
+        scoreComponents: { exact, semantic, textScore, semanticScore },
+        matchReason,
+        direction: navigation.direction,
+        senderLabel: navigation.senderLabel,
+        citation: {
+          sourceEntityId: entityId,
+          personId: navigation.personId,
+          personLabel: navigation.personLabel,
+          threadId: navigation.threadId,
+          conversationLabel: navigation.sourceLabel,
+          messageId: navigation.messageId,
+          occurredAt: navigation.occurredAt,
+        },
+        navigationTarget: resultType === "person"
+          ? { view: "people" as const, personId: entityId }
+          : { view: "conversations" as const, threadId: navigation.threadId!, messageId: navigation.messageId },
+        threadId: navigation.threadId,
+        messageId: navigation.messageId,
+        personId: navigation.personId,
+        sourceLabel: navigation.sourceLabel,
+        occurredAt: navigation.occurredAt,
       } satisfies SearchResult;
+      return [result];
     });
 
     return ranked
-      .sort((left, right) => right.score - left.score)
-      .filter((result) => this.resultMatchesScope(result, scope))
+      .sort((left, right) => {
+        if (left.scoreComponents.exact !== right.scoreComponents.exact) return left.scoreComponents.exact ? -1 : 1;
+        if (right.score !== left.score) return right.score - left.score;
+        if ((right.occurredAt ?? 0) !== (left.occurredAt ?? 0)) return (right.occurredAt ?? 0) - (left.occurredAt ?? 0);
+        return left.id.localeCompare(right.id);
+      })
       .slice(0, limit);
+  }
+
+  search(query: string, limit = 10, queryEmbedding?: number[], scope?: SearchScope) {
+    const input: SearchQueryInput = {
+      text: query,
+      limit,
+      resultTypes: scope?.sourceScope === "thread" ? ["message", "conversation"] : PRIMARY_SEARCH_RESULT_TYPES,
+      personIds: scope?.sourceScope === "person" && scope.personId ? [scope.personId] : undefined,
+      threadId: scope?.sourceScope === "thread" ? scope.threadId : undefined,
+    };
+    return this.searchRecords(input, queryEmbedding);
   }
 
   getEmbeddingSyncStatus() {
@@ -1722,6 +1906,69 @@ export class OpenFolioDatabase {
       .all(threadId, limit, resolvedOffset) as Array<Record<string, unknown>>;
 
     return this.mapMessageRows(rows);
+  }
+
+  getConversationCitationContext(
+    threadId: string,
+    messageId: string,
+    before = 3,
+    after = 3,
+  ): ConversationCitationContext | null {
+    const thread = this.getThreadDetail(threadId);
+    if (!thread) return null;
+
+    const anchor = this.db.prepare(`
+      SELECT
+        mm.id, mm.thread_id AS threadId, mm.person_id AS personId,
+        mm.body, mm.occurred_at AS occurredAt, mm.is_from_me AS isFromMe,
+        mm.has_attachments AS hasAttachments
+      FROM message_messages mm
+      WHERE mm.thread_id = ? AND mm.id = ?
+    `).get(threadId, messageId) as Record<string, unknown> | undefined;
+    if (!anchor) return null;
+
+    const beforeLimit = Math.max(0, Math.min(25, Math.floor(before)));
+    const afterLimit = Math.max(0, Math.min(25, Math.floor(after)));
+    const occurredAt = Number(anchor.occurredAt);
+    const olderRows = this.db.prepare(`
+      SELECT
+        mm.id, mm.thread_id AS threadId, mm.person_id AS personId,
+        mm.body, mm.occurred_at AS occurredAt, mm.is_from_me AS isFromMe,
+        mm.has_attachments AS hasAttachments
+      FROM message_messages mm
+      WHERE mm.thread_id = ?
+        AND (mm.occurred_at < ? OR (mm.occurred_at = ? AND mm.id < ?))
+      ORDER BY mm.occurred_at DESC, mm.id DESC
+      LIMIT ?
+    `).all(threadId, occurredAt, occurredAt, messageId, beforeLimit + 1) as Array<Record<string, unknown>>;
+    const newerRows = this.db.prepare(`
+      SELECT
+        mm.id, mm.thread_id AS threadId, mm.person_id AS personId,
+        mm.body, mm.occurred_at AS occurredAt, mm.is_from_me AS isFromMe,
+        mm.has_attachments AS hasAttachments
+      FROM message_messages mm
+      WHERE mm.thread_id = ?
+        AND (mm.occurred_at > ? OR (mm.occurred_at = ? AND mm.id > ?))
+      ORDER BY mm.occurred_at ASC, mm.id ASC
+      LIMIT ?
+    `).all(threadId, occurredAt, occurredAt, messageId, afterLimit + 1) as Array<Record<string, unknown>>;
+
+    const hasOlder = olderRows.length > beforeLimit;
+    const hasNewer = newerRows.length > afterLimit;
+    const contextRows = [
+      ...olderRows.slice(0, beforeLimit).reverse(),
+      anchor,
+      ...newerRows.slice(0, afterLimit),
+    ];
+
+    return {
+      thread,
+      citedMessageId: messageId,
+      messages: this.mapMessageRows(contextRows),
+      citedMessageIndex: Math.min(beforeLimit, olderRows.length),
+      hasOlder,
+      hasNewer,
+    };
   }
 
   listThreadsPaginated(limit = 50, offset = 0) {

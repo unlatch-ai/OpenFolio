@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AskRunInput, OpenFolioBridge } from "@openfolio/shared-types";
+import type { ConversationCitationInput, OpenFolioBridge, SearchQueryInput } from "@openfolio/shared-types";
 
 const bridge: OpenFolioBridge = {
   dashboard: {
@@ -23,33 +23,14 @@ const bridge: OpenFolioBridge = {
   },
   search: {
     query: (input: { text: string; limit?: number }) => ipcRenderer.invoke("openfolio:search:query", input),
+    queryArchive: (input: SearchQueryInput) => ipcRenderer.invoke("openfolio:search:queryArchive", input),
+    getCitationContext: (input: ConversationCitationInput) => ipcRenderer.invoke("openfolio:search:getCitationContext", input),
     getScaleStatus: () => ipcRenderer.invoke("openfolio:search:getScaleStatus"),
-  },
-  ai: {
-    run: (input: AskRunInput) => ipcRenderer.invoke("openfolio:ai:run", input),
-    getSettings: () => ipcRenderer.invoke("openfolio:ai:getSettings"),
-    saveOpenAIKey: (input) => ipcRenderer.invoke("openfolio:ai:saveOpenAIKey", input),
-    deleteOpenAIKey: () => ipcRenderer.invoke("openfolio:ai:deleteOpenAIKey"),
-  },
-  cloud: {
-    getConfig: () => ipcRenderer.invoke("openfolio:cloud:getConfig"),
-    beginAuthSession: () => ipcRenderer.invoke("openfolio:cloud:beginAuthSession"),
-    openExternal: (url: string) => ipcRenderer.invoke("openfolio:cloud:openExternal", url),
-    onAuthCallback: (listener: (url: string) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, url: string) => listener(url);
-      ipcRenderer.on("openfolio:cloud:authCallback", handler);
-      return () => ipcRenderer.removeListener("openfolio:cloud:authCallback", handler);
-    },
-  },
-  connectorCredentials: {
-    listAccounts: () => ipcRenderer.invoke("openfolio:connectors:listAccounts"),
-    saveCredential: (input) => ipcRenderer.invoke("openfolio:connectors:saveCredential", input),
-    deleteCredential: (input) => ipcRenderer.invoke("openfolio:connectors:deleteCredential", input),
   },
   updates: {
     getState: () => ipcRenderer.invoke("openfolio:updates:getState"),
-    checkNow: () => ipcRenderer.invoke("openfolio:updates:checkNow"),
-    installNow: () => ipcRenderer.invoke("openfolio:updates:installNow"),
+    checkNow: () => ipcRenderer.invoke("openfolio:updates:getState"),
+    installNow: () => Promise.reject(new Error("OpenFolio updates are manual under Network Lock.")),
     onStateChange: (listener: (state: import("@openfolio/shared-types").UpdateState) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, state: import("@openfolio/shared-types").UpdateState) => listener(state);
       ipcRenderer.on("openfolio:updates:state", handler);

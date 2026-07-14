@@ -1,329 +1,164 @@
 import Link from "next/link";
-import {
-  MessageSquare,
-  Search,
-  Bot,
-  ArrowRight,
-  Shield,
-  Terminal as TerminalIcon,
-  Sparkles,
-  BarChart3,
-  Clock,
-  Flame,
-  Users,
-} from "lucide-react";
-import { Navbar } from "@/components/navbar";
-import { Footer } from "@/components/footer";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { ArrowRight, Download, Github, ShieldCheck } from "lucide-react";
 import { DemoConversation } from "@/components/demo-conversation";
+import { Footer } from "@/components/footer";
+import { Navbar } from "@/components/navbar";
 
-const features = [
+const surfaces = [
   {
-    icon: BarChart3,
-    title: "Your Wrapped experience",
-    description:
-      "Top contacts, messaging streaks, busiest hours, monthly trends, and a GitHub-style activity heatmap — all computed locally from your messages.",
-    badge: "Insights",
+    index: "01",
+    title: "Search",
+    body: "Describe the detail you remember. OpenFolio ranks exact words and meaning-based matches from your local archive.",
   },
   {
-    icon: Search,
-    title: "Semantic search",
-    description:
-      "Cmd+K searches your message history with local embeddings, keyword fallback, and optional BYOK Ask mode.",
-    badge: "Search",
+    index: "02",
+    title: "People",
+    body: "Browse the people in your history, then search every conversation connected to one person.",
   },
   {
-    icon: MessageSquare,
-    title: "Conversation browser",
-    description:
-      "Beautiful two-panel inbox with real-time sync. Messages flow in automatically via FSEvents — no manual imports after setup.",
-    badge: "Core",
+    index: "03",
+    title: "Conversations",
+    body: "Open the source message with its surrounding context. Search always leads back to evidence.",
+  },
+  {
+    index: "04",
+    title: "Wrapped",
+    body: "Revisit a year through deterministic totals, rhythms, and people—not generated interpretations.",
   },
 ];
 
-const capabilities = [
-  { label: "Messages visualization", status: "local" },
-  { label: "Relationship insights", status: "local" },
-  { label: "Semantic search", status: "local" },
-  { label: "Activity heatmap", status: "local" },
-  { label: "MCP server", status: "local" },
-  { label: "Identity & billing", status: "future" },
+const privacyFacts = [
+  ["Messages", "Read-only from the database already on your Mac"],
+  ["Search index", "Stored locally in OpenFolio’s Application Support folder"],
+  ["Semantic search", "Bundled q8 all-MiniLM-L6-v2 model, about 23 MB"],
+  ["Fallback", "Exact search stays available if semantic search is not ready"],
+  ["Account", "Not required"],
+  ["Updates", "Manual download and app replacement; local data stays in place"],
 ];
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="site-shell">
       <Navbar />
+      <main>
 
-      {/* Hero */}
-      <section className="mx-auto max-w-5xl px-6 pt-24 pb-16">
-        <Badge variant="outline" className="mb-6">
-          <Sparkles className="size-3" />
-          100% local, zero cloud required
-        </Badge>
-        <h1 className="text-5xl font-bold tracking-tight text-foreground max-w-[20ch] leading-[1.08]">
-          Spotify Wrapped for your relationships.
-        </h1>
-        <p className="mt-5 max-w-lg text-base text-muted-foreground leading-relaxed">
-          OpenFolio visualizes your iMessage history — top contacts, messaging
-          patterns, response times, and streaks. Everything runs locally on your Mac.
-        </p>
-        <div className="mt-8 flex gap-3">
-          <Button asChild size="lg">
-            <a href="https://github.com/unlatch-ai/OpenFolio">
-              View on GitHub
-              <ArrowRight className="size-4" />
+      <section className="hero section-frame" aria-labelledby="hero-title">
+        <div className="hero-copy">
+          <p className="eyebrow"><span>Folio 001</span><span>Private message recall</span></p>
+          <h1 id="hero-title">OpenFolio remembers who told you what.</h1>
+          <p className="hero-deck">
+            Search your entire iMessage history on your Mac. Find the person,
+            fact, or message you remember, then verify it in the original
+            conversation.
+          </p>
+          <div className="hero-actions">
+            <a className="button button-primary" href="https://github.com/unlatch-ai/OpenFolio/releases/latest">
+              <Download aria-hidden="true" /> Download for macOS
             </a>
-          </Button>
-          <Button asChild variant="outline" size="lg">
-            <a href="https://github.com/unlatch-ai/OpenFolio#building-from-source">Build from Source</a>
-          </Button>
+            <a className="button button-quiet" href="https://github.com/unlatch-ai/OpenFolio">
+              <Github aria-hidden="true" /> View source
+            </a>
+          </div>
+          <p className="microcopy">Open source · macOS · no account · manual updates</p>
+        </div>
+
+        <div className="hero-artifact" aria-label="A sample OpenFolio search for a restaurant recommendation">
+          <DemoConversation />
         </div>
       </section>
 
-      {/* Live demo conversation */}
-      <section className="mx-auto max-w-5xl px-6 pb-20">
-        <DemoConversation />
+      <section className="statement-band" aria-label="Product principle">
+        <div className="section-frame statement-grid">
+          <p className="folio-mark">OF / 01</p>
+          <p className="statement-copy">
+            It is not a relationship score or an AI answer engine. It is a
+            private evidence archive for details buried across years of messages.
+          </p>
+        </div>
       </section>
 
-      <Separator />
+      <section className="section-frame editorial-section" aria-labelledby="workflow-title">
+        <div className="section-heading">
+          <p className="eyebrow"><span>Method</span><span>Recall to source</span></p>
+          <h2 id="workflow-title">One clear loop.</h2>
+        </div>
+        <ol className="process-grid">
+          <li><span>01</span><h3>Remember</h3><p>Describe a phrase, place, plan, or person—even if you do not remember the exact words.</p></li>
+          <li><span>02</span><h3>Find</h3><p>Review ranked message, person, and conversation matches from your local archive.</p></li>
+          <li><span>03</span><h3>Verify</h3><p>Open the cited message in context. The source stays visible; OpenFolio does not invent an answer.</p></li>
+        </ol>
+      </section>
 
-      {/* Features */}
-      <section className="mx-auto max-w-5xl px-6 py-20">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-3">
-          What you get
-        </p>
-        <h2 className="text-3xl font-bold tracking-tight mb-10">
-          Your messages, beautifully visualized.
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature, i) => (
-            <Card
-              key={feature.title}
-              className={i === 0 ? "sm:col-span-2 lg:col-span-1" : ""}
-            >
-              <CardHeader>
-                <div className="flex items-center justify-between w-full">
-                  <feature.icon className="size-5 text-muted-foreground" />
-                  <Badge variant="secondary">{feature.badge}</Badge>
-                </div>
-                <CardTitle className="mt-2">{feature.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CardDescription className="leading-relaxed">
-                  {feature.description}
-                </CardDescription>
-              </CardContent>
-            </Card>
+      <section className="section-frame editorial-section surfaces-section" aria-labelledby="surfaces-title">
+        <div className="section-heading split-heading">
+          <div>
+            <p className="eyebrow"><span>Archive</span><span>Four views</span></p>
+            <h2 id="surfaces-title">Search comes first.</h2>
+          </div>
+          <p>People organize memory. Conversations preserve evidence. Wrapped creates reflection.</p>
+        </div>
+        <div className="surface-index">
+          {surfaces.map((surface) => (
+            <article className="surface-row" key={surface.index}>
+              <span>{surface.index}</span>
+              <h3>{surface.title}</h3>
+              <p>{surface.body}</p>
+            </article>
           ))}
         </div>
       </section>
 
-      <Separator />
-
-      {/* How it works */}
-      <section className="py-20">
-        <div className="mx-auto max-w-5xl px-6">
-          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-3">
-            How it works
-          </p>
-          <h2 className="text-3xl font-bold tracking-tight mb-12">
-            Three steps to your Wrapped.
-          </h2>
-          <div className="grid gap-px bg-border sm:grid-cols-3 rounded-xl overflow-hidden border border-border">
-            {[
-              {
-                step: "01",
-                icon: Shield,
-                title: "Connect",
-                description:
-                  "Grant Full Disk Access. OpenFolio reads your Messages database in read-only mode — it never sends or modifies messages.",
-              },
-              {
-                step: "02",
-                icon: BarChart3,
-                title: "Discover",
-                description:
-                  "See your top contacts, messaging patterns, response times, streaks, and a year-in-review Wrapped dashboard.",
-              },
-              {
-                step: "03",
-                icon: Search,
-                title: "Search",
-                description:
-                  "Cmd+K to search across your entire message history with local AI embeddings. No API keys needed.",
-              },
-            ].map((item) => (
-              <div key={item.step} className="bg-background p-8">
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="flex items-center justify-center size-8 rounded-md bg-secondary text-xs font-bold text-secondary-foreground">
-                    {item.step}
-                  </span>
-                  <item.icon className="size-4 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-semibold tracking-tight">
-                  {item.title}
-                </h3>
-                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                  {item.description}
-                </p>
-              </div>
+      <section className="privacy-section" aria-labelledby="privacy-title">
+        <div className="section-frame privacy-grid">
+          <div className="privacy-intro">
+            <ShieldCheck aria-hidden="true" />
+            <p className="eyebrow"><span>Privacy</span><span>Local by construction</span></p>
+            <h2 id="privacy-title">Your archive stays on your Mac.</h2>
+            <p>
+              The production app is built to deny network access. It reads
+              Messages in place, builds a separate local index, and runs both
+              exact and semantic retrieval on-device.
+            </p>
+            <Link href="/docs/privacy" className="text-link">Read the precise privacy boundary <ArrowRight aria-hidden="true" /></Link>
+          </div>
+          <dl className="fact-list">
+            {privacyFacts.map(([term, description]) => (
+              <div key={term}><dt>{term}</dt><dd>{description}</dd></div>
             ))}
-          </div>
+          </dl>
         </div>
       </section>
 
-      <Separator />
-
-      {/* Wrapped preview */}
-      <section className="py-20">
-        <div className="mx-auto max-w-5xl px-6">
-          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-3">
-            Your insights
+      <section className="section-frame release-note" aria-labelledby="release-title">
+        <p className="folio-mark">OF / NOTE</p>
+        <div>
+          <h2 id="release-title">No background updater.</h2>
+          <p>
+            To update, download the newest release and replace OpenFolio in
+            Applications. Your index and settings remain in macOS Application
+            Support, separate from the app bundle.
           </p>
-          <h2 className="text-3xl font-bold tracking-tight mb-8">
-            Everything about your messaging life.
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { icon: Users, label: "Top contacts", desc: "Who you talk to most" },
-              { icon: Clock, label: "Peak hours", desc: "When you're most active" },
-              { icon: Flame, label: "Streaks", desc: "Consecutive weeks messaging" },
-              { icon: BarChart3, label: "Heatmap", desc: "GitHub-style activity graph" },
-            ].map((item) => (
-              <Card key={item.label}>
-                <CardContent className="pt-6">
-                  <item.icon className="size-5 text-muted-foreground mb-3" />
-                  <p className="font-semibold text-sm">{item.label}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{item.desc}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <Separator />
-
-      {/* Capabilities table */}
-      <section className="py-20">
-        <div className="mx-auto max-w-5xl px-6">
-          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-3">
-            Privacy first
+          <p className="verification-note">
+            The code and packaged app enforce a zero-network policy. The final
+            signed-release claim remains gated on PID-attributed traffic testing
+            of the signed artifact on macOS.
           </p>
-          <h2 className="text-3xl font-bold tracking-tight mb-8">
-            Everything runs on your Mac.
-          </h2>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="divide-y divide-border">
-                {capabilities.map((cap) => (
-                  <div
-                    key={cap.label}
-                    className="flex items-center justify-between py-3"
-                  >
-                    <span className="text-sm font-medium">{cap.label}</span>
-                    <Badge
-                      variant={
-                        cap.status === "coming" ? "outline" : "secondary"
-                      }
-                    >
-                      {cap.status === "local" && (
-                        <Shield className="size-3 text-accent" />
-                      )}
-                      {cap.status}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </section>
 
-      <Separator />
-
-      {/* MCP / Terminal section */}
-      <section className="py-20">
-        <div className="mx-auto max-w-5xl px-6">
-          <div className="grid gap-8 lg:grid-cols-2 items-start">
-            <div>
-              <Badge variant="outline" className="mb-4">
-                <TerminalIcon className="size-3" />
-                For developers
-              </Badge>
-              <h2 className="text-3xl font-bold tracking-tight">
-                Built for agents.
-              </h2>
-              <p className="mt-3 text-muted-foreground leading-relaxed">
-                OpenFolio exposes your relationship graph through a local stdio
-                MCP server and CLI. Your agents can search messages, inspect
-                people, and access follow-up suggestions from your local graph.
-              </p>
-              <div className="mt-6 flex gap-2">
-                <Badge variant="secondary">MCP Server</Badge>
-                <Badge variant="secondary">CLI</Badge>
-                <Badge variant="secondary">SQLite</Badge>
-              </div>
-            </div>
-            <div className="rounded-xl border border-border bg-foreground/[0.03] overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
-                <div className="flex gap-1.5">
-                  <span className="size-2.5 rounded-full bg-border" />
-                  <span className="size-2.5 rounded-full bg-border" />
-                  <span className="size-2.5 rounded-full bg-border" />
-                </div>
-                <span className="text-xs text-muted-foreground ml-2">
-                  Terminal
-                </span>
-              </div>
-              <pre className="p-4 text-sm font-mono text-foreground/80 leading-relaxed overflow-x-auto">
-                <code>{`$ openfolio mcp serve
-  local stdio MCP server ready
-
-$ openfolio search "last conversation with Sarah"
-  3 results from local graph
-
-$ openfolio ask "who should I follow up with?"
-  Based on your message history:
-  1. Alex Chen — no reply in 12 days
-  2. Jordan Lee — mentioned meeting next week`}</code>
-              </pre>
-            </div>
+      <section className="closing-section">
+        <div className="section-frame closing-grid">
+          <p className="eyebrow"><span>Open source</span><span>AGPL-3.0</span></p>
+          <h2>Find the message.<br />Keep the context.</h2>
+          <div className="closing-actions">
+            <a className="button button-light" href="https://github.com/unlatch-ai/OpenFolio/releases/latest">
+              Download for macOS <ArrowRight aria-hidden="true" />
+            </a>
+            <Link href="/docs/getting-started" className="text-link text-link-dark">Installation guide</Link>
           </div>
         </div>
       </section>
-
-      <Separator />
-
-      {/* CTA */}
-      <section className="py-20">
-        <div className="mx-auto max-w-5xl px-6 text-center">
-          <h2 className="text-3xl font-bold tracking-tight">
-            See your relationships in a new light.
-          </h2>
-          <p className="mt-3 text-muted-foreground">
-            Open source. No account required. Your data stays on your Mac.
-          </p>
-          <div className="mt-8 flex justify-center gap-3">
-            <Button asChild size="lg">
-              <a href="https://github.com/unlatch-ai/OpenFolio">
-                Get Started
-                <ArrowRight className="size-4" />
-              </a>
-            </Button>
-          </div>
-        </div>
-      </section>
+      </main>
 
       <Footer />
     </div>
