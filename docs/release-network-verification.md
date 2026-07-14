@@ -28,7 +28,12 @@ draft release. Use a clean macOS account or VM with other applications closed.
 
    ```bash
    nettop -n -x -L 0 -p OpenFolio > openfolio-nettop.csv
-   while true; do date -u; pgrep -alf 'OpenFolio|openfolio'; sleep 1; done > openfolio-processes.txt
+   while true; do
+     date -u
+     ps -axo pid=,ppid=,command=
+     lsof -nP -iTCP -iUDP
+     sleep 1
+   done > openfolio-processes-and-sockets.txt
    ```
 
 4. Launch OpenFolio and exercise this matrix:
@@ -48,16 +53,23 @@ draft release. Use a clean macOS account or VM with other applications closed.
 
 ```bash
 tcpdump -nn -r openfolio-v0.4.0.pcap -k NP > openfolio-packets.txt
-rg -n -i 'OpenFolio|openfolio' openfolio-packets.txt openfolio-nettop.csv openfolio-processes.txt
-lsof -nP -iTCP -iUDP | rg -i 'OpenFolio|openfolio'
-shasum -a 256 openfolio-v0.4.0.pcap openfolio-nettop.csv openfolio-processes.txt codesign.txt stapler.txt gatekeeper.txt > evidence-sha256.txt
+rg -n -i 'OpenFolio|openfolio|chrome_crashpad_handler|ShipIt' openfolio-processes-and-sockets.txt
+shasum -a 256 openfolio-v0.4.0.pcap openfolio-nettop.csv openfolio-processes-and-sockets.txt codesign.txt stapler.txt gatekeeper.txt > evidence-sha256.txt
 ```
 
+Use the timestamped `ps` snapshots to identify every OpenFolio root PID and
+recursively enumerate descendants by PPID. Include helpers whose displayed name
+does not contain OpenFolio, such as `chrome_crashpad_handler`, and the local MCP
+`node` process identified by its command line. Search `openfolio-packets.txt`,
+`openfolio-nettop.csv`, and the socket snapshots by every PID, not only by
+process name.
+
 The acceptable result is no socket, DNS, loopback, LAN, Internet, or listener
-activity attributed to OpenFolio or any helper. Investigate every match; do not
-discard traffic as harmless without identifying the process, destination, and
-code path. A clean app row with zero bytes is acceptable. Traffic from the MCP
-client is not OpenFolio traffic, but record and attribute it separately.
+activity attributed to any PID in that process tree. Investigate every match;
+do not discard traffic as harmless without identifying the process,
+destination, and code path. A clean app row with zero bytes is acceptable.
+Traffic from the MCP client is not OpenFolio traffic, but record and attribute
+it separately from the MCP server process.
 
 Archive the evidence beside the exact artifact hashes. Packet capture alone,
 or a source-level network lock alone, is not sufficient release proof.

@@ -64,7 +64,10 @@ const appExecutable = path.join(path.resolve(appPath), "Contents", "MacOS", "Ope
 let targetArchitectures = [];
 if (process.platform === "darwin") {
   try {
-    targetArchitectures = execFileSync("lipo", ["-archs", appExecutable], { encoding: "utf8" }).trim().split(/\s+/);
+    targetArchitectures = execFileSync("lipo", ["-archs", appExecutable], { encoding: "utf8" })
+      .trim()
+      .split(/\s+/)
+      .map((architecture) => architecture === "x86_64" ? "x64" : architecture);
   } catch (error) {
     errors.push(`could not inspect app architecture: ${error instanceof Error ? error.message : String(error)}`);
   }
