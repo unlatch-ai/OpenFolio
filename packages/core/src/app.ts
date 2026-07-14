@@ -7,6 +7,8 @@ import type {
   MessagesImportJob,
   ReminderSuggestion,
   RelationshipDigest,
+  SearchQueryInput,
+  SearchResponse,
   SearchResult,
 } from "@openfolio/shared-types";
 import { OpenFolioDatabase } from "./db.js";
@@ -96,6 +98,95 @@ export class OpenFolioCore {
   async search(text: string, limit = 10, scope?: Pick<AskRunInput, "personId" | "threadId" | "sourceScope">): Promise<SearchResult[]> {
     const embedding = await this.ai.embed(text);
     return this.db.search(text, limit, embedding ?? undefined, scope);
+  }
+
+  async searchArchive(input: SearchQueryInput): Promise<SearchResponse> {
+    if (
+      input.dateRange?.startAt != null
+      && input.dateRange?.endAt != null
+      && input.dateRange.startAt >= input.dateRange.endAt
+    ) {
+      return {
+        state: "error",
+        results: [],
+        resultCount: 0,
+        retrievalMode: "exact",
+        semanticStatus: "unavailable",
+        semanticMessage: null,
+        error: {
+          code: "invalid_filters",
+          message: "Search could not use that date range.",
+          details: "endAt must be later than startAt.",
+        },
+      };
+    }
+
+    const text = input.text.trim();
+    if (!text) {
+      return {
+        state: "empty",
+        results: [],
+        resultCount: 0,
+        retrievalMode: "exact",
+        semanticStatus: "unavailable",
+        semanticMessage: null,
+        error: null,
+      };
+    }
+
+    const embedding = await this.ai.embed(text);
+    let results: SearchResult[];
+    try {
+      results = this.db.searchRecords({ ...input, text }, embedding ?? undefined);
+    } catch (error) {
+      return {
+        state: "error",
+        results: [],
+        resultCount: 0,
+        retrievalMode: "exact",
+        semanticStatus: "unavailable",
+        semanticMessage: null,
+        error: {
+          code: "local_index_unavailable",
+          message: "Search could not read the local index. Try again.",
+          details: error instanceof Error ? error.message : "Unknown local index error.",
+        },
+      };
+    }
+    const [localStatus, syncStatus] = await Promise.all([
+      this.localEmbeddings.getStatus(),
+      Promise.resolve(this.getEmbeddingSyncStatus()),
+    ]);
+
+    let semanticStatus: SearchResponse["semanticStatus"];
+    let semanticMessage: string | null = null;
+    if (!embedding) {
+      semanticStatus = "unavailable";
+      semanticMessage = localStatus.error ?? "Semantic search is unavailable. Exact search is still available.";
+    } else if (syncStatus.syncing || syncStatus.dirtyDocuments > 0 || syncStatus.embeddedDocuments === 0) {
+      semanticStatus = "indexing";
+      semanticMessage = "Search is ready. Meaning-based matches will improve as indexing finishes.";
+    } else {
+      semanticStatus = "ready";
+    }
+
+    return {
+      state: results.length > 0 ? "results" : "empty",
+      results,
+      resultCount: results.length,
+      retrievalMode: embedding && syncStatus.embeddedDocuments > 0 ? "hybrid" : "exact",
+      semanticStatus,
+      semanticMessage,
+      error: null,
+    };
+  }
+
+  getConversationCitationContext(threadId: string, messageId: string, before?: number, after?: number) {
+    const context = this.db.getConversationCitationContext(threadId, messageId, before, after);
+    if (!context) {
+      throw new Error("The cited message is not available in that local conversation.");
+    }
+    return context;
   }
 
   getSearchScaleStatus(options?: { vectorScanWarningThreshold?: number }) {

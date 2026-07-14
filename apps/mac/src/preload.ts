@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AskRunInput, OpenFolioBridge } from "@openfolio/shared-types";
+import type { AskRunInput, ConversationCitationInput, OpenFolioBridge, SearchQueryInput } from "@openfolio/shared-types";
 
 function disabledNetworkFeature(message: string): Promise<never> {
   return Promise.reject(new Error(message));
@@ -27,6 +27,8 @@ const bridge: OpenFolioBridge = {
   },
   search: {
     query: (input: { text: string; limit?: number }) => ipcRenderer.invoke("openfolio:search:query", input),
+    queryArchive: (input: SearchQueryInput) => ipcRenderer.invoke("openfolio:search:queryArchive", input),
+    getCitationContext: (input: ConversationCitationInput) => ipcRenderer.invoke("openfolio:search:getCitationContext", input),
     getScaleStatus: () => ipcRenderer.invoke("openfolio:search:getScaleStatus"),
   },
   ai: {

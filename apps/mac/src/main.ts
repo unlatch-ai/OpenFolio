@@ -18,7 +18,9 @@ import type {
   OpenFolioBridge,
   PersonAlias,
   Reminder,
-  SearchResult,
+  SearchQueryInput,
+  SearchResponse,
+  ConversationCitationInput,
   UpdateState,
 } from "@openfolio/shared-types";
 import { LocalMcpController } from "@openfolio/mcp";
@@ -389,12 +391,19 @@ const api: OpenFolioBridge = {
     },
   },
   search: {
-    query: async ({ text, limit }: { text: string; limit?: number }): Promise<SearchResult[]> => {
-      logAppDebug("search", "query", { text, limit });
-      const results = await core.search(text, limit);
-      logAppDebug("search", "resultCount", results.length);
-      return results;
+    query: async ({ text, limit }: { text: string; limit?: number }) => core.search(text, limit),
+    queryArchive: async (input: SearchQueryInput): Promise<SearchResponse> => {
+      logAppDebug("search", "query", input);
+      const response = await core.searchArchive(input);
+      logAppDebug("search", "resultCount", response.resultCount, response.semanticStatus);
+      return response;
     },
+    getCitationContext: async (input: ConversationCitationInput) => core.getConversationCitationContext(
+      input.threadId,
+      input.messageId,
+      input.before,
+      input.after,
+    ),
     getScaleStatus: async () => core.getSearchScaleStatus(),
   },
   ai: {
@@ -657,6 +666,8 @@ safeHandle("openfolio:contacts:requestAccess", () => api.contacts.requestAccess(
 safeHandle("openfolio:contacts:getAccessStatus", () => api.contacts.getAccessStatus());
 safeHandle("openfolio:contacts:sync", () => api.contacts.sync());
 safeHandle("openfolio:search:query", (_, input: { text: string; limit?: number }) => api.search.query(input));
+safeHandle("openfolio:search:queryArchive", (_, input: SearchQueryInput) => api.search.queryArchive(input));
+safeHandle("openfolio:search:getCitationContext", (_, input: ConversationCitationInput) => api.search.getCitationContext(input));
 safeHandle("openfolio:search:getScaleStatus", () => api.search.getScaleStatus());
 safeHandle("openfolio:ai:run", (_, input: AskRunInput) => api.ai.run(input));
 safeHandle("openfolio:ai:getSettings", () => api.ai.getSettings());
