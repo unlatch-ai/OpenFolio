@@ -1,6 +1,6 @@
 # Editorial Archive Implementation Plan
 
-Status: approved July 2026; implementation in progress
+Status: implemented on the current development branch July 2026; signed-release verification pending
 Inputs: [product-contract.md](./product-contract.md), [editorial-archive-design-system.md](./editorial-archive-design-system.md)
 
 ## Ground rules

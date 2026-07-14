@@ -82,6 +82,18 @@ export function isNavigationAllowed(targetUrl: string, currentUrl: string, polic
   }
 }
 
+export function isIpcSenderAllowed(senderUrl: string, policy: RuntimeNetworkPolicy) {
+  try {
+    const sender = new URL(senderUrl);
+    if (policy.mode === "development-loopback" && policy.rendererOrigin) {
+      return sender.origin === policy.rendererOrigin;
+    }
+    return policy.mode === "production-deny-all" && sender.protocol === "file:";
+  } catch {
+    return false;
+  }
+}
+
 export function isSafeSystemSettingsUrl(url: string) {
   return SAFE_SYSTEM_SETTINGS_URLS.has(url);
 }

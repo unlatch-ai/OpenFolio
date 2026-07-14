@@ -1,11 +1,11 @@
 # Editorial Archive Design System
 
-Status: approved direction July 2026; cobalt accent remains provisional pending visual review
+Status: implemented foundation July 2026
 Depends on: [product-contract.md](./product-contract.md)
 
 ## Direction
 
-OpenFolio is an **Editorial Archive**: a dark graphite Mac shell presenting warm paper records. The interface is 90% monochrome and 10% controlled person/data color. Cobalt indicates interaction. The user's message history supplies the expressive color and texture.
+OpenFolio is an **Editorial Archive**: a dark graphite Mac shell presenting warm paper records. The interface is 90% monochrome and 10% controlled person/data color. Oxidized teal indicates interaction without reading as electric or purple. The user's message history supplies the expressive color and texture.
 
 It should feel sophisticated enough for private data and human enough for personal history. It must not look like an iMessage clone, CRM, generic dashboard, developer console, luxury-fashion site, or scrapbook.
 
@@ -26,10 +26,9 @@ All app and website components consume semantic tokens. Raw palette values belon
 | `chalk` | `#FAF9F6` | elevated paper surface |
 | `paper-ink` | `#141412` | primary text on paper |
 | `shell-ink` | `#F5F4F0` | primary text on dark shell |
-| `cobalt` | `#4E5CFF` | primary interaction |
-| `cobalt-hover` | `#3E4BE4` | hover/pressed interaction |
-| `cobalt-soft` | `#E7E9FF` | selected surface on paper |
-| `cobalt-dark-soft` | `#25294D` | selected surface on dark |
+| `interaction-accent` | `#36575A` | primary interaction |
+| `interaction-accent-hover` | `#294548` | hover/pressed interaction |
+| `interaction-accent-soft` | `#DFE8E5` | selected surface on paper |
 | `critical` | `#9B353D` | destructive/error |
 | `critical-soft` | `#F3E3E3` | error background |
 | `success` | `#56715B` | verified local-ready state |
@@ -58,17 +57,17 @@ Person colors are assigned deterministically from the canonical person ID, not d
 | `foreground` | `paper-ink` |
 | `card` | `chalk` |
 | `card-foreground` | `paper-ink` |
-| `muted` | `#EAE7E0` |
-| `muted-foreground` | `#6F6D67` |
+| `muted` | `#E9E6DE` |
+| `muted-foreground` | `#686760` |
 | `border` | `rgba(20,20,18,0.13)` |
 | `input` | `rgba(20,20,18,0.18)` |
-| `primary` | `cobalt` |
+| `primary` | `interaction-accent` |
 | `primary-foreground` | `#FFFFFF` |
 | `secondary` | `#EAE7E0` |
 | `secondary-foreground` | `paper-ink` |
-| `accent` | `cobalt-soft` |
-| `accent-foreground` | `#2832B7` |
-| `ring` | `cobalt` |
+| `accent` | `interaction-accent-soft` |
+| `accent-foreground` | `#243F42` |
+| `ring` | `interaction-accent` |
 | `destructive` | `critical` |
 
 ### Semantic dark-canvas tokens
@@ -85,16 +84,16 @@ The sidebar remains dark in every mode. Dark appearance converts the content can
 | `muted-foreground` | `#A7A59F` |
 | `border` | `rgba(255,255,255,0.12)` |
 | `input` | `rgba(255,255,255,0.18)` |
-| `primary` | `#7781FF` |
+| `primary` | `#6F9192` |
 | `primary-foreground` | `#0B0B0B` |
 | `secondary` | `graphite` |
 | `secondary-foreground` | `shell-ink` |
-| `accent` | `cobalt-dark-soft` |
-| `accent-foreground` | `#C8CCFF` |
-| `ring` | `#8B93FF` |
+| `accent` | `#243B3D` |
+| `accent-foreground` | `#CFE0DE` |
+| `ring` | `#8AA4A4` |
 | `destructive` | `#DC6B72` |
 
-Sidebar tokens are fixed: background `ink`, foreground `shell-ink`, muted foreground `#A3A19B`, border `rgba(255,255,255,0.12)`, selected background `rgba(255,255,255,0.09)`, and selected marker `cobalt`.
+Sidebar tokens are fixed: background `ink`, foreground `shell-ink`, muted foreground `#A3A19B`, border `rgba(255,255,255,0.12)`, selected background `rgba(255,255,255,0.09)`, and selected marker `interaction-accent`.
 
 Shared component aliases:
 
@@ -103,48 +102,48 @@ Shared component aliases:
 | `popover` | `chalk` | `#1D1D1B` |
 | `popover-foreground` | `paper-ink` | `shell-ink` |
 | `overlay` | `rgba(11,11,11,0.42)` | `rgba(0,0,0,0.64)` |
-| `selection` | `cobalt-soft` | `cobalt-dark-soft` |
-| `selection-foreground` | `#2832B7` | `#D8DAFF` |
+| `selection` | `interaction-accent-soft` | `#243B3D` |
+| `selection-foreground` | `#243F42` | `#CFE0DE` |
 | `sidebar-background` | `ink` | `ink` |
 | `sidebar-foreground` | `shell-ink` | `shell-ink` |
-| `sidebar-primary` | `cobalt` | `#7781FF` |
+| `sidebar-primary` | `interaction-accent` | `#6F9192` |
 | `sidebar-primary-foreground` | `#FFFFFF` | `ink` |
 | `sidebar-accent` | `rgba(255,255,255,0.09)` | same |
 | `sidebar-accent-foreground` | `shell-ink` | same |
 | `sidebar-border` | `rgba(255,255,255,0.12)` | same |
-| `sidebar-ring` | `#8B93FF` | same |
+| `sidebar-ring` | `#8AA4A4` | same |
 | `chart-1…6` | person lilac, rose, moss, amber, slate, clay | same primitives, used on dark canvas |
 
 Native text selection uses `selection`; the cited-result marker still uses the stronger `primary`. Status surfaces map to the explicit critical/success/warning pairs rather than overloading relationship colors.
 
 ### Typography
 
-- Display/editorial: **Instrument Serif**, bundled locally as WOFF2. Fallback: `Georgia, serif`.
-- Product UI: **Geist Sans**, bundled locally as WOFF2. macOS fallback: `-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif`.
-- System truth: **Geist Mono**, bundled locally as WOFF2. Fallback: `"SF Mono", ui-monospace, monospace`.
-- No font may load from a remote CDN.
+- Display/editorial: the system-local serif stack `ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif`.
+- Product UI: the system-local stack `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif`.
+- System truth: the system-local stack `"SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace`.
+- No font may load from a remote CDN. A named product font may replace a stack only after its files are checked into the product and covered by the release artifact checks.
 
 Roles:
 
 | Role | Size / line | Weight | Face |
 | --- | --- | --- | --- |
 | Display XL | 64 / 64 | 400 | serif |
-| Display L | 48 / 50 | 400 | serif |
+| Display L | 48 / 52 | 400 | serif |
 | Page title | 32 / 36 | 400 | serif |
-| Story title | 24 / 29 | 400 | serif |
-| UI title | 20 / 26 | 600 | sans |
+| Story title | 24 / 28 | 400 | serif |
+| UI title | 20 / 24 | 600 | sans |
 | Section | 14 / 20 | 600 | sans |
-| Body | 14 / 21 | 400 | sans |
-| Compact body | 13 / 18 | 400 | sans |
+| Body | 14 / 20 | 400 | sans |
+| Compact body | 13 / 20 | 400 | sans |
 | Label | 12 / 16 | 600 | sans |
-| Metadata | 11 / 15 | 450 | sans |
+| Metadata | 11 / 16 | 450 | sans |
 | Mono metadata | 11 / 16 | 450 | mono |
 
 Serif is reserved for brand, Search opening statement, dossier title, Wrapped storytelling, and large statistics. It never labels controls, filters, settings rows, or dense lists. Mono is limited to timestamps, years, versions, paths, counts in progress displays, and diagnostics.
 
 ### Spacing and layout
 
-Base unit: 4px. Allowed spacing tokens: `4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96`.
+Base unit: 4px. The shared scale is `space-1…12` = `4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96px`. Components use these tokens rather than one-off spacing values.
 
 - Sidebar: 232px expanded, 56px compact.
 - List pane: 320px default; 280px minimum; 360px maximum.
@@ -160,11 +159,11 @@ Base unit: 4px. Allowed spacing tokens: `4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 8
 
 Radii:
 
-- canvas: 16px;
-- major artifact: 12px;
-- card/control: 8px;
-- small chip: 6px;
-- full pill: only tags, filter values, statuses, and segmented controls;
+- hairline detail: 2px;
+- controls: 4px;
+- panels and message records: 6px;
+- onboarding artifact only: 12px;
+- full pill: only a status dot or a control whose semantics require a capsule;
 - circle: avatars and icon-only controls only.
 
 Use 1px rules for grouping. Standard cards have no shadow. Elevation tokens:
@@ -201,7 +200,7 @@ Message strata are thin bars derived from message counts over fixed time buckets
 - Height or darkness represents count normalized within that instance.
 - A gap means zero records, not missing data.
 - Person strata use the assigned person color only for one selected layer; the rest remains monochrome.
-- Global strata use monochrome with cobalt only for the selected interval.
+- Global strata use monochrome with oxidized teal only for the selected interval.
 - Always provide a text summary or accessible chart label. The motif is not the only carrier of data.
 - Never describe it as audio, sentiment, heart rate, or relationship strength.
 - Skeletons may imitate the geometry but cannot imply fake data.
@@ -213,7 +212,7 @@ The renderer is a Tailwind v4 shadcn project. Reuse existing primitives and add 
 ### Shell and navigation
 
 - Sidebar is graphite/ink, flat, and rule-separated.
-- Active item uses a 2px cobalt left marker plus a subtle light surface. It is not a large cobalt pill.
+- Active item uses a 2px interaction-accent left marker plus a subtle light surface. It is not a large colored pill.
 - Icons are monochrome and 16px. Labels remain visible until compact mode.
 - Local status uses text plus icon; color is never the only status indicator.
 
@@ -221,17 +220,17 @@ The renderer is a Tailwind v4 shadcn project. Reuse existing primitives and add 
 
 - 56px high on pristine Search, 44px after results appear.
 - Leading search icon, text input, clear action when non-empty, `⌘K` hint when empty.
-- 1px border; cobalt focus ring; no outer shadow at rest.
+- 1px border; interaction-accent focus ring; no outer shadow at rest.
 - Submit on Enter. Search-as-you-type starts after 180ms, while Enter runs immediately.
 - A loading spinner may replace the shortcut hint but must not shift layout.
 
 ### Buttons
 
-- Primary: cobalt fill; one primary action per local region.
+- Primary: interaction-accent fill; one primary action per local region.
 - Secondary: transparent/paper with border.
 - Quiet: text/icon with transparent background.
 - Destructive: critical color only after explicit destructive intent.
-- Rectangular 8px radius; 36px default, 28px compact.
+- Rectangular 4px radius; 36px default, 28px compact.
 - Loading state preserves label width, uses spinner, and disables repeat activation.
 
 ### Filters and segmented controls
@@ -244,9 +243,9 @@ The renderer is a Tailwind v4 shadcn project. Reuse existing primitives and add 
 ### Results and citations
 
 - Results are separated by rules, not floating cards.
-- Selected result gets cobalt marker and `cobalt-soft` surface.
+- Selected result gets an interaction-accent marker and `interaction-accent-soft` surface.
 - Snippet is at most three lines in the list; full context belongs in evidence preview.
-- Matched text uses font weight plus a low-contrast cobalt background, never color alone.
+- Matched text uses font weight plus a low-contrast interaction-accent background, never color alone.
 - Citation metadata is compact sans or mono for timestamp.
 - The `Open in conversation` action is always text-labeled.
 
@@ -261,9 +260,9 @@ The renderer is a Tailwind v4 shadcn project. Reuse existing primitives and add 
 
 - Incoming and outgoing records differ through alignment, a subtle surface tone, and sender label in groups.
 - Maximum message block width: 72% on wide panes, 88% compact.
-- Message blocks have 8px corners, no bubble tails, and no bright blue fill.
+- Message blocks have 6px corners, no bubble tails, and no bright blue fill.
 - Date separators are horizontal rules with a centered date.
-- The cited message gets a 2px cobalt outline and `Source match` label; surrounding messages remain visually quieter.
+- The cited message gets a 2px interaction-accent outline and `Source match` label; surrounding messages remain visually quieter.
 - Attachments use a document row with type icon, filename/type, and timestamp. Unsupported attachments are not shown as broken images.
 
 ### Cards, empty states, loading, and feedback
@@ -278,9 +277,9 @@ The renderer is a Tailwind v4 shadcn project. Reuse existing primitives and add 
 ### Charts and Wrapped
 
 - Axes, grids, and unselected data are gray.
-- One active series uses cobalt; people use deterministic person colors.
+- One active series uses oxidized teal; people use deterministic person colors.
 - No gradients, glow, faux 3D, smoothed lines that obscure discrete truth, or default Recharts tooltips.
-- Heatmap scale: paper → mist → graphite → ink; selected cell cobalt.
+- Heatmap scale: paper → mist → graphite → ink; selected cell oxidized teal.
 - Wrapped may use large serif type, asymmetry, cropping, and full-bleed strata, but every statistic remains labeled and deterministic.
 
 ## Page wireframes and content hierarchy
@@ -404,7 +403,7 @@ Black outer field; warm paper sections framed as artifacts. Hero uses a 12-colum
 ## Accessibility
 
 - Target WCAG 2.2 AA. Body text and essential controls meet 4.5:1; large display text 3:1; focus and UI boundaries 3:1 against adjacent colors.
-- Every interactive element is keyboard reachable in a logical order. Visible focus uses a 2px cobalt ring with 2px offset.
+- Every interactive element is keyboard reachable in a logical order. Visible focus uses a 2px interaction-accent ring with 2px offset.
 - `⌘K` has menu/shortcut semantics; all pointer-only hover information is also available on focus.
 - Minimum target: 36×36px in the desktop app, 44×44px on touch-capable website layouts.
 - Icon-only actions require an accessible name and tooltip; destructive actions require text in confirmation.

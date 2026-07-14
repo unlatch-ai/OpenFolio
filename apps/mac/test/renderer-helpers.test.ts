@@ -107,7 +107,7 @@ describe("renderer workflow helpers", () => {
     expect(getReminderToggleLabel(reminder)).toBe("Done");
   });
 
-  it("formats richer Ask citation metadata", () => {
+  it("formats evidence citation metadata", () => {
     const result = {
       id: "doc",
       kind: "message",
@@ -119,7 +119,6 @@ describe("renderer workflow helpers", () => {
       occurredAt: new Date("2026-05-01T12:00:00Z").getTime(),
     } satisfies SearchResult;
 
-    expect(formatCitationMeta(result)).toContain("message");
     expect(formatCitationMeta(result)).toContain("Ada");
     expect(formatCitationMeta(result)).toContain("2026");
   });

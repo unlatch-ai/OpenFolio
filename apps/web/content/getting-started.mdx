@@ -6,26 +6,47 @@ title: Getting Started
 
 ## Install
 
-1. Download the latest macOS release from GitHub Releases.
+1. Download the latest macOS release from [GitHub Releases](https://github.com/unlatch-ai/OpenFolio/releases/latest).
 2. Move `OpenFolio.app` into `/Applications`.
 3. Launch the app.
-4. Grant Full Disk Access so OpenFolio can read `~/Library/Messages/chat.db`.
-5. Import Messages and begin searching.
+4. Grant Full Disk Access when macOS asks. OpenFolio needs read-only access to
+   the Messages database already stored on your Mac.
+5. Let exact search prepare enough records, then try something you remember.
+6. Optionally allow Contacts access to replace phone numbers and email handles
+   with names.
 
-## Account mode
+No OpenFolio account, cloud service, or API key is required.
 
-You can use OpenFolio locally without signing in. The current Mac app does not
-connect to hosted account services by default.
+## Search readiness
 
-Hosted sign-in is deferred for future features such as:
+OpenFolio prepares exact search and local semantic search separately. Exact
+word search remains available while meaning-based matches are still being
+prepared, or if the local semantic model is unavailable.
 
-- billing-backed entitlements
-- hosted AI
-- managed connectors
-- future hosted MCP / remote access
+The semantic index uses a bundled q8 `all-MiniLM-L6-v2` ONNX model. Model files
+and the search index stay on the Mac; there is no remote-model fallback.
 
-These hosted capabilities are planned future commercial layers. The current open-source app is local-first and does not require an account.
+## Update manually
 
-## Optional BYOK AI
+OpenFolio has no background updater. To update:
 
-If you provide your own OpenAI key, OpenFolio can answer questions in Ask mode and can optionally use OpenAI embeddings. Without a key, search continues to use the local embedding model.
+1. Quit OpenFolio.
+2. Download the newest release.
+3. Replace the existing app in `/Applications`.
+4. Open the new version.
+
+Your imported archive, index, and settings live in macOS Application Support,
+outside the app bundle. Replacing the app does not move or erase that data.
+
+## What to search for
+
+Try a literal memory rather than a question that asks the app to make a
+judgment:
+
+- `the dumpling place Maya liked in the Richmond`
+- `flight number for Sam's wedding`
+- `messages about the lease renewal`
+- `"garage code"`
+
+Results are source records, not generated answers. Open a result to verify the
+cited message in its original conversation.

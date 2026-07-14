@@ -613,23 +613,6 @@ export interface OpenFolioBridge {
     getCitationContext(input: ConversationCitationInput): Promise<ConversationCitationContext>;
     getScaleStatus(): Promise<SearchScaleStatus>;
   };
-  ai: {
-    run(input: AskRunInput): Promise<AskResponse>;
-    getSettings(): Promise<AiSettingsStatus>;
-    saveOpenAIKey(input: { apiKey: string; answerModel?: string | null; embeddingModel?: string | null; useOpenAIEmbeddings?: boolean }): Promise<AiSettingsStatus>;
-    deleteOpenAIKey(): Promise<AiSettingsStatus>;
-  };
-  cloud: {
-    getConfig(): Promise<CloudRuntimeConfig>;
-    beginAuthSession(): Promise<{ redirectUri: string }>;
-    openExternal(url: string): Promise<void>;
-    onAuthCallback(listener: (url: string) => void): () => void;
-  };
-  connectorCredentials: {
-    listAccounts(): Promise<ConnectorAccount[]>;
-    saveCredential(input: ConnectorCredential): Promise<ConnectorAccount>;
-    deleteCredential(input: { provider: ConnectorProvider; accountId: string }): Promise<{ ok: boolean }>;
-  };
   updates: {
     getState(): Promise<UpdateState>;
     checkNow(): Promise<UpdateState>;

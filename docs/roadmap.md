@@ -6,9 +6,9 @@ The current product direction is defined by:
 - [Editorial Archive design system](./editorial-archive-design-system.md)
 - [Implementation plan](./editorial-archive-implementation.md)
 
-## Next milestone: Evidence-first search
+## Current milestone: Evidence-first search
 
-Status: proposed and review-ready, not implemented.
+Status: implemented on the current development branch; release verification pending.
 
 - Make Search the default page and primary navigation item.
 - Complete the loop from remembered description to ranked local result to the
@@ -24,9 +24,9 @@ Status: proposed and review-ready, not implemented.
 
 ## Editorial Archive renderer
 
-Status: proposed and review-ready, not implemented.
+Status: implemented on the current development branch; visual review pending.
 
-- Apply the graphite shell, warm paper canvas, cobalt interaction system, local
+- Apply the graphite shell, warm paper canvas, oxidized-teal interaction system, local
   serif/sans/mono fonts, restrained rules, and message-strata motif.
 - Rebuild onboarding around first successful search.
 - Present People as dossiers and Conversations as the evidence archive.
@@ -35,7 +35,7 @@ Status: proposed and review-ready, not implemented.
 
 ## Public surface alignment
 
-Status: pending verified Mac behavior.
+Status: implemented on the current development branch; publish with the verified Mac release.
 
 - Lead the website and README with `OpenFolio remembers who told you what.`
 - Demonstrate query → evidence → original conversation.

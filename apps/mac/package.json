@@ -1,7 +1,7 @@
 {
   "name": "@openfolio/mac",
   "version": "0.3.3",
-  "description": "Local-first iMessage search and relationship memory for macOS.",
+  "description": "Private, evidence-first iMessage recall for macOS.",
   "author": "Kevin Fang",
   "private": true,
   "type": "module",
@@ -51,7 +51,6 @@
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^39.8.1",
     "electron-builder": "26.8.1",
-    "electron-updater": "^6.8.3",
     "electron-vite": "^4.0.1",
     "tailwindcss": "^4.2.2",
     "vite": "^7.3.5"
@@ -63,7 +62,10 @@
     "icon": "build/icon.icns",
     "files": [
       "out/**",
-      "package.json"
+      "package.json",
+      "!node_modules/@openfolio/*/src/**",
+      "!node_modules/@openfolio/*/test/**",
+      "!node_modules/@openfolio/*/dist/**/test/**"
     ],
     "extraResources": [
       {

@@ -11,7 +11,7 @@ export const metadata = {
     default: "OpenFolio Docs",
     template: "%s | OpenFolio Docs",
   },
-  description: "Documentation for OpenFolio, the Electron-first local relationship memory app.",
+  description: "Documentation for OpenFolio, private evidence-first iMessage recall for macOS.",
 };
 
 export default async function DocsLayout({ children }: { children: ReactNode }) {

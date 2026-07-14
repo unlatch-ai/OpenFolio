@@ -8,6 +8,7 @@ import type {
   MessagesImportJob,
   MessagesThreadSummary,
   SearchResult,
+  SearchResponse,
   SyncWatcherState,
   ThreadListItem,
   UpdateState,
@@ -23,13 +24,15 @@ function writeSetupDismissed(value: boolean) {
 
 export type View = "search" | "people" | "conversations" | "wrapped" | "settings";
 export type SearchType = "all" | "messages" | "people" | "conversations";
-export type SearchDate = "any" | "this-year" | "last-year";
+export type SearchDate = "any" | "this-year" | "last-year" | "custom";
 
 export interface SearchFilters {
   type: SearchType;
   personId: string | null;
   threadId: string | null;
   date: SearchDate;
+  customStart: string;
+  customEnd: string;
 }
 
 export interface SearchState {
@@ -40,6 +43,10 @@ export interface SearchState {
   selectedResultId: string | null;
   filters: SearchFilters;
   focusRequest: number;
+  retrievalMode: SearchResponse["retrievalMode"];
+  semanticStatus: SearchResponse["semanticStatus"];
+  semanticMessage: string | null;
+  resultCount: number;
 }
 
 export interface AppState {
@@ -55,6 +62,7 @@ export interface AppState {
   search: SearchState;
   setSearchQuery: (query: string) => void;
   setSearchResults: (results: SearchResult[]) => void;
+  setSearchResponse: (response: SearchResponse) => void;
   setSearching: (searching: boolean) => void;
   setSearchError: (error: string | null) => void;
   selectSearchResult: (id: string | null) => void;
@@ -88,7 +96,14 @@ export interface AppState {
   setSetupDismissed: (dismissed: boolean) => void;
 }
 
-const initialFilters: SearchFilters = { type: "all", personId: null, threadId: null, date: "any" };
+const initialFilters: SearchFilters = {
+  type: "all",
+  personId: null,
+  threadId: null,
+  date: "any",
+  customStart: "",
+  customEnd: "",
+};
 
 export const useAppStore = create<AppState>((set) => ({
   view: "search",
@@ -111,9 +126,25 @@ export const useAppStore = create<AppState>((set) => ({
     selectedResultId: null,
     filters: initialFilters,
     focusRequest: 1,
+    retrievalMode: "exact",
+    semanticStatus: "unavailable",
+    semanticMessage: null,
+    resultCount: 0,
   },
   setSearchQuery: (query) => set((state) => ({ search: { ...state.search, query } })),
-  setSearchResults: (results) => set((state) => ({ search: { ...state.search, results } })),
+  setSearchResults: (results) => set((state) => ({
+    search: { ...state.search, results, resultCount: results.length },
+  })),
+  setSearchResponse: (response) => set((state) => ({
+    search: {
+      ...state.search,
+      results: response.results,
+      resultCount: response.resultCount,
+      retrievalMode: response.retrievalMode,
+      semanticStatus: response.semanticStatus,
+      semanticMessage: response.semanticMessage,
+    },
+  })),
   setSearching: (searching) => set((state) => ({ search: { ...state.search, searching } })),
   setSearchError: (error) => set((state) => ({ search: { ...state.search, error } })),
   selectSearchResult: (selectedResultId) => set((state) => ({ search: { ...state.search, selectedResultId } })),

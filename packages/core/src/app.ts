@@ -1,6 +1,4 @@
 import type {
-  AskResponse,
-  AskRunInput,
   ConnectorSyncResult,
   EditablePersonProfile,
   MessagesAccessStatus,
@@ -17,7 +15,12 @@ import { MessagesImporter, getMessagesAccessStatus, DEFAULT_MESSAGES_DB_PATH } f
 import { LocalEmbeddingEngine } from "./local-embeddings.js";
 import { AnalyticsEngine } from "./analytics.js";
 import { ChatDbWatcher, type SyncWatcherState } from "./watcher.js";
-import type { StoredProviderConfig } from "./types.js";
+
+type SearchScope = {
+  sourceScope?: "all" | "person" | "thread";
+  personId?: string | null;
+  threadId?: string | null;
+};
 
 export class OpenFolioCore {
   readonly db: OpenFolioDatabase;
@@ -38,31 +41,20 @@ export class OpenFolioCore {
 
   constructor(options?: {
     dbPath?: string;
-    aiConfig?: StoredProviderConfig | null;
     enableLocalEmbeddings?: boolean;
     networkPolicy?: "offline";
   }) {
     this.db = new OpenFolioDatabase(options?.dbPath);
 
     // Local embeddings enabled when explicitly requested, or in the Electron app (no API key).
-    // Disabled when aiConfig is explicitly null (test/CI environments).
     const shouldUseLocal = options?.enableLocalEmbeddings === true;
     this.localEmbeddings = shouldUseLocal ? new LocalEmbeddingEngine() : new LocalEmbeddingEngine({ modelId: "__disabled__" });
 
-    // Network Lock is the only supported core runtime policy. Provider and
-    // proxy environment variables are intentionally ignored.
-    void options?.aiConfig;
+    // Network Lock is the only supported core runtime policy.
     void options?.networkPolicy;
-    this.ai = new AIOrchestrator(
-      shouldUseLocal ? { provider: "local" as const } : null,
-      shouldUseLocal ? this.localEmbeddings : null,
-    );
+    this.ai = new AIOrchestrator(shouldUseLocal ? this.localEmbeddings : null);
     this.messages = new MessagesImporter(this.db);
     this.analytics = new AnalyticsEngine(this.db);
-  }
-
-  configureAi(_aiConfig: StoredProviderConfig | null) {
-    this.ai = new AIOrchestrator({ provider: "local" }, this.localEmbeddings);
   }
 
   getMessagesAccessStatus(): MessagesAccessStatus {
@@ -95,7 +87,7 @@ export class OpenFolioCore {
     return this.startMessagesImport();
   }
 
-  async search(text: string, limit = 10, scope?: Pick<AskRunInput, "personId" | "threadId" | "sourceScope">): Promise<SearchResult[]> {
+  async search(text: string, limit = 10, scope?: SearchScope): Promise<SearchResult[]> {
     const embedding = await this.ai.embed(text);
     return this.db.search(text, limit, embedding ?? undefined, scope);
   }
@@ -191,17 +183,6 @@ export class OpenFolioCore {
 
   getSearchScaleStatus(options?: { vectorScanWarningThreshold?: number }) {
     return this.db.getSearchScaleStatus(options);
-  }
-
-  async ask(input: string | AskRunInput): Promise<AskResponse> {
-    const request = typeof input === "string" ? { query: input, sourceScope: "all" as const } : input;
-    const sourceScope = request.sourceScope ?? "all";
-    const results = await this.search(request.query, 8, {
-      sourceScope,
-      personId: request.personId,
-      threadId: request.threadId,
-    });
-    return this.ai.answer(request.query, results, sourceScope);
   }
 
   getPerson(personId: string) {

@@ -27,10 +27,7 @@ describe("core Network Lock", () => {
     const core = new OpenFolioCore({ dbPath: tempPath("openfolio.sqlite"), networkPolicy: "offline" });
 
     const search = await core.search("nothing remote");
-    const answer = await core.ask("nothing remote");
-
     expect(search).toEqual([]);
-    expect(answer.provider).toBe("local");
     expect(fetchSpy).not.toHaveBeenCalled();
     core.db.close();
   });

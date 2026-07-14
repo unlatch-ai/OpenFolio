@@ -1,9 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AskRunInput, ConversationCitationInput, OpenFolioBridge, SearchQueryInput } from "@openfolio/shared-types";
-
-function disabledNetworkFeature(message: string): Promise<never> {
-  return Promise.reject(new Error(message));
-}
+import type { ConversationCitationInput, OpenFolioBridge, SearchQueryInput } from "@openfolio/shared-types";
 
 const bridge: OpenFolioBridge = {
   dashboard: {
@@ -31,27 +27,10 @@ const bridge: OpenFolioBridge = {
     getCitationContext: (input: ConversationCitationInput) => ipcRenderer.invoke("openfolio:search:getCitationContext", input),
     getScaleStatus: () => ipcRenderer.invoke("openfolio:search:getScaleStatus"),
   },
-  ai: {
-    run: (input: AskRunInput) => ipcRenderer.invoke("openfolio:ai:run", input),
-    getSettings: () => ipcRenderer.invoke("openfolio:ai:getSettings"),
-    saveOpenAIKey: () => disabledNetworkFeature("Network Lock does not permit remote AI providers."),
-    deleteOpenAIKey: () => disabledNetworkFeature("Network Lock does not store remote AI credentials."),
-  },
-  cloud: {
-    getConfig: () => Promise.resolve({ convexUrl: null, hostedBaseUrl: null, deviceName: "This Mac", platform: "darwin" }),
-    beginAuthSession: () => disabledNetworkFeature("Network Lock does not permit hosted authentication."),
-    openExternal: () => disabledNetworkFeature("Network Lock does not open network URLs."),
-    onAuthCallback: () => () => {},
-  },
-  connectorCredentials: {
-    listAccounts: () => Promise.resolve([]),
-    saveCredential: () => disabledNetworkFeature("Network Lock does not permit hosted connectors."),
-    deleteCredential: () => Promise.resolve({ ok: false }),
-  },
   updates: {
     getState: () => ipcRenderer.invoke("openfolio:updates:getState"),
     checkNow: () => ipcRenderer.invoke("openfolio:updates:getState"),
-    installNow: () => disabledNetworkFeature("OpenFolio updates are manual under Network Lock."),
+    installNow: () => Promise.reject(new Error("OpenFolio updates are manual under Network Lock.")),
     onStateChange: (listener: (state: import("@openfolio/shared-types").UpdateState) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, state: import("@openfolio/shared-types").UpdateState) => listener(state);
       ipcRenderer.on("openfolio:updates:state", handler);

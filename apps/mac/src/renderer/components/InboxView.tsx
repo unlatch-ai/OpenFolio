@@ -70,8 +70,15 @@ function ConversationArchive({
   const [messages, setMessages] = useState<MessageDetail[]>([]);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [showSourceEducation, setShowSourceEducation] = useState(false);
   const citationRef = useRef<HTMLElement | null>(null);
   const pageSize = 75;
+
+  useEffect(() => {
+    if (!citationId || localStorage.getItem("openfolio.sourceEducationSeen") === "1") return;
+    setShowSourceEducation(true);
+    localStorage.setItem("openfolio.sourceEducationSeen", "1");
+  }, [citationId]);
 
   useEffect(() => {
     setLoading(true);
@@ -163,6 +170,12 @@ function ConversationArchive({
         </div>
       </header>
       <div className="message-archive">
+        {showSourceEducation && (
+          <div className="source-education" role="status">
+            <span>This is the original message. Search always brings you back to the source.</span>
+            <button type="button" onClick={() => setShowSourceEducation(false)} aria-label="Dismiss source explanation">×</button>
+          </div>
+        )}
         {messages.map((message) => {
           const date = exactDate(message.occurredAt);
           const showDate = date !== previousDate;
@@ -193,7 +206,7 @@ function ConversationArchive({
                   <div className="attachment-row" key={attachment.id}>
                     <File />
                     <span>
-                      <strong>{attachment.transferName || "Attachment"}</strong>
+                      <strong>Attachment</strong>
                       <small>{attachment.mimeType || "Attachment"}</small>
                     </span>
                   </div>

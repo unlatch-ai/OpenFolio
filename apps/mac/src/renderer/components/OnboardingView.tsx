@@ -7,7 +7,7 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -39,11 +39,13 @@ function StepRow({
   active,
   onAction,
   busy,
+  onSkip,
 }: {
   step: OnboardingStep;
   active: boolean;
   onAction: () => void;
   busy: boolean;
+  onSkip?: () => void;
 }) {
   const showAction =
     step.actionLabel &&
@@ -75,11 +77,17 @@ function StepRow({
           {step.actionLabel}
         </Button>
       )}
+      {step.id === "contacts" && step.status !== "complete" && onSkip && (
+        <Button size="xs" variant="ghost" onClick={onSkip} disabled={busy}>
+          Skip
+        </Button>
+      )}
     </div>
   );
 }
 
 export function OnboardingView() {
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const {
     messagesStatus,
     contactsStatus,
@@ -120,6 +128,21 @@ export function OnboardingView() {
     }, 1500);
     return () => window.clearInterval(interval);
   }, [embeddingSync?.syncing, setEmbeddingSync]);
+
+  useEffect(() => {
+    if (messagesStatus?.status === "granted") return;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      void window.openfolio.messages.getAccessStatus().then(setMessagesStatus).catch(() => undefined);
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 1500);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [messagesStatus?.status, setMessagesStatus]);
 
   async function refreshAppData() {
     const [nextThreads, summaries, nextEmbeddingSync] = await Promise.all([
@@ -272,7 +295,16 @@ export function OnboardingView() {
             >
               Try your first search
             </Button>
+            <Button size="sm" variant="ghost" onClick={() => setPrivacyOpen((open) => !open)}>
+              How privacy works
+            </Button>
           </div>
+          {privacyOpen && (
+            <div className="setup-privacy" role="note">
+              <strong>OpenFolio reads, but never changes, Messages.</strong>
+              <p>It builds a separate search index on this Mac. Message and contact data are not uploaded.</p>
+            </div>
+          )}
         </div>
 
         <div className="setup-progress">
@@ -288,16 +320,25 @@ export function OnboardingView() {
             )}
           </div>
           <div className="setup-steps">
-            {state.steps.map((step) => (
+            {state.steps.filter((step) => step.id === state.activeStepId).map((step) => (
               <StepRow
                 key={step.id}
                 step={step}
                 active={state.activeStepId === step.id}
                 busy={busy}
                 onAction={actionByStep[step.id]}
+                onSkip={step.id === "contacts" && state.canEnterApp ? () => setSetupDismissed(true) : undefined}
               />
             ))}
           </div>
+          {importJob && (
+            <div className="import-activity" aria-label="Import activity">
+              <span><Check size={13} /> Reading conversations {importJob.importedThreads > 0 ? `· ${importJob.importedThreads}` : ""}</span>
+              <span><Check size={13} /> Resolving participants {importJob.importedPeople > 0 ? `· ${importJob.importedPeople}` : ""}</span>
+              <span><Check size={13} /> Preparing exact search {importJob.importedMessages > 0 ? `· ${importJob.importedMessages} messages` : ""}</span>
+              <span>{embeddingSync?.syncing ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />} Preparing semantic search</span>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -4,37 +4,45 @@ title: Privacy
 
 # Privacy
 
-OpenFolio is local-first by default.
+OpenFolio is designed as a zero-network production app. It reads Messages
+locally, stores a separate local search index, and runs exact and semantic
+retrieval on the Mac. It has no account, telemetry, hosted AI, cloud sync,
+remote model fallback, automatic updater, or browser-based sign-in.
 
-## What stays local
+## What OpenFolio reads
 
-- the canonical SQLite graph
-- raw Messages history
-- local notes and reminders
-- local embedding cache
-- local connector credentials and BYOK AI keys
+- The local Messages database, read-only, after you grant Full Disk Access.
+- Apple Contacts, only if you choose to allow access, to resolve message handles
+  to names.
 
-If you add your own OpenAI key and use Ask mode, OpenFolio sends the selected
-retrieved snippets needed to answer that question to OpenAI. If you enable
-OpenAI embeddings, document text needed for embedding is sent to OpenAI. Without
-those BYOK settings, semantic indexing and retrieval stay local.
+OpenFolio does not send, edit, delete, or back up messages.
 
-## macOS permissions
+## What OpenFolio stores
 
-OpenFolio asks for Full Disk Access so it can read the local iMessage database
-that macOS stores on your Mac. The app imports that data into a local SQLite
-database and does not upload raw Messages history by default.
+- A local SQLite archive and search index.
+- Local embeddings created with the bundled q8 `all-MiniLM-L6-v2` model.
+- Local settings and optional contact matches.
 
-OpenFolio asks for Contacts access so it can resolve phone numbers and email
-handles to names from Apple Contacts. Contact metadata is stored locally with
-the same local-first boundary.
+These files live in macOS Application Support, separate from the app bundle.
+They remain in place when you manually replace the app with a newer version.
 
-## What hosted services are for
+## Exact claim boundary
 
-- account identity
-- billing and entitlements
-- hosted AI when explicitly enabled in a future paid plan
-- future managed connectors
-- future hosted MCP / remote access
+The production code and packaged app enforce a deny-all network policy covering
+Internet, LAN, loopback, DNS, socket, navigation, download, and external web
+handoff paths. Exact search remains available if the bundled semantic model is
+missing or unavailable; the app does not fetch a replacement.
 
-The current MCP path is local stdio. If OpenFolio later offers hosted MCP, the intended model is an optional derived hosted graph with explicit consent and clear onboarding disclosure about what is uploaded.
+The stronger public statement that a particular signed release makes zero
+network requests remains gated on inspecting that final signed artifact and
+observing every process in its tree with PID-attributed traffic instrumentation
+on real macOS. Source review, unit tests, CSP, and an unsigned local build are
+not enough to prove that release claim. Until that gate passes, treat the
+zero-network behavior as the implemented and tested contract, not a verified
+claim about every signed binary.
+
+## Updates
+
+OpenFolio does not check for updates or open a release page from inside the app.
+To update, download a new release yourself and replace the app in
+`/Applications`. Your local archive stays in Application Support.

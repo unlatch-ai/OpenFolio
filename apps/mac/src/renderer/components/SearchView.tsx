@@ -144,6 +144,7 @@ export function SearchView() {
     embeddingSync,
     setSearchQuery,
     setSearchResults,
+    setSearchResponse,
     setSearching,
     setSearchError,
     selectSearchResult,
@@ -185,12 +186,12 @@ export function SearchView() {
       setSearching(true);
       setSearchError(null);
       try {
-        const results = await queryEditorialArchive({
+        const response = await queryEditorialArchive({
           text,
           filters: search.filters,
           limit: 50,
         });
-        if (id === requestRef.current) setSearchResults(results);
+        if (id === requestRef.current) setSearchResponse(response);
       } catch {
         if (id === requestRef.current)
           setSearchError("Search could not read the local index. Try again.");
@@ -198,7 +199,7 @@ export function SearchView() {
         if (id === requestRef.current) setSearching(false);
       }
     },
-    [search.filters, setSearchError, setSearchResults, setSearching],
+    [search.filters, setSearchError, setSearchResponse, setSearchResults, setSearching],
   );
 
   useEffect(() => {
@@ -267,7 +268,11 @@ export function SearchView() {
           ? {
               key: "date",
               label:
-                search.filters.date === "this-year" ? "This year" : "Last year",
+                search.filters.date === "this-year"
+                  ? "This year"
+                  : search.filters.date === "last-year"
+                    ? "Last year"
+                    : `${search.filters.customStart || "Start"} – ${search.filters.customEnd || "End"}`,
             }
           : null,
       ].filter(Boolean) as Array<{
@@ -410,8 +415,31 @@ export function SearchView() {
                   <option value="any">Any time</option>
                   <option value="this-year">This year</option>
                   <option value="last-year">Last year</option>
+                  <option value="custom">Custom range</option>
                 </select>
               </label>
+              {search.filters.date === "custom" && (
+                <div className="custom-date-range" aria-label="Custom date range">
+                  <label>
+                    From
+                    <input
+                      type="date"
+                      value={search.filters.customStart}
+                      max={search.filters.customEnd || undefined}
+                      onChange={(event) => setSearchFilters({ customStart: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    To
+                    <input
+                      type="date"
+                      value={search.filters.customEnd}
+                      min={search.filters.customStart || undefined}
+                      onChange={(event) => setSearchFilters({ customEnd: event.target.value })}
+                    />
+                  </label>
+                </div>
+              )}
             </div>
             {applied.length > 0 && (
               <div className="filter-chips">
@@ -444,15 +472,14 @@ export function SearchView() {
             )}
             <div className="result-status" aria-live="polite">
               <strong>
-                {search.results.length}{" "}
-                {search.results.length === 1 ? "match" : "matches"}
+                {search.resultCount}{" "}
+                {search.resultCount === 1 ? "match" : "matches"}
               </strong>
               <span>
                 {search.searching
                   ? "Searching…"
-                  : embeddingSync?.lastError
-                    ? "Exact search ready · semantic unavailable"
-                    : "Local retrieval"}
+                  : search.semanticMessage ||
+                    `${search.retrievalMode === "hybrid" ? "Exact + related wording" : "Exact search"} · ${search.semanticStatus}`}
               </span>
             </div>
             {search.error && (
@@ -518,7 +545,11 @@ export function SearchView() {
                         </time>
                       </span>
                       <span className="search-result-source">
-                        {result.sourceLabel ||
+                        {result.direction === "incoming"
+                          ? `From ${result.senderLabel || result.citation.personLabel || "contact"}`
+                          : result.direction === "outgoing"
+                            ? "From you"
+                            : result.sourceLabel ||
                           (result.kind === "message"
                             ? "Message"
                             : result.kind === "thread"
@@ -526,7 +557,9 @@ export function SearchView() {
                               : "Person")}
                       </span>
                       <span className="search-result-snippet">
-                        {highlightSnippet(result.snippet, search.query).map(
+                        {(result.matchReason === "exact_words"
+                          ? highlightSnippet(result.snippet, search.query)
+                          : [{ text: result.snippet, match: false }]).map(
                           (part, index) =>
                             part.match ? (
                               <mark key={index}>{part.text}</mark>

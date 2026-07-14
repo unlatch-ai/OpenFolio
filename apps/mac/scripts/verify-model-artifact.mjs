@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -82,23 +83,42 @@ if (!fs.existsSync(appAsar)) {
   errors.push("app.asar is missing");
 } else {
   const executableArchive = fs.readFileSync(appAsar);
-  const forbiddenRemoteModelStrings = [
+  const forbiddenCapabilityStrings = [
     "https://huggingface.co/Xenova/all-MiniLM-L6-v2",
     "Xenova/all-MiniLM-L6-v2/resolve/main",
     "cdn-lfs.huggingface.co",
+    "node_modules/openai/",
+    "node_modules/electron-updater/",
+    "people.googleapis.com",
+    "gmail.googleapis.com",
+    ".convex.cloud",
   ];
-  for (const forbidden of forbiddenRemoteModelStrings) {
+  for (const forbidden of forbiddenCapabilityStrings) {
     if (executableArchive.includes(Buffer.from(forbidden))) {
-      errors.push(`forbidden remote model string in app.asar: ${forbidden}`);
+      errors.push(`forbidden network capability string in app.asar: ${forbidden}`);
     }
   }
 }
 
+if (process.platform === "darwin") {
+  try {
+    const entitlements = execFileSync("codesign", ["--display", "--entitlements", ":-", path.resolve(appPath)], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    for (const entitlement of ["com.apple.security.network.client", "com.apple.security.network.server"]) {
+      if (entitlements.includes(entitlement)) errors.push(`forbidden network entitlement found: ${entitlement}`);
+    }
+  } catch (error) {
+    errors.push(`could not inspect app entitlements: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 if (errors.length > 0) {
-  throw new Error(`Artifact model verification failed:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+  throw new Error(`Artifact verification failed:\n${errors.map((error) => `- ${error}`).join("\n")}`);
 }
 
 const modelBytes = manifest.files.reduce((total, file) => total + file.size, 0);
 process.stdout.write(
-  `Verified ${path.resolve(appPath)}: ${manifest.files.length} model/license files, ${modelBytes} bytes, one weight copy, no updater metadata or direct remote model URL\n`,
+  `Verified ${path.resolve(appPath)}: ${manifest.files.length} model/license files, ${modelBytes} bytes, one weight copy, no updater metadata, forbidden network SDK, host, or entitlement\n`,
 );

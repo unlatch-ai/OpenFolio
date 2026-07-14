@@ -162,7 +162,7 @@ Search is a full page, not primarily a command-palette modal.
 - If a natural-language query resembles a question, the UI still says `Matches` and shows evidence. It must not format the top snippets as an answer.
 - Ranking confidence is internal. Do not show a fake percentage.
 
-The current core can blend FTS and local embeddings, but the renderer bridge exposes only text and limit. Person, conversation, date, and result-type filters require a small core/bridge contract extension. Match-reason labels require exposing score components or deterministic match metadata. These are implementation work, not current capabilities.
+The core and renderer bridge now expose blended full-text/local-semantic retrieval, person, conversation, date, and result-type filters, plus deterministic match metadata. Exact search remains available while the semantic index is incomplete or unavailable.
 
 ### Filters
 
@@ -327,4 +327,4 @@ Canonical release address, rendered as selectable/copyable plain text and never 
 **Website boundary**
 `The OpenFolio website and GitHub download require the internet. Using the installed Mac app does not.`
 
-Implementation consequence: current code does not satisfy this target. It includes automatic updater traffic, runtime model download fallback, BYOK/OpenAI paths, Mac hosted-auth and loopback scaffolding, HTTP(S) browser handoff, network-capable core connectors, and MCP behavior that can inherit network provider configuration. The implementation must remove these paths from the signed Mac/MCP production closure, bundle and license-review the approved local model, and fail closed to exact search if model assets are missing or invalid. Code removal and request denial are necessary but not sufficient proof; the final signed/notarized artifact and every bundled helper must pass PID-attributed zero-traffic testing on real macOS.
+The current development branch removes automatic updater, runtime model-download, BYOK/OpenAI, hosted-auth, loopback, and external HTTP(S) handoff paths from the Mac product; bundles and verifies the approved local model; and fails closed to exact search if semantic assets are missing or invalid. Code removal, artifact scanning, and request denial are necessary but not sufficient proof: the final signed/notarized artifact and every bundled helper must still pass PID-attributed zero-traffic testing on real macOS.

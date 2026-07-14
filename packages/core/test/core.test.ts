@@ -508,7 +508,7 @@ describe("OpenFolioCore", () => {
     });
   });
 
-  it("limits Ask citations to person and thread source filters", async () => {
+  it("limits local retrieval to person and thread source filters", async () => {
     appendSecondPersonThread(chatDbPath);
     const core = new OpenFolioCore({ dbPath });
     await core.startMessagesImport();
@@ -517,13 +517,13 @@ describe("OpenFolioCore", () => {
     const bob = people.find((item) => item.primaryHandle === "+15555550124")!;
     const bobThread = core.getPersonProfile(bob.id)?.threads[0]!;
 
-    const personResponse = await core.ask({ query: "planning hello", sourceScope: "person", personId: ada.id });
-    const threadResponse = await core.ask({ query: "planning hello", sourceScope: "thread", threadId: bobThread.threadId });
+    const personResults = await core.search("planning hello", 8, { sourceScope: "person", personId: ada.id });
+    const threadResults = await core.search("planning hello", 8, { sourceScope: "thread", threadId: bobThread.threadId });
 
-    expect(personResponse.citations.length).toBeGreaterThan(0);
-    expect(personResponse.citations.every((citation) => citation.personId === ada.id || citation.threadId !== bobThread.threadId)).toBe(true);
-    expect(threadResponse.citations.length).toBeGreaterThan(0);
-    expect(threadResponse.citations.every((citation) => citation.threadId === bobThread.threadId)).toBe(true);
+    expect(personResults.length).toBeGreaterThan(0);
+    expect(personResults.every((result) => result.personId === ada.id || result.threadId !== bobThread.threadId)).toBe(true);
+    expect(threadResults.length).toBeGreaterThan(0);
+    expect(threadResults.every((result) => result.threadId === bobThread.threadId)).toBe(true);
   });
 
   it("returns typed exact results with stable citation and local navigation identity", async () => {

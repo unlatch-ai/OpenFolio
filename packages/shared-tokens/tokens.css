@@ -58,21 +58,53 @@
   --sidebar-accent-foreground: var(--shell-ink);
   --sidebar-border: rgba(255, 255, 255, 0.12);
   --sidebar-ring: #8aa4a4;
-  --radius: 0.25rem;
+  --radius: 4px;
 
+  /* One 4px rhythm. Token names increase by one base unit until 24px,
+     then retain only the larger layout stops the product actually uses. */
   --space-1: 4px;
   --space-2: 8px;
-  --space-3: 16px;
-  --space-4: 24px;
-  --space-5: 32px;
-  --space-6: 40px;
-  --space-7: 48px;
-  --space-8: 64px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+  --space-11: 80px;
+  --space-12: 96px;
 
   --radius-hairline: 2px;
   --radius-control: 4px;
   --radius-panel: 6px;
   --radius-onboarding: 12px;
+
+  /* System-local stacks keep the zero-network promise true at render time. */
+  --font-editorial:
+    ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-interface:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial,
+    sans-serif;
+  --font-system:
+    "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+
+  --type-display-size: 48px;
+  --type-display-line: 52px;
+  --type-feature-size: 40px;
+  --type-feature-line: 40px;
+  --type-page-size: 32px;
+  --type-page-line: 36px;
+  --type-story-size: 24px;
+  --type-story-line: 28px;
+  --type-ui-title-size: 20px;
+  --type-ui-title-line: 24px;
+  --type-body-size: 13px;
+  --type-body-line: 20px;
+  --type-label-size: 12px;
+  --type-label-line: 16px;
+  --type-meta-size: 11px;
+  --type-meta-line: 16px;
 
   --chart-1: var(--person-lilac);
   --chart-2: var(--person-rose);

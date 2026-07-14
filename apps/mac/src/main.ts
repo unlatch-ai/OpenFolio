@@ -3,10 +3,8 @@ import { spawn } from "node:child_process";
 import { app, BrowserWindow, ipcMain, nativeImage, session, shell } from "electron";
 import os from "node:os";
 import path from "node:path";
-import { OpenFolioCore } from "@openfolio/core";
+import { installNodeNetworkLock, OpenFolioCore } from "@openfolio/core";
 import type {
-  AiSettingsStatus,
-  AskRunInput,
   ContactsSyncSummary,
   ContactsAccessStatus,
   DiagnosticsReport,
@@ -32,6 +30,7 @@ import {
 } from "./messages-access";
 import {
   createRuntimeNetworkPolicy,
+  isIpcSenderAllowed,
   isNavigationAllowed,
   isRuntimeRequestAllowed,
   isSafeSystemSettingsUrl,
@@ -39,6 +38,7 @@ import {
 } from "./navigation";
 import { getBackupDirectoryPath, getLocalDataStatus } from "./local-data";
 
+installNodeNetworkLock();
 const core = new OpenFolioCore({ enableLocalEmbeddings: true, networkPolicy: "offline" });
 const mcpController = new LocalMcpController();
 const MANUAL_UPDATE_MESSAGE = "OpenFolio does not connect to the Internet or check for updates. Download the newest version independently and replace OpenFolio.app. Your private library remains in Application Support on this Mac.";
@@ -54,16 +54,6 @@ function logAppDebug(scope: string, ...args: unknown[]) {
   if (debugLogging) {
     console.log(`[openfolio-${scope}]`, ...args);
   }
-}
-
-function getAiSettingsStatus(): AiSettingsStatus {
-  return {
-    provider: "local",
-    hasOpenAIKey: false,
-    answerModel: null,
-    embeddingModel: "all-MiniLM-L6-v2",
-    useOpenAIEmbeddings: false,
-  };
 }
 
 function createManualUpdateState(): UpdateState {
@@ -197,9 +187,13 @@ if (enforceSingleInstance && !app.requestSingleInstanceLock()) {
 }
 
 function installRuntimeNetworkPolicy(policy: RuntimeNetworkPolicy) {
-  session.defaultSession.webRequest.onBeforeRequest({ urls: ["<all_urls>"] }, (details, callback) => {
+  const appSession = session.defaultSession;
+  appSession.webRequest.onBeforeRequest({ urls: ["<all_urls>"] }, (details, callback) => {
     callback({ cancel: !isRuntimeRequestAllowed(details.url, policy) });
   });
+  appSession.setPermissionCheckHandler(() => false);
+  appSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  appSession.on("will-download", (event) => event.preventDefault());
 }
 
 function createWindow() {
@@ -228,6 +222,7 @@ function createWindow() {
   }
 
   browserWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  browserWindow.webContents.on("will-attach-webview", (event) => event.preventDefault());
 
   browserWindow.webContents.on("will-navigate", (event, url) => {
     const currentUrl = browserWindow.webContents.getURL();
@@ -405,49 +400,6 @@ const api: OpenFolioBridge = {
       input.after,
     ),
     getScaleStatus: async () => core.getSearchScaleStatus(),
-  },
-  ai: {
-    run: async (input: AskRunInput) => {
-      logAppDebug("ai", "run", { query: input.query, sourceScope: input.sourceScope, personId: input.personId, threadId: input.threadId });
-      if (input.useHosted) {
-        return {
-          answer: "Network Lock permits local search and local answers only.",
-          citations: [],
-          provider: "local" as const,
-          sourceScope: input.sourceScope ?? "all",
-        };
-      }
-      const result = await core.ask(input);
-      logAppDebug("ai", "result", { provider: result.provider, citations: result.citations.length });
-      return result;
-    },
-    getSettings: async () => getAiSettingsStatus(),
-    saveOpenAIKey: async () => {
-      throw new Error("Network Lock does not permit remote AI providers.");
-    },
-    deleteOpenAIKey: async () => getAiSettingsStatus(),
-  },
-  cloud: {
-    getConfig: async () => ({
-      convexUrl: null,
-      hostedBaseUrl: null,
-      deviceName: os.hostname(),
-      platform: process.platform,
-    }),
-    beginAuthSession: async () => {
-      throw new Error("Network Lock does not permit hosted authentication.");
-    },
-    openExternal: async () => {
-      throw new Error("Network Lock does not open network URLs.");
-    },
-    onAuthCallback: () => () => {},
-  },
-  connectorCredentials: {
-    listAccounts: async () => [],
-    saveCredential: async () => {
-      throw new Error("Network Lock does not permit hosted connectors.");
-    },
-    deleteCredential: async () => ({ ok: false }),
   },
   updates: {
     getState: async () => createManualUpdateState(),
@@ -642,9 +594,21 @@ const api: OpenFolioBridge = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function safeHandle(channel: string, handler: (...args: any[]) => unknown) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ipcMain.handle(channel, async (...args: any[]) => {
+  ipcMain.handle(channel, async (event, ...args: any[]) => {
     try {
-      return await handler(...args);
+      const senderFrame = event.senderFrame;
+      if (
+        !runtimeNetworkPolicy
+        || !mainWindow
+        || mainWindow.isDestroyed()
+        || event.sender !== mainWindow.webContents
+        || !senderFrame
+        || senderFrame !== event.sender.mainFrame
+        || !isIpcSenderAllowed(senderFrame.url, runtimeNetworkPolicy)
+      ) {
+        throw new Error("Rejected IPC from an untrusted renderer frame.");
+      }
+      return await handler(event, ...args);
     } catch (error) {
       console.error(`[openfolio-ipc] ${channel} failed:`, error);
       throw new Error(`${channel}: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -669,8 +633,6 @@ safeHandle("openfolio:search:query", (_, input: { text: string; limit?: number }
 safeHandle("openfolio:search:queryArchive", (_, input: SearchQueryInput) => api.search.queryArchive(input));
 safeHandle("openfolio:search:getCitationContext", (_, input: ConversationCitationInput) => api.search.getCitationContext(input));
 safeHandle("openfolio:search:getScaleStatus", () => api.search.getScaleStatus());
-safeHandle("openfolio:ai:run", (_, input: AskRunInput) => api.ai.run(input));
-safeHandle("openfolio:ai:getSettings", () => api.ai.getSettings());
 safeHandle("openfolio:updates:getState", () => api.updates.getState());
 safeHandle("openfolio:localData:getStatus", () => api.localData.getStatus());
 safeHandle("openfolio:localData:revealDatabase", () => api.localData.revealDatabase());

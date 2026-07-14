@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { OpenFolioCore } from "@openfolio/core";
+import { installNodeNetworkLock, OpenFolioCore } from "@openfolio/core";
 import { startOpenFolioMcpServer } from "./mcp-server.js";
 
 export function createCli() {
@@ -15,18 +15,10 @@ export function createCli() {
     .argument("<query>")
     .option("-l, --limit <limit>", "result limit", "10")
     .action(async (query, options) => {
+      installNodeNetworkLock();
       const core = new OpenFolioCore({ networkPolicy: "offline" });
       const results = await core.search(query, Number(options.limit));
       process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
-    });
-
-  program
-    .command("ask")
-    .argument("<query>")
-    .action(async (query) => {
-      const core = new OpenFolioCore({ networkPolicy: "offline" });
-      const response = await core.ask(query);
-      process.stdout.write(`${response.answer}\n`);
     });
 
   program
@@ -34,6 +26,7 @@ export function createCli() {
     .command("get")
     .argument("<personId>")
     .action(async (personId) => {
+      installNodeNetworkLock();
       const core = new OpenFolioCore({ networkPolicy: "offline" });
       const person = core.getPerson(personId);
       process.stdout.write(`${JSON.stringify(person ?? null, null, 2)}\n`);
@@ -46,6 +39,7 @@ export function createCli() {
     .requiredOption("--entity-id <entityId>")
     .requiredOption("--content <content>")
     .action((options) => {
+      installNodeNetworkLock();
       const core = new OpenFolioCore({ networkPolicy: "offline" });
       const note = core.addNote(options.entityType, options.entityId, options.content);
       process.stdout.write(`${JSON.stringify(note, null, 2)}\n`);
@@ -58,6 +52,7 @@ export function createCli() {
     .option("--person-id <personId>")
     .option("--due-at <dueAt>")
     .action((options) => {
+      installNodeNetworkLock();
       const core = new OpenFolioCore({ networkPolicy: "offline" });
       const reminder = core.addReminder(
         options.title,

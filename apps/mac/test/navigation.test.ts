@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createRuntimeNetworkPolicy,
   isAllowedExternalUrl,
+  isIpcSenderAllowed,
   isNavigationAllowed,
   isRuntimeRequestAllowed,
   isSafeSystemSettingsUrl,
@@ -54,5 +55,15 @@ describe("Network Lock policy", () => {
     expect(isSafeSystemSettingsUrl("x-apple.systempreferences://com.apple.preference.security?Privacy_Contacts")).toBe(false);
     expect(isSafeSystemSettingsUrl("https://support.apple.com")).toBe(false);
     expect(isSafeSystemSettingsUrl("file:///Users/me/.ssh/id_rsa")).toBe(false);
+  });
+
+  it("accepts IPC only from the packaged file renderer or exact development origin", () => {
+    const production = createRuntimeNetworkPolicy(true);
+    const development = createRuntimeNetworkPolicy(false, "http://127.0.0.1:5173/");
+
+    expect(isIpcSenderAllowed("file:///Applications/OpenFolio.app/index.html", production)).toBe(true);
+    expect(isIpcSenderAllowed("https://example.com", production)).toBe(false);
+    expect(isIpcSenderAllowed("http://127.0.0.1:5173/index.html", development)).toBe(true);
+    expect(isIpcSenderAllowed("http://localhost:5173/index.html", development)).toBe(false);
   });
 });

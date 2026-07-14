@@ -1,4 +1,4 @@
-import type { SearchMatchReason, SearchResult, SearchResultType, SearchScaleStatus } from "@openfolio/shared-types";
+import type { SearchMatchReason, SearchResponse, SearchResult, SearchResultType, SearchScaleStatus } from "@openfolio/shared-types";
 import type { SearchFilters } from "./store";
 
 export interface EditorialSearchRequest {
@@ -7,15 +7,21 @@ export interface EditorialSearchRequest {
   filters: SearchFilters;
 }
 
-function dateBounds(date: SearchFilters["date"]) {
+function dateBounds(filters: SearchFilters) {
+  const { date } = filters;
   if (date === "any") return null;
+  if (date === "custom") {
+    const start = new Date(`${filters.customStart}T00:00:00`).getTime();
+    const end = new Date(`${filters.customEnd}T23:59:59.999`).getTime();
+    return Number.isFinite(start) && Number.isFinite(end) && start <= end ? { start, end } : null;
+  }
   const now = new Date();
   const year = date === "this-year" ? now.getFullYear() : now.getFullYear() - 1;
   return { start: new Date(year, 0, 1).getTime(), end: new Date(year + 1, 0, 1).getTime() };
 }
 
-export async function queryEditorialArchive(request: EditorialSearchRequest): Promise<EditorialSearchResult[]> {
-  const bounds = dateBounds(request.filters.date);
+export async function queryEditorialArchive(request: EditorialSearchRequest): Promise<SearchResponse> {
+  const bounds = dateBounds(request.filters);
   const resultTypes: SearchResultType[] | undefined = request.filters.type === "all"
     ? undefined
     : [request.filters.type === "messages" ? "message" : request.filters.type === "people" ? "person" : "conversation"];
@@ -28,7 +34,7 @@ export async function queryEditorialArchive(request: EditorialSearchRequest): Pr
     dateRange: bounds ? { startAt: bounds.start, endAt: bounds.end } : undefined,
   });
   if (response.state === "error") throw new Error(response.error?.message || "Local search failed");
-  return response.results;
+  return response;
 }
 
 export type EditorialSearchResult = SearchResult;
@@ -54,11 +60,12 @@ export function describeSearchScale(status: SearchScaleStatus) {
 }
 
 export function formatCitationMeta(result: SearchResult) {
-  const source = result.sourceLabel || result.title || result.kind;
+  const person = result.citation?.personLabel || result.senderLabel;
+  const conversation = result.citation?.conversationLabel || result.sourceLabel || result.title;
   const date = result.occurredAt
     ? new Date(result.occurredAt).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
     : null;
-  return [result.kind, result.title, source !== result.title ? source : null, date].filter(Boolean).join(" · ");
+  return [person, conversation, date].filter(Boolean).join(" · ");
 }
 
 export function highlightSnippet(snippet: string, query: string) {

@@ -4,25 +4,27 @@ title: OpenFolio Docs
 
 # OpenFolio Docs
 
-OpenFolio is an Electron-first personal relationship memory app for macOS.
+OpenFolio privately searches your iMessage history on your Mac, helps you find
+the person, fact, or message you remember, and lets you verify it in the
+original conversation.
+
+**OpenFolio remembers who told you what.**
 
 ## Product shape
 
-- `apps/mac` is the real product.
-- `packages/core` is the canonical local-first behavior layer.
-- `apps/web` is the public landing page, docs, and hosted account surface.
-- `packages/hosted` handles account identity, billing, entitlements, and future hosted MCP or managed-service boundaries.
+- **Search** is the default and primary workflow.
+- **People** organizes the archive by person.
+- **Conversations** preserves the original evidence and surrounding context.
+- **Wrapped** is a deterministic annual reflection, not a generated story.
+- `apps/mac` is the product, `packages/core` is its canonical local behavior
+  layer, and `apps/web` contains this public website and documentation.
 
-## Principles
+OpenFolio is not a relationship-health score, CRM, reminder system, generated
+answer product, hosted message backup, Obsidian product, or MCP product.
 
-- Local SQLite is the source of truth.
-- Raw Messages history stays on-device by default.
-- Account creation is optional for local use.
-- Hosted services are layered on top for identity, billing, hosted AI, managed connectors, and future remote access.
-
-## Next pages
+## Start here
 
 - [Getting Started](/docs/getting-started)
-- [Architecture](/docs/architecture)
 - [Privacy](/docs/privacy)
+- [Architecture](/docs/architecture)
 - [Deployment](/docs/deployment)
