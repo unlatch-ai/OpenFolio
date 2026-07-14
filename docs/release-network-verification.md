@@ -8,9 +8,8 @@ draft release. Use a clean macOS account or VM with other applications closed.
 1. Record the candidate and environment:
 
    ```bash
-   shasum -a 256 OpenFolio-0.4.0-arm64.dmg OpenFolio-0.4.0-arm64.zip
-   sw_vers
-   uname -m
+   shasum -a 256 OpenFolio-0.4.0-arm64.dmg OpenFolio-0.4.0-arm64.zip | tee artifact-sha256.txt
+   { sw_vers; uname -m; } | tee environment.txt
    codesign -dv --verbose=4 /Applications/OpenFolio.app 2>codesign.txt
    xcrun stapler validate /Applications/OpenFolio.app | tee stapler.txt
    spctl --assess --type execute --verbose=2 /Applications/OpenFolio.app 2>&1 | tee gatekeeper.txt
@@ -23,11 +22,16 @@ draft release. Use a clean macOS account or VM with other applications closed.
    sudo tcpdump -i pktap,all -n -U -k NP -w openfolio-v0.4.0.pcap
    ```
 
-3. In a second terminal, capture socket/process summaries and process-tree
-   snapshots:
+3. In a third terminal, capture network summaries:
 
    ```bash
    nettop -n -x -L 0 -p OpenFolio > openfolio-nettop.csv
+   ```
+
+4. In a fourth terminal, capture complete socket state and timestamped process
+   trees so short-lived helpers and silent listeners are preserved:
+
+   ```bash
    while true; do
      date -u
      ps -axo pid=,ppid=,command=
@@ -36,7 +40,7 @@ draft release. Use a clean macOS account or VM with other applications closed.
    done > openfolio-processes-and-sockets.txt
    ```
 
-4. Launch OpenFolio and exercise this matrix:
+5. Launch OpenFolio and exercise this matrix:
 
    - cold start before permissions;
    - Full Disk Access recovery and Messages import;
@@ -47,14 +51,14 @@ draft release. Use a clean macOS account or VM with other applications closed.
    - MCP disabled, enabled after acknowledgment, and each exposed tool;
    - five minutes idle, relaunch, and normal shutdown.
 
-5. Stop the captures with Ctrl-C. Preserve the original PCAP before analysis.
+6. Stop all three captures with Ctrl-C. Preserve the original PCAP before analysis.
 
 ## Analysis
 
 ```bash
 tcpdump -nn -r openfolio-v0.4.0.pcap -k NP > openfolio-packets.txt
 rg -n -i 'OpenFolio|openfolio|chrome_crashpad_handler|ShipIt' openfolio-processes-and-sockets.txt
-shasum -a 256 openfolio-v0.4.0.pcap openfolio-nettop.csv openfolio-processes-and-sockets.txt codesign.txt stapler.txt gatekeeper.txt > evidence-sha256.txt
+shasum -a 256 openfolio-v0.4.0.pcap openfolio-nettop.csv openfolio-processes-and-sockets.txt artifact-sha256.txt environment.txt codesign.txt stapler.txt gatekeeper.txt > evidence-sha256.txt
 ```
 
 Use the timestamped `ps` snapshots to identify every OpenFolio root PID and
