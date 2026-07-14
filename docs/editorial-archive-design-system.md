@@ -1,6 +1,6 @@
 # Editorial Archive Design System
 
-Status: proposed, review-ready; not yet approved
+Status: approved direction July 2026; cobalt accent remains provisional pending visual review
 Depends on: [product-contract.md](./product-contract.md)
 
 ## Direction

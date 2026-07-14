@@ -1,6 +1,6 @@
 # OpenFolio Product Contract
 
-Status: proposed, review-ready; not yet approved
+Status: approved July 2026
 Last updated: July 2026
 
 ## Contract

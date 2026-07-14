@@ -1,6 +1,6 @@
 # Editorial Archive Implementation Plan
 
-Status: proposed, review-ready; implementation begins after Kevin's contract/design review
+Status: approved July 2026; implementation in progress
 Inputs: [product-contract.md](./product-contract.md), [editorial-archive-design-system.md](./editorial-archive-design-system.md)
 
 ## Ground rules
@@ -316,12 +316,9 @@ Before any public zero-network claim or release:
 
 No slice may edit another slice's exclusive files without handing ownership back to the integrator. Cross-slice needs should be expressed as a typed contract or a small follow-up owned by the original slice.
 
-## Kevin review decisions
+## Review decisions
 
-Two decisions block renderer work and any later screen/image generation:
-
-1. Approve or revise the concrete Search interaction: full-page Search as default, `⌘K` as focus/navigation rather than a modal, Type/Person/Conversation/Date filters, and a source-context evidence preview whose primary action opens the original conversation.
-2. Approve or revise the concrete visual lock: Instrument Serif + Geist Sans/Mono, cobalt `#4E5CFF`, fixed graphite shell + warm paper canvas, and whether the proposed full dark-canvas appearance ships in the first redesign.
+Kevin approved the full-page Search interaction, `⌘K` focus/navigation behavior, filters, evidence preview, Instrument Serif + Geist roles, and the graphite-shell/warm-paper direction in July 2026. Cobalt `#4E5CFF` is an implementation placeholder until the first integrated visual review; it remains one semantic token so changing it does not fork the system. The first redesign ships the warm-paper content canvas and defers full dark-canvas mode.
 
 The strict zero-network boundary is not a renderer-style choice: no socket activity and no HTTP(S) browser handoff are release requirements. One later, non-blocking product decision remains: whether Wrapped should eventually export share cards. Initial Wrapped stays view-only.
 
