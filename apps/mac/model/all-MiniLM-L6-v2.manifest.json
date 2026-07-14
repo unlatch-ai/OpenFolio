@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "modelId": "Xenova/all-MiniLM-L6-v2",
+  "revision": "751bff37182d3f1213fa05d7196b954e230abad9",
+  "dtype": "q8",
+  "embeddingDimension": 384,
+  "license": {
+    "spdx": "Apache-2.0",
+    "sourceRepository": "sentence-transformers/all-MiniLM-L6-v2",
+    "sourceRevision": "826711e54e001c83835913827a843d8dd0a1def9",
+    "sourcePath": "LICENSE"
+  },
+  "files": [
+    {
+      "path": "config.json",
+      "size": 650,
+      "sha256": "7135149f7cffa1a573466c6e4d8423ed73b62fd2332c575bf738a0d033f70df7",
+      "sourceRepository": "Xenova/all-MiniLM-L6-v2",
+      "sourceRevision": "751bff37182d3f1213fa05d7196b954e230abad9",
+      "sourcePath": "config.json"
+    },
+    {
+      "path": "special_tokens_map.json",
+      "size": 125,
+      "sha256": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+      "sourceRepository": "Xenova/all-MiniLM-L6-v2",
+      "sourceRevision": "751bff37182d3f1213fa05d7196b954e230abad9",
+      "sourcePath": "special_tokens_map.json"
+    },
+    {
+      "path": "tokenizer.json",
+      "size": 711661,
+      "sha256": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
+      "sourceRepository": "Xenova/all-MiniLM-L6-v2",
+      "sourceRevision": "751bff37182d3f1213fa05d7196b954e230abad9",
+      "sourcePath": "tokenizer.json"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "size": 366,
+      "sha256": "9261e7d79b44c8195c1cada2b453e55b00aeb81e907a6664974b4d7776172ab3",
+      "sourceRepository": "Xenova/all-MiniLM-L6-v2",
+      "sourceRevision": "751bff37182d3f1213fa05d7196b954e230abad9",
+      "sourcePath": "tokenizer_config.json"
+    },
+    {
+      "path": "vocab.txt",
+      "size": 231508,
+      "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
+      "sourceRepository": "Xenova/all-MiniLM-L6-v2",
+      "sourceRevision": "751bff37182d3f1213fa05d7196b954e230abad9",
+      "sourcePath": "vocab.txt"
+    },
+    {
+      "path": "onnx/model_quantized.onnx",
+      "size": 22972370,
+      "sha256": "afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1",
+      "sourceRepository": "Xenova/all-MiniLM-L6-v2",
+      "sourceRevision": "751bff37182d3f1213fa05d7196b954e230abad9",
+      "sourcePath": "onnx/model_quantized.onnx"
+    },
+    {
+      "path": "MODEL_CARD.md",
+      "size": 1767,
+      "sha256": "63ea99bf681a2e9eda4f6a537d5ed8fda95d1677111656da37e9cfd080c3af02",
+      "sourceRepository": "Xenova/all-MiniLM-L6-v2",
+      "sourceRevision": "751bff37182d3f1213fa05d7196b954e230abad9",
+      "sourcePath": "README.md"
+    },
+    {
+      "path": "LICENSE.txt",
+      "size": 10318,
+      "sha256": "1e66d43b04a3f2428303ad3316d1fbb996991541192892b22d21f0065a093b2b",
+      "sourceRepository": "sentence-transformers/all-MiniLM-L6-v2",
+      "sourceRevision": "826711e54e001c83835913827a843d8dd0a1def9",
+      "sourcePath": "LICENSE"
+    }
+  ]
+}

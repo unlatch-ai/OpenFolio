@@ -45,7 +45,7 @@ describe("core Network Lock", () => {
     await expect(engine.getStatus()).resolves.toMatchObject({
       ready: false,
       modelDownloaded: false,
-      error: expect.stringMatching(/unavailable/i),
+      error: expect.stringMatching(/missing|unavailable/i),
     });
     expect(fetchSpy).not.toHaveBeenCalled();
   });

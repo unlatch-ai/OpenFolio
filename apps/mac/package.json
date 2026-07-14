@@ -11,9 +11,12 @@
     "build:permission-guide": "if [ \"$(uname)\" = Darwin ]; then bash native/permission-guide/build.sh; else echo 'Skipping permission-guide (not macOS)'; fi",
     "build:native": "pnpm run build:contacts-helper && pnpm run build:permission-guide",
     "predev": "pnpm run build:native",
-    "prebuild": "pnpm run build:native",
-    "predist:mac": "pnpm run build:native",
-    "prerelease:mac": "pnpm run build:native",
+    "model:vendor": "node scripts/model-assets.mjs vendor",
+    "model:verify": "node scripts/model-assets.mjs verify",
+    "artifact:verify": "node scripts/verify-model-artifact.mjs",
+    "prebuild": "pnpm run build:native && pnpm run model:vendor",
+    "predist:mac": "pnpm run build:native && pnpm run model:verify",
+    "prerelease:mac": "pnpm run build:native && pnpm run model:verify",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -33,7 +36,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
-    "electron-updater": "^6.8.3",
     "framer-motion": "^12.38.0",
     "lucide-react": "^0.542.0",
     "next-themes": "^0.4.6",
@@ -52,6 +54,7 @@
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^39.8.1",
     "electron-builder": "26.8.1",
+    "electron-updater": "^6.8.3",
     "electron-vite": "^4.0.1",
     "tailwindcss": "^4.2.2",
     "vite": "^7.3.5"
@@ -59,6 +62,7 @@
   "build": {
     "appId": "ai.openfolio.mac",
     "productName": "OpenFolio",
+    "afterPack": "scripts/after-pack.mjs",
     "icon": "build/icon.icns",
     "files": [
       "out/**",
@@ -72,6 +76,13 @@
       {
         "from": "bin/OpenFolio Setup.app",
         "to": "bin/OpenFolio Setup.app"
+      },
+      {
+        "from": ".model-cache/models/Xenova/all-MiniLM-L6-v2/751bff37182d3f1213fa05d7196b954e230abad9",
+        "to": "models/Xenova/all-MiniLM-L6-v2/751bff37182d3f1213fa05d7196b954e230abad9",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "artifactName": "${productName}-${version}-${arch}.${ext}",
@@ -82,7 +93,6 @@
         "repo": "OpenFolio"
       }
     ],
-    "electronUpdaterCompatibility": ">=2.16",
     "mac": {
       "category": "public.app-category.productivity",
       "hardenedRuntime": true,
