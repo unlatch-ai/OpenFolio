@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const macDir = path.resolve(scriptDir, "..");
+const appPackage = JSON.parse(fs.readFileSync(path.join(macDir, "package.json"), "utf8"));
+const expectedVersion = appPackage.version;
 const approvedManifestPath = path.join(macDir, "model", "all-MiniLM-L6-v2.manifest.json");
 const approvedManifestText = fs.readFileSync(approvedManifestPath, "utf8");
 const manifest = JSON.parse(approvedManifestText);
@@ -58,15 +60,34 @@ if (weightCopies.length !== 1) {
   errors.push(`expected exactly one quantized model copy, found ${weightCopies.length}`);
 }
 
-const targetArchitecture = path.resolve(appPath).includes("arm64") ? "arm64" : "x64";
+const appExecutable = path.join(path.resolve(appPath), "Contents", "MacOS", "OpenFolio");
+let targetArchitectures = [];
+if (process.platform === "darwin") {
+  try {
+    targetArchitectures = execFileSync("lipo", ["-archs", appExecutable], { encoding: "utf8" })
+      .trim()
+      .split(/\s+/)
+      .map((architecture) => architecture === "x86_64" ? "x64" : architecture);
+  } catch (error) {
+    errors.push(`could not inspect app architecture: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+if (targetArchitectures.length === 0) {
+  targetArchitectures = fs.existsSync(path.join(resourcesDir, "app.asar.unpacked", "node_modules", "onnxruntime-node", "bin", "napi-v6", "darwin", "arm64"))
+    ? ["arm64"]
+    : ["x64"];
+}
 const onnxBinaryRoot = path.join(resourcesDir, "app.asar.unpacked", "node_modules", "onnxruntime-node", "bin", "napi-v6");
 const onnxBinaries = walk(onnxBinaryRoot);
 if (onnxBinaries.length === 0) {
-  errors.push(`ONNX Runtime binaries are missing for darwin/${targetArchitecture}`);
+  errors.push(`ONNX Runtime binaries are missing for darwin/${targetArchitectures.join(",")}`);
 } else {
   for (const binary of onnxBinaries) {
     const relative = path.relative(onnxBinaryRoot, binary);
-    if (!relative.startsWith(path.join("darwin", targetArchitecture, path.sep))) {
+    const matchesTarget = targetArchitectures.some((architecture) =>
+      relative.startsWith(path.join("darwin", architecture, path.sep)),
+    );
+    if (!matchesTarget) {
       errors.push(`unexpected cross-platform ONNX Runtime binary: ${relative}`);
     }
   }
@@ -79,20 +100,20 @@ for (const updaterFile of ["app-update.yml", "latest-mac.yml", "latest.yml"]) {
 }
 
 const appAsar = path.join(resourcesDir, "app.asar");
+const forbiddenCapabilityStrings = [
+  "https://huggingface.co/Xenova/all-MiniLM-L6-v2",
+  "Xenova/all-MiniLM-L6-v2/resolve/main",
+  "cdn-lfs.huggingface.co",
+  "node_modules/openai/",
+  "node_modules/electron-updater/",
+  "people.googleapis.com",
+  "gmail.googleapis.com",
+  ".convex.cloud",
+];
 if (!fs.existsSync(appAsar)) {
   errors.push("app.asar is missing");
 } else {
   const executableArchive = fs.readFileSync(appAsar);
-  const forbiddenCapabilityStrings = [
-    "https://huggingface.co/Xenova/all-MiniLM-L6-v2",
-    "Xenova/all-MiniLM-L6-v2/resolve/main",
-    "cdn-lfs.huggingface.co",
-    "node_modules/openai/",
-    "node_modules/electron-updater/",
-    "people.googleapis.com",
-    "gmail.googleapis.com",
-    ".convex.cloud",
-  ];
   for (const forbidden of forbiddenCapabilityStrings) {
     if (executableArchive.includes(Buffer.from(forbidden))) {
       errors.push(`forbidden network capability string in app.asar: ${forbidden}`);
@@ -100,7 +121,31 @@ if (!fs.existsSync(appAsar)) {
   }
 }
 
+for (const file of walk(path.resolve(appPath)).filter((candidate) => fs.statSync(candidate).isFile())) {
+  const contents = fs.readFileSync(file);
+  for (const forbidden of forbiddenCapabilityStrings) {
+    if (contents.includes(Buffer.from(forbidden))) {
+      const relative = path.relative(path.resolve(appPath), file);
+      if (file !== appAsar) errors.push(`forbidden network capability string in ${relative}: ${forbidden}`);
+    }
+  }
+}
+
 if (process.platform === "darwin") {
+  const infoPlist = path.join(path.resolve(appPath), "Contents", "Info.plist");
+  try {
+    const embeddedVersion = execFileSync(
+      "/usr/libexec/PlistBuddy",
+      ["-c", "Print :CFBundleShortVersionString", infoPlist],
+      { encoding: "utf8" },
+    ).trim();
+    if (embeddedVersion !== expectedVersion) {
+      errors.push(`app version mismatch: package expects ${expectedVersion}, artifact contains ${embeddedVersion}`);
+    }
+  } catch (error) {
+    errors.push(`could not inspect app version: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
   try {
     const entitlements = execFileSync("codesign", ["--display", "--entitlements", ":-", path.resolve(appPath)], {
       encoding: "utf8",
@@ -112,6 +157,27 @@ if (process.platform === "darwin") {
   } catch (error) {
     errors.push(`could not inspect app entitlements: ${error instanceof Error ? error.message : String(error)}`);
   }
+
+  const signedExecutables = walk(path.resolve(appPath)).filter((file) => {
+    const stat = fs.statSync(file);
+    return stat.isFile() && (stat.mode & 0o111) !== 0;
+  });
+  for (const executable of signedExecutables) {
+    try {
+      const entitlements = execFileSync("codesign", ["--display", "--entitlements", ":-", executable], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      for (const entitlement of ["com.apple.security.network.client", "com.apple.security.network.server"]) {
+        if (entitlements.includes(entitlement)) {
+          errors.push(`forbidden network entitlement found in ${path.relative(path.resolve(appPath), executable)}: ${entitlement}`);
+        }
+      }
+    } catch {
+      // Not every executable resource is independently signed. The workflow's
+      // deep codesign verification checks signature integrity for the closure.
+    }
+  }
 }
 
 if (errors.length > 0) {
@@ -120,5 +186,5 @@ if (errors.length > 0) {
 
 const modelBytes = manifest.files.reduce((total, file) => total + file.size, 0);
 process.stdout.write(
-  `Verified ${path.resolve(appPath)}: ${manifest.files.length} model/license files, ${modelBytes} bytes, one weight copy, no updater metadata, forbidden network SDK, host, or entitlement\n`,
+  `Verified ${path.resolve(appPath)} v${expectedVersion}: ${manifest.files.length} model/license files, ${modelBytes} bytes, one weight copy, no updater metadata, forbidden network SDK, host, or entitlement\n`,
 );

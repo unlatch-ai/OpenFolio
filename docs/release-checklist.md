@@ -13,7 +13,8 @@ OpenFolio currently ships the macOS app from `apps/mac` through GitHub Releases.
 - Run `codesign --verify --deep --strict --verbose=1 apps/mac/dist/mac-arm64/OpenFolio.app`.
 - Complete the first-run QA pass in `docs/qa-checklist.md`.
 - Run `pnpm bench:search` after `pnpm build` when search or indexing code changes.
-- Inspect the packaged artifact with `pnpm --filter @openfolio/mac verify:artifact`.
+- Inspect the packaged artifact with
+  `pnpm --filter @openfolio/mac artifact:verify -- /absolute/path/to/OpenFolio.app`.
 - Confirm the bundled model manifest, hashes, license files, and offline smoke
   test pass without a network fallback.
 - Capture PID-attributed network traffic for the signed/notarized app and every
@@ -29,13 +30,16 @@ OpenFolio currently ships the macOS app from `apps/mac` through GitHub Releases.
 - Root `package.json` is the monorepo version and is not used by the macOS app.
 - Do not tag a release until the packaged app version and release tag match.
 
-## Current signing state
+## Signing and publication
 
-- Local `dist:mac` signing works with the configured Developer ID certificate.
-- Notarization is not configured yet; electron-builder reports that notarize
-  options cannot be generated.
-- Public release work should either configure notarization credentials or state
-  clearly that the build is signed but not notarized.
+- The release workflow requires the Developer ID certificate and Apple API key
+  secrets, builds and notarizes the app, then validates the signature, staple,
+  and Gatekeeper assessment.
+- A tag creates or updates a GitHub draft release only. Do not publish that
+  draft until the exact uploaded artifact passes the PID-attributed zero-traffic
+  matrix and its evidence is archived with the artifact hash.
+- Local ad-hoc builds are useful for packaging checks but are not release
+  candidates and do not satisfy signing, notarization, or traffic-proof gates.
 
 ## Updating an installation
 

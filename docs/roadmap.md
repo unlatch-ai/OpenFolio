@@ -8,7 +8,7 @@ The current product direction is defined by:
 
 ## Current milestone: Evidence-first search
 
-Status: implemented on the current development branch; release verification pending.
+Status: implemented in `main`; release verification pending.
 
 - Make Search the default page and primary navigation item.
 - Complete the loop from remembered description to ranked local result to the
@@ -24,7 +24,7 @@ Status: implemented on the current development branch; release verification pend
 
 ## Editorial Archive renderer
 
-Status: implemented on the current development branch; visual review pending.
+Status: implemented in `main`; release verification pending.
 
 - Apply the graphite shell, warm paper canvas, oxidized-teal interaction system, local
   serif/sans/mono fonts, restrained rules, and message-strata motif.
@@ -35,7 +35,7 @@ Status: implemented on the current development branch; visual review pending.
 
 ## Public surface alignment
 
-Status: implemented on the current development branch; publish with the verified Mac release.
+Status: implemented in `main`; publish with the verified Mac release.
 
 - Lead the website and README with `OpenFolio remembers who told you what.`
 - Demonstrate query → evidence → original conversation.

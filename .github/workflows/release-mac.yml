@@ -56,6 +56,9 @@ jobs:
           test -n "$CSC_KEY_PASSWORD"
           test -n "$APPLE_API_KEY_ID"
           test -n "$APPLE_API_ISSUER"
+          test -n "$APPLE_API_KEY_CONTENT"
+        env:
+          APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY }}
 
       - name: Write Apple API key to file
         run: |
@@ -71,7 +74,7 @@ jobs:
 
       - name: Verify packaged application
         run: |
-          APP_PATH="$(find apps/mac/dist -type d -name OpenFolio.app -print -quit)"
+          APP_PATH="$(find "$GITHUB_WORKSPACE/apps/mac/dist" -type d -name OpenFolio.app -print -quit)"
           test -n "$APP_PATH"
           pnpm --filter @openfolio/mac artifact:verify -- "$APP_PATH"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"

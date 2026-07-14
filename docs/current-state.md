@@ -8,7 +8,7 @@ Its installed app is designed to work without network access.
 
 ## Working product surface
 
-- Search is the default route. It blends local full-text and semantic retrieval
+- Search is the default route in `main`. It blends local full-text and semantic retrieval
   and supports person, conversation, date, and result-type filters.
 - Every result exposes its match reason, surrounding messages, and an exact
   handoff to the cited message in Conversations.
