@@ -46,6 +46,7 @@
       "@babel/core@<=7.29.0": ">=7.29.6",
       "ansi-to-react>linkify-it": "5.0.1",
       "uuid": ">=14.0.0",
+      "esbuild": ">=0.28.1",
       "@develar/schema-utils>ajv": "6.14.0",
       "@develar/schema-utils>ajv-keywords": "3.5.2"
     }

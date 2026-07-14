@@ -35,11 +35,14 @@ export function cosineSimilarity(left: number[], right: number[]) {
 }
 
 export function normalizeQueryForFts(query: string) {
-  return query
+  const tokens = query
     .split(/\s+/)
-    .map((token) => token.trim().replace(/["']/g, ""))
+    .map((token) => token.trim().replace(/["']/g, "").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))
     .filter(Boolean)
-    .map((token) => `${token}*`)
+  const stopwords = new Set(["a", "an", "and", "about", "for", "from", "in", "is", "it", "me", "of", "on", "that", "the", "to", "was", "what", "who", "with", "you"]);
+  const meaningful = tokens.filter((token) => !stopwords.has(token.toLowerCase()));
+  return (meaningful.length > 0 ? meaningful : tokens)
+    .map((token) => `"${token}"*`)
     .join(" OR ");
 }
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Archive, ArrowRight, CalendarDays, MessageSquare, Search, User, X } from "lucide-react";
 import type { MessageDetail, Person, SearchResult } from "@openfolio/shared-types";
 import { useAppStore } from "../store";
-import { formatCitationMeta, highlightSnippet, queryEditorialArchive, type EditorialSearchResult } from "../search-results";
+import { formatCitationMeta, formatMatchReason, highlightSnippet, queryEditorialArchive } from "../search-results";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 
@@ -18,15 +18,15 @@ function ResultIcon({ kind }: { kind: SearchResult["kind"] }) {
   return <MessageSquare aria-hidden="true" />;
 }
 
-function EvidencePreview({ result, onOpen, onClose }: { result: EditorialSearchResult; onOpen: () => void; onClose: () => void }) {
+function EvidencePreview({ result, onOpen, onClose }: { result: SearchResult; onOpen: () => void; onClose: () => void }) {
   const [context, setContext] = useState<MessageDetail[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!result.threadId || !result.messageId) { setContext([]); return; }
     setLoading(true);
-    window.openfolio.threads.getMessages({ threadId: result.threadId, limit: 7, aroundMessageId: result.messageId })
-      .then(setContext)
+    window.openfolio.search.getCitationContext({ threadId: result.threadId, messageId: result.messageId, before: 3, after: 3 })
+      .then((citation) => setContext(citation.messages))
       .catch(() => setContext([]))
       .finally(() => setLoading(false));
   }, [result.threadId, result.messageId]);
@@ -40,7 +40,7 @@ function EvidencePreview({ result, onOpen, onClose }: { result: EditorialSearchR
         {!loading && context.map((message) => (
           <div key={message.id} className={`evidence-message ${message.id === result.messageId ? "source" : ""}`} aria-current={message.id === result.messageId ? "true" : undefined}>
             {message.id === result.messageId && <span className="source-label">Source match</span>}
-            <span>{message.isFromMe ? "You" : result.title}</span>
+            <span>{message.isFromMe ? "You" : result.senderLabel || result.citation.personLabel || result.title}</span>
             <p>{message.body || (message.hasAttachments ? "Attachment" : "Message without text")}</p>
             <time dateTime={new Date(message.occurredAt).toISOString()}>{new Date(message.occurredAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</time>
           </div>
@@ -56,7 +56,7 @@ export function SearchView() {
   const [people, setPeople] = useState<Person[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef(0);
-  const selected = search.results.find((result) => result.id === search.selectedResultId) as EditorialSearchResult | undefined;
+  const selected = search.results.find((result) => result.id === search.selectedResultId);
 
   useEffect(() => { window.openfolio.people.list({ limit: 100 }).then(setPeople).catch(() => setPeople([])); }, []);
   useEffect(() => { inputRef.current?.focus(); inputRef.current?.select(); }, [search.focusRequest]);
@@ -150,11 +150,10 @@ export function SearchView() {
             {search.error && <div className="archive-error" role="alert"><p>{search.error}</p><Button variant="secondary" onClick={() => void runSearch(search.query)}>Try again</Button></div>}
             {!search.error && !search.searching && search.results.length === 0 && <div className="archive-empty"><MessageSquare /><h2>No messages matched that memory.</h2><p>Try exact words, a name, or remove one of the filters.</p>{applied.length > 0 && <Button variant="secondary" onClick={clearSearchFilters}>Remove filters</Button>}</div>}
             <div className={`search-results ${search.searching ? "is-searching" : ""}`} aria-busy={search.searching}>
-              {search.results.map((raw) => {
-                const result = raw as EditorialSearchResult;
+              {search.results.map((result) => {
                 return <button key={result.id} className={`search-result ${selected?.id === result.id ? "selected" : ""}`} onClick={() => selectSearchResult(result.id)} aria-pressed={selected?.id === result.id}>
                   <ResultIcon kind={result.kind} />
-                  <span className="search-result-copy"><span className="search-result-heading"><strong>{result.title}</strong><time dateTime={result.occurredAt ? new Date(result.occurredAt).toISOString() : undefined}>{result.occurredAt ? new Date(result.occurredAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : result.kind === "thread" ? "Conversation" : "Person"}</time></span><span className="search-result-source">{result.sourceLabel || (result.kind === "message" ? "Message" : result.kind === "thread" ? "Conversation" : "Person")}</span><span className="search-result-snippet">{highlightSnippet(result.snippet, search.query).map((part, index) => part.match ? <mark key={index}>{part.text}</mark> : part.text)}</span><span className="match-reason">{result.matchReason}</span></span>
+                  <span className="search-result-copy"><span className="search-result-heading"><strong>{result.title}</strong><time dateTime={result.occurredAt ? new Date(result.occurredAt).toISOString() : undefined}>{result.occurredAt ? new Date(result.occurredAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : result.kind === "thread" ? "Conversation" : "Person"}</time></span><span className="search-result-source">{result.sourceLabel || (result.kind === "message" ? "Message" : result.kind === "thread" ? "Conversation" : "Person")}</span><span className="search-result-snippet">{highlightSnippet(result.snippet, search.query).map((part, index) => part.match ? <mark key={index}>{part.text}</mark> : part.text)}</span><span className="match-reason">{formatMatchReason(result.matchReason)}</span></span>
                   <ArrowRight aria-hidden="true" />
                 </button>;
               })}

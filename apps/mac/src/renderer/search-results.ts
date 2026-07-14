@@ -1,10 +1,5 @@
-import type { SearchResult, SearchScaleStatus } from "@openfolio/shared-types";
+import type { SearchMatchReason, SearchResult, SearchResultType, SearchScaleStatus } from "@openfolio/shared-types";
 import type { SearchFilters } from "./store";
-
-export interface EditorialSearchResult extends SearchResult {
-  matchReason: "Exact words" | "Related wording" | "Person" | "Conversation title";
-  direction: "You" | null;
-}
 
 export interface EditorialSearchRequest {
   text: string;
@@ -20,30 +15,29 @@ function dateBounds(date: SearchFilters["date"]) {
 }
 
 export async function queryEditorialArchive(request: EditorialSearchRequest): Promise<EditorialSearchResult[]> {
-  // Renderer adapter: the current bridge accepts text/limit only. New filter fields stay
-  // isolated here until the backend contract lands; filtering remains deterministic locally.
-  const rows = await window.openfolio.search.query({ text: request.text, limit: Math.max(request.limit ?? 40, 100) });
   const bounds = dateBounds(request.filters.date);
-  const terms = request.text.toLowerCase().split(/\s+/).filter((term) => term.length > 2);
-
-  return rows.filter((row) => {
-    if (request.filters.type === "messages" && row.kind !== "message") return false;
-    if (request.filters.type === "people" && row.kind !== "person") return false;
-    if (request.filters.type === "conversations" && row.kind !== "thread") return false;
-    if (request.filters.type === "all" && (row.kind === "note" || row.kind === "reminder")) return false;
-    if (request.filters.personId && row.personId !== request.filters.personId) return false;
-    if (request.filters.threadId && row.threadId !== request.filters.threadId && row.entityId !== request.filters.threadId) return false;
-    if (bounds && (!row.occurredAt || row.occurredAt < bounds.start || row.occurredAt >= bounds.end)) return false;
-    return true;
-  }).slice(0, request.limit ?? 40).map((row) => {
-    const haystack = `${row.title} ${row.snippet}`.toLowerCase();
-    const exact = terms.some((term) => haystack.includes(term));
-    return {
-      ...row,
-      matchReason: row.kind === "person" ? "Person" : row.kind === "thread" ? "Conversation title" : exact ? "Exact words" : "Related wording",
-      direction: null,
-    };
+  const resultTypes: SearchResultType[] | undefined = request.filters.type === "all"
+    ? undefined
+    : [request.filters.type === "messages" ? "message" : request.filters.type === "people" ? "person" : "conversation"];
+  const response = await window.openfolio.search.queryArchive({
+    text: request.text,
+    limit: request.limit ?? 40,
+    resultTypes,
+    personIds: request.filters.personId ? [request.filters.personId] : undefined,
+    threadId: request.filters.threadId,
+    dateRange: bounds ? { startAt: bounds.start, endAt: bounds.end } : undefined,
   });
+  if (response.state === "error") throw new Error(response.error?.message || "Local search failed");
+  return response.results;
+}
+
+export type EditorialSearchResult = SearchResult;
+
+export function formatMatchReason(reason: SearchMatchReason) {
+  if (reason === "exact_words") return "Exact words";
+  if (reason === "related_wording") return "Related wording";
+  if (reason === "conversation_title") return "Conversation title";
+  return "Person";
 }
 
 export function groupSearchResults(results: SearchResult[]) {
