@@ -1,46 +1,54 @@
 # OpenFolio Roadmap
 
-## Sprint 1: Reliable First Run + Search Confidence
+The current product direction is defined by:
 
-Status: complete.
+- [Product contract](./product-contract.md)
+- [Editorial Archive design system](./editorial-archive-design-system.md)
+- [Implementation plan](./editorial-archive-implementation.md)
 
-- Guided local setup for Messages permission, import, Contacts sync, and
-  semantic index status.
-- Background embedding queue with visible progress and retry entry points.
-- Search/Ask palette polish: clearer modes, grouped results, local/BYOK status,
-  and citation navigation.
-- People profile actions: add notes, add reminders, search within a person, and
-  jump from a person message back to its thread.
-- Security pass on external URL opening and MCP status language.
-- Replace placeholder tests with behavior tests for onboarding, URL safety, MCP
-  semantics, and embedding accounting.
+## Next milestone: Evidence-first search
 
-## Sprint 2: Scale and Correctness
+Status: proposed and review-ready, not implemented.
 
-Status: complete.
+- Make Search the default page and primary navigation item.
+- Complete the loop from remembered description to ranked local result to the
+  exact cited message in Conversations.
+- Add person, conversation, result-type, and date filters to the local search
+  contract.
+- Preserve exact search while the local semantic index is incomplete or
+  unavailable.
+- Replace generated-answer/BYOK UI with retrieval and evidence.
+- Enforce a genuinely zero-network Mac runtime: bundled local model, no hosted
+  calls, no runtime model fetch, no automatic update check/download, and no
+  HTTP(S) handoff to another app.
 
-- Benchmark local vector search on large imported histories.
-- Choose and integrate a local vector index if in-process vector scans become a
-  user-visible bottleneck.
-- Add import cancellation/retry and clearer failure recovery.
-- Add deeper renderer interaction tests for setup, Settings, Search/Ask, and
-  People workflows.
-- Address GitHub dependency vulnerability reports.
-- Document release hygiene, version checks, and notarization status.
+## Editorial Archive renderer
 
-## Sprint 3: Local Relationship Workspace
+Status: proposed and review-ready, not implemented.
 
-Status: in progress.
+- Apply the graphite shell, warm paper canvas, cobalt interaction system, local
+  serif/sans/mono fonts, restrained rules, and message-strata motif.
+- Rebuild onboarding around first successful search.
+- Present People as dossiers and Conversations as the evidence archive.
+- Rebuild Wrapped as a deterministic editorial annual artifact.
+- Reorganize Settings around privacy truth and local control.
 
-- Richer People research view with editable contact aliases, pinned notes,
-  reminder completion, and stronger relationship summaries.
-- Better thread navigation, pagination, and attachment affordances.
-- Improve Ask answers with stronger citation formatting and source filtering.
+## Public surface alignment
 
-## Deferred Commercial Layers
+Status: pending verified Mac behavior.
 
-- Stripe billing and subscriptions.
-- Hosted AI relay, usage quotas, and paid plan enforcement.
-- Google Contacts and Gmail connector UI.
-- Hosted/remote MCP.
-- Cloud graph sync or raw Messages backup.
+- Lead the website and README with `OpenFolio remembers who told you what.`
+- Demonstrate query → evidence → original conversation.
+- State the website/download network boundary separately from installed-app
+  behavior.
+- Keep Obsidian and MCP in later-source/interface documentation, not the initial
+  pitch.
+
+## Later, explicitly out of the initial milestone
+
+- Obsidian as an additional local source.
+- MCP as an additional local interface.
+- Wrapped share-card exports, pending a product decision.
+- Hosted services, accounts, billing, cloud sync, and managed connectors.
+- Generated answers, if ever reintroduced, as a separately consented and
+  source-cited product with an explicit network boundary.
