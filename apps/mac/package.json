@@ -1,6 +1,6 @@
 {
   "name": "@openfolio/mac",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Private, evidence-first iMessage recall for macOS.",
   "author": "Kevin Fang",
   "private": true,

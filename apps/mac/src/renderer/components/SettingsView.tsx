@@ -398,7 +398,7 @@ export function SettingsView() {
           <SettingsRow
             title="Version"
             mono
-            detail={<p>OpenFolio {updateState?.currentVersion || "0.3.3"}</p>}
+            detail={<p>OpenFolio {updateState?.currentVersion || "current version"}</p>}
           />
           <SettingsRow
             title="Manual updates"
