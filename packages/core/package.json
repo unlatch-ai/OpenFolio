@@ -16,9 +16,9 @@
   },
   "dependencies": {
     "@openfolio/shared-types": "workspace:*",
-    "openai": "^6.34.0"
+    "openai": "^6.46.0"
   },
   "devDependencies": {
-    "@huggingface/transformers": "^4.0.1"
+    "@huggingface/transformers": "^4.2.0"
   }
 }
