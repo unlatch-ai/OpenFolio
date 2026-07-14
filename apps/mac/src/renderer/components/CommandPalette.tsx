@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
 import { Search, MessageSquare, User, FileText, Bell, Sparkles } from "lucide-react";
 import { useAppStore } from "../store";
-import type { AiSettingsStatus, AskResponse, AskRunInput, SearchResult } from "@openfolio/shared-types";
+import type { AskResponse, AskRunInput, SearchResult } from "@openfolio/shared-types";
 import { formatCitationMeta, groupSearchResults } from "../search-results";
 
 const ICON_MAP: Record<string, typeof MessageSquare> = {
@@ -27,7 +27,6 @@ export function CommandPalette() {
   const [mode, setMode] = useState<"search" | "ask">("search");
   const [asking, setAsking] = useState(false);
   const [answer, setAnswer] = useState<AskResponse | null>(null);
-  const [aiSettings, setAiSettings] = useState<AiSettingsStatus | null>(null);
   const [sourceScope, setSourceScope] = useState<AskRunInput["sourceScope"]>("all");
 
   // Cmd+K global shortcut
@@ -41,11 +40,6 @@ export function CommandPalette() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    void window.openfolio.ai.getSettings().then(setAiSettings).catch(() => setAiSettings(null));
-  }, [open]);
 
   const runSearch = useCallback(
     (text: string) => {
@@ -98,7 +92,7 @@ export function CommandPalette() {
       setAnswer(response);
       setCommandResults(response.citations, false);
     } catch {
-      setAnswer({ answer: "Ask failed. Check your OpenAI key in Settings or try a narrower query.", citations: [], provider: "local", sourceScope });
+      setAnswer({ answer: "Local Ask failed. Try a narrower query.", citations: [], provider: "local", sourceScope });
     } finally {
       setAsking(false);
     }
@@ -139,7 +133,7 @@ export function CommandPalette() {
             <button className={mode === "ask" ? "active" : ""} onClick={() => { setMode("ask"); setAnswer(null); setCommandResults([], false); }}>Ask</button>
             {mode === "ask" && (
               <span className="cmd-mode-hint">
-                {aiSettings?.hasOpenAIKey ? "BYOK OpenAI enabled" : "Local citations only until you add an OpenAI key"}
+                Network Lock: local retrieval only
               </span>
             )}
             {mode === "ask" && <button className="cmd-ask-button" onClick={() => void runAsk()} disabled={asking || !query.trim()}>{asking ? "Asking..." : "Ask"}</button>}
@@ -156,7 +150,7 @@ export function CommandPalette() {
           <Command.List className="cmd-list">
             {answer && (
               <div className="cmd-answer">
-                <strong>{answer.provider === "openai" ? "OpenAI answer with local citations" : "Local retrieval summary"}</strong>
+                <strong>Local retrieval summary</strong>
                 <p>{answer.answer}</p>
               </div>
             )}

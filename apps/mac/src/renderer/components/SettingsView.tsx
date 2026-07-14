@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import type { AiSettingsStatus, EmbeddingSyncStatus, LocalDataStatus, McpSetupStatus, SearchScaleStatus } from "@openfolio/shared-types";
-import { Copy, Download, ExternalLink, FolderOpen, KeyRound, RefreshCw } from "lucide-react";
+import type { EmbeddingSyncStatus, LocalDataStatus, McpSetupStatus, SearchScaleStatus } from "@openfolio/shared-types";
+import { Copy, FolderOpen, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Switch } from "./ui/switch";
 import { useTheme } from "@/lib/use-theme";
 import { useAppStore } from "../store";
 import { formatDiagnosticsReport } from "../diagnostics";
 import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
 import { getBackupSummaryLabel, getPathLabel } from "../local-data-labels";
 import { describeSearchScale } from "../search-results";
-import { getAppVersionLabel, getLastCheckedLabel, getReleaseNotesUrl, getUpdateStatusLabel, getUpdateVersionLabel } from "../update-labels";
+import { getAppVersionLabel, getUpdateStatusLabel, getUpdateVersionLabel } from "../update-labels";
 
 export function SettingsView() {
   const { theme, setTheme } = useTheme();
@@ -23,29 +22,20 @@ export function SettingsView() {
     updateState,
     importJob,
     busy,
-    cloudError,
     setMessagesStatus,
     setContactsStatus,
     setContactsSync,
     setImportJob,
-    setUpdateState,
     setBusy,
     setThreads,
   } = useAppStore();
 
-  const [aiSettings, setAiSettings] = useState<AiSettingsStatus | null>(null);
-  const [apiKey, setApiKey] = useState("");
-  const [useOpenAIEmbeddings, setUseOpenAIEmbeddings] = useState(false);
   const [mcpSetup, setMcpSetup] = useState<McpSetupStatus | null>(null);
   const [embeddingSync, setEmbeddingSync] = useState<EmbeddingSyncStatus | null>(null);
   const [searchScale, setSearchScale] = useState<SearchScaleStatus | null>(null);
   const [localData, setLocalData] = useState<LocalDataStatus | null>(null);
 
   useEffect(() => {
-    void window.openfolio.ai.getSettings().then((settings) => {
-      setAiSettings(settings);
-      setUseOpenAIEmbeddings(settings.useOpenAIEmbeddings);
-    });
     void window.openfolio.mcp.getSetup().then(setMcpSetup);
     void window.openfolio.embeddings.getSyncStatus().then(setEmbeddingSync);
     void window.openfolio.search.getScaleStatus().then(setSearchScale);
@@ -124,24 +114,6 @@ export function SettingsView() {
       setBusy(false);
     }
   }, [setBusy, setContactsStatus, setContactsSync]);
-
-  const saveAiKey = useCallback(async () => {
-    if (!apiKey.trim()) {
-      toast.error("Enter an OpenAI API key first.");
-      return;
-    }
-    try {
-      const settings = await window.openfolio.ai.saveOpenAIKey({
-        apiKey: apiKey.trim(),
-        useOpenAIEmbeddings,
-      });
-      setAiSettings(settings);
-      setApiKey("");
-      toast.success("OpenAI key saved locally");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save key.");
-    }
-  }, [apiKey, useOpenAIEmbeddings]);
 
   const importAction = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
 
@@ -247,67 +219,16 @@ export function SettingsView() {
           </div>
         </div>
 
-        {/* Account */}
-        <div className="settings-group">
-          <h3 className="settings-group-title">Account</h3>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Hosted account</p>
-              <p className="settings-row-detail">Deferred. The Mac app currently runs local-first without account sign-in or hosted AI.</p>
-            </div>
-            <div className="settings-row-actions">
-              <Badge variant="secondary">future</Badge>
-            </div>
-          </div>
-          {cloudError && <p className="text-sm text-destructive mt-2">{cloudError}</p>}
-        </div>
-
         {/* AI */}
         <div className="settings-group">
           <h3 className="settings-group-title">AI</h3>
           <div className="settings-row">
             <div className="settings-row-info">
-              <p className="settings-row-label">Bring your own OpenAI key</p>
-              <p className="settings-row-detail">
-                {aiSettings?.hasOpenAIKey
-                  ? "OpenAI answers are enabled. Your key is stored locally on this Mac."
-                  : "Optional. Enables Ask mode without an OpenFolio hosted plan."}
-              </p>
-            </div>
-            <div className="settings-row-actions settings-key-actions">
-              <input
-                className="settings-key-input"
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-                placeholder="sk-..."
-                type="password"
-              />
-              <Button size="xs" onClick={saveAiKey}>
-                <KeyRound size={12} />
-                Save
-              </Button>
-              {aiSettings?.hasOpenAIKey && (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={async () => {
-                    const settings = await window.openfolio.ai.deleteOpenAIKey();
-                    setAiSettings(settings);
-                    toast("OpenAI key removed");
-                  }}
-                >
-                  Remove
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="settings-row">
-            <div className="settings-row-info">
-              <p className="settings-row-label">Use OpenAI embeddings</p>
-              <p className="settings-row-detail">Off keeps semantic indexing local with Transformers.js. On uses your OpenAI key for embeddings.</p>
+              <p className="settings-row-label">Network Lock</p>
+              <p className="settings-row-detail">OpenFolio uses local search and local answers only. Remote AI providers and hosted accounts are disabled.</p>
             </div>
             <div className="settings-row-actions">
-              <Switch checked={useOpenAIEmbeddings} onCheckedChange={setUseOpenAIEmbeddings} />
+              <Badge variant="success">offline</Badge>
             </div>
           </div>
           <div className="settings-row">
@@ -394,55 +315,14 @@ export function SettingsView() {
             <div className="settings-row-info">
               <p className="settings-row-label">App Updates</p>
               <p className="settings-row-detail">
-                {updateState?.message || "Checks GitHub Releases for signed OpenFolio updates."}
+                {updateState?.message || "OpenFolio does not connect to the Internet or check for updates. Download the newest version independently and replace OpenFolio.app."}
               </p>
               <p className="settings-row-detail">{getUpdateVersionLabel(updateState)}</p>
-              <p className="settings-row-detail">{getLastCheckedLabel(updateState)}</p>
             </div>
             <div className="settings-row-actions">
-              <Badge variant={updateState?.status === "downloaded" ? "success" : "secondary"}>
+              <Badge variant="secondary">
                 {getUpdateStatusLabel(updateState)}
               </Badge>
-              <Button
-                variant="secondary"
-                size="xs"
-                onClick={async () => {
-                  try {
-                    const s = await window.openfolio.updates.checkNow();
-                    setUpdateState(s);
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : "Failed to check.");
-                  }
-                }}
-              >
-                Check
-              </Button>
-              <Button
-                variant="secondary"
-                size="xs"
-                onClick={async () => {
-                  try {
-                    await window.openfolio.cloud.openExternal(getReleaseNotesUrl(updateState));
-                  } catch (e) {
-                    toast.error(e instanceof Error ? e.message : "Could not open release notes.");
-                  }
-                }}
-              >
-                <ExternalLink size={12} />
-                Notes
-              </Button>
-              {updateState?.status === "downloaded" && (
-                <Button
-                  size="xs"
-                  onClick={async () => {
-                    try { await window.openfolio.updates.installNow(); }
-                    catch (e) { toast.error(e instanceof Error ? e.message : "Install failed."); }
-                  }}
-                >
-                  <Download size={12} />
-                  Install
-                </Button>
-              )}
             </div>
           </div>
           <div className="settings-row">

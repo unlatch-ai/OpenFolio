@@ -34,7 +34,12 @@ export class OpenFolioCore {
 
   private embeddingSyncLastError: string | null = null;
 
-  constructor(options?: { dbPath?: string; aiConfig?: StoredProviderConfig | null; enableLocalEmbeddings?: boolean }) {
+  constructor(options?: {
+    dbPath?: string;
+    aiConfig?: StoredProviderConfig | null;
+    enableLocalEmbeddings?: boolean;
+    networkPolicy?: "offline";
+  }) {
     this.db = new OpenFolioDatabase(options?.dbPath);
 
     // Local embeddings enabled when explicitly requested, or in the Electron app (no API key).
@@ -42,22 +47,20 @@ export class OpenFolioCore {
     const shouldUseLocal = options?.enableLocalEmbeddings === true;
     this.localEmbeddings = shouldUseLocal ? new LocalEmbeddingEngine() : new LocalEmbeddingEngine({ modelId: "__disabled__" });
 
-    const aiConfig = options?.aiConfig ?? (process.env.OPENAI_API_KEY
-      ? {
-          provider: "openai" as const,
-          apiKey: process.env.OPENAI_API_KEY,
-          model: process.env.OPENAI_MODEL,
-          embeddingModel: process.env.OPENAI_EMBEDDING_MODEL,
-        }
-      : shouldUseLocal ? { provider: "local" as const } : null);
-
-    this.ai = new AIOrchestrator(aiConfig, shouldUseLocal ? this.localEmbeddings : null);
+    // Network Lock is the only supported core runtime policy. Provider and
+    // proxy environment variables are intentionally ignored.
+    void options?.aiConfig;
+    void options?.networkPolicy;
+    this.ai = new AIOrchestrator(
+      shouldUseLocal ? { provider: "local" as const } : null,
+      shouldUseLocal ? this.localEmbeddings : null,
+    );
     this.messages = new MessagesImporter(this.db);
     this.analytics = new AnalyticsEngine(this.db);
   }
 
-  configureAi(aiConfig: StoredProviderConfig | null) {
-    this.ai = new AIOrchestrator(aiConfig, this.localEmbeddings);
+  configureAi(_aiConfig: StoredProviderConfig | null) {
+    this.ai = new AIOrchestrator({ provider: "local" }, this.localEmbeddings);
   }
 
   getMessagesAccessStatus(): MessagesAccessStatus {

@@ -12,8 +12,8 @@ export function createInitialUpdateState(version: string): UpdateState {
   };
 }
 
-export function isAutoUpdateSupported(isPackaged: boolean) {
-  return isPackaged;
+export function isAutoUpdateSupported(_isPackaged: boolean) {
+  return false;
 }
 
 type UpdateErrorLike = {

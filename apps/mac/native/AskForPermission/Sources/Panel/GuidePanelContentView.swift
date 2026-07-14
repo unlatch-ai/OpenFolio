@@ -217,24 +217,11 @@ struct GuidePanelContentView: View {
     }
 
     private var privacyRow: some View {
-        HStack(alignment: .center, spacing: 6) {
-            Text("Needed to read your local iMessage database. Messages stay on this Mac.")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-
-            Button {
-                NSWorkspace.shared.open(URL(string: "https://openfolio.ai/docs/privacy")!)
-            } label: {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityLabel("Open OpenFolio privacy documentation")
-            }
-            .buttonStyle(.plain)
-
-            Spacer(minLength: 0)
-        }
+        Text("Needed to read your local iMessage database. Messages stay on this Mac, and OpenFolio does not make network requests.")
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(arrowOpacity)
     }
 

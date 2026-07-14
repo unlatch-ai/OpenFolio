@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { AskRunInput, OpenFolioBridge } from "@openfolio/shared-types";
 
+function disabledNetworkFeature(message: string): Promise<never> {
+  return Promise.reject(new Error(message));
+}
+
 const bridge: OpenFolioBridge = {
   dashboard: {
     getThreadSummaries: (limit?: number) => ipcRenderer.invoke("openfolio:dashboard:getThreadSummaries", limit),
@@ -28,28 +32,24 @@ const bridge: OpenFolioBridge = {
   ai: {
     run: (input: AskRunInput) => ipcRenderer.invoke("openfolio:ai:run", input),
     getSettings: () => ipcRenderer.invoke("openfolio:ai:getSettings"),
-    saveOpenAIKey: (input) => ipcRenderer.invoke("openfolio:ai:saveOpenAIKey", input),
-    deleteOpenAIKey: () => ipcRenderer.invoke("openfolio:ai:deleteOpenAIKey"),
+    saveOpenAIKey: () => disabledNetworkFeature("Network Lock does not permit remote AI providers."),
+    deleteOpenAIKey: () => disabledNetworkFeature("Network Lock does not store remote AI credentials."),
   },
   cloud: {
-    getConfig: () => ipcRenderer.invoke("openfolio:cloud:getConfig"),
-    beginAuthSession: () => ipcRenderer.invoke("openfolio:cloud:beginAuthSession"),
-    openExternal: (url: string) => ipcRenderer.invoke("openfolio:cloud:openExternal", url),
-    onAuthCallback: (listener: (url: string) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, url: string) => listener(url);
-      ipcRenderer.on("openfolio:cloud:authCallback", handler);
-      return () => ipcRenderer.removeListener("openfolio:cloud:authCallback", handler);
-    },
+    getConfig: () => Promise.resolve({ convexUrl: null, hostedBaseUrl: null, deviceName: "This Mac", platform: "darwin" }),
+    beginAuthSession: () => disabledNetworkFeature("Network Lock does not permit hosted authentication."),
+    openExternal: () => disabledNetworkFeature("Network Lock does not open network URLs."),
+    onAuthCallback: () => () => {},
   },
   connectorCredentials: {
-    listAccounts: () => ipcRenderer.invoke("openfolio:connectors:listAccounts"),
-    saveCredential: (input) => ipcRenderer.invoke("openfolio:connectors:saveCredential", input),
-    deleteCredential: (input) => ipcRenderer.invoke("openfolio:connectors:deleteCredential", input),
+    listAccounts: () => Promise.resolve([]),
+    saveCredential: () => disabledNetworkFeature("Network Lock does not permit hosted connectors."),
+    deleteCredential: () => Promise.resolve({ ok: false }),
   },
   updates: {
     getState: () => ipcRenderer.invoke("openfolio:updates:getState"),
-    checkNow: () => ipcRenderer.invoke("openfolio:updates:checkNow"),
-    installNow: () => ipcRenderer.invoke("openfolio:updates:installNow"),
+    checkNow: () => ipcRenderer.invoke("openfolio:updates:getState"),
+    installNow: () => disabledNetworkFeature("OpenFolio updates are manual under Network Lock."),
     onStateChange: (listener: (state: import("@openfolio/shared-types").UpdateState) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, state: import("@openfolio/shared-types").UpdateState) => listener(state);
       ipcRenderer.on("openfolio:updates:state", handler);

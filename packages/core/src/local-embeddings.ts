@@ -29,7 +29,8 @@ export interface LocalEmbeddingStatus {
  * Local embedding engine using Transformers.js (ONNX Runtime).
  *
  * Runs all-MiniLM-L6-v2 (~23MB) in-process — no external server,
- * no API keys, no network after first model download.
+ * no API keys and no runtime network access. Model files must already exist in
+ * the configured local cache.
  */
 export class LocalEmbeddingEngine {
   private pipeline: Pipeline | null = null;
@@ -45,13 +46,26 @@ export class LocalEmbeddingEngine {
     fs.mkdirSync(this.modelsDir, { recursive: true });
   }
 
+  private getModelCachePath() {
+    return path.join(this.modelsDir, "models", this.modelId.replace("/", "--"));
+  }
+
+  private hasLocalModel() {
+    return fs.existsSync(this.getModelCachePath());
+  }
+
   /**
-   * Lazy-init the pipeline. Downloads the model on first call (~23MB).
-   * Subsequent calls reuse the cached pipeline.
+   * Lazy-init the pipeline from local model files. Missing files fail closed
+   * and leave full-text search available.
    */
   private async ensurePipeline(): Promise<Pipeline | null> {
     if (this.pipeline) return this.pipeline;
     if (this.loading) return this.loading;
+
+    if (!this.hasLocalModel()) {
+      this.initError = "The bundled local embedding model is unavailable. Semantic search is disabled; full-text search remains available.";
+      return null;
+    }
 
     this.loading = (async () => {
       try {
@@ -60,8 +74,8 @@ export class LocalEmbeddingEngine {
 
         // Point model cache to our app-specific directory
         env.cacheDir = this.modelsDir;
-        // Disable remote model hub in production if model is already cached
-        env.allowRemoteModels = true;
+        env.allowLocalModels = true;
+        env.allowRemoteModels = false;
 
         const pipe = await pipeline("feature-extraction", this.modelId, {
           dtype: "fp32",
@@ -83,9 +97,7 @@ export class LocalEmbeddingEngine {
   }
 
   async getStatus(): Promise<LocalEmbeddingStatus> {
-    const modelCacheExists = fs.existsSync(
-      path.join(this.modelsDir, "models", this.modelId.replace("/", "--")),
-    );
+    const modelCacheExists = this.hasLocalModel();
 
     return {
       ready: this.pipeline !== null,

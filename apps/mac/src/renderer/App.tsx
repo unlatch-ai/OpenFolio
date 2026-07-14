@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-import type { CloudRuntimeConfig } from "@openfolio/shared-types";
 import { TooltipProvider } from "@/renderer/components/ui/tooltip";
 import { SidebarProvider, SidebarInset } from "@/renderer/components/ui/sidebar";
 import { Toaster } from "@/renderer/components/ui/sonner";
@@ -22,7 +20,7 @@ declare global {
   }
 }
 
-/* ─── Main shell (inside Convex provider) ─── */
+/* ─── Main local shell ─── */
 function Dashboard() {
   const view = useAppStore((s) => s.view);
   const initialized = useAppStore((s) => s.initialized);
@@ -92,55 +90,9 @@ function Dashboard() {
   );
 }
 
-/* ─── Root: Convex provider + config ─── */
+/* ─── Offline root ─── */
 export function App() {
-  const [runtimeConfig, setRuntimeConfig] = useState<CloudRuntimeConfig | null>(null);
-  const [configError, setConfigError] = useState<string | null>(null);
-  const setCloudConfig = useAppStore((s) => s.setCloudConfig);
-
   useTheme();
-
-  useEffect(() => {
-    window.openfolio.cloud
-      .getConfig()
-      .then((config) => {
-        setRuntimeConfig(config);
-        setCloudConfig(config);
-      })
-      .catch((error) => {
-        setConfigError(error instanceof Error ? error.message : "Failed to load configuration.");
-      });
-  }, [setCloudConfig]);
-
-  if (configError) {
-    return (
-      <div className="gate-shell">
-        <div className="gate-card">
-          <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-3">
-            Configuration error
-          </p>
-          <h1 className="text-xl font-bold tracking-tight">Could not start OpenFolio</h1>
-          <p className="mt-2 text-sm text-destructive">{configError}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!runtimeConfig) {
-    return (
-      <div className="gate-shell">
-        <div className="gate-card">
-          <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground mb-3">
-            Preparing
-          </p>
-          <h1 className="text-xl font-bold tracking-tight">Loading OpenFolio</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Preparing your local relationship graph.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <ErrorBoundary>

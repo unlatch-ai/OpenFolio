@@ -1,4 +1,4 @@
-import { Check, Database, KeyRound, MessageSquare, RefreshCw, Search, ShieldCheck, Users } from "lucide-react";
+import { Check, Database, MessageSquare, RefreshCw, Search, ShieldCheck, Users } from "lucide-react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { Badge } from "./ui/badge";
@@ -215,14 +215,6 @@ export function OnboardingView() {
               disabled={!state.canEnterApp}
             >
               Enter OpenFolio
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void window.openfolio.cloud.openExternal("https://openfolio.ai/docs/privacy")}
-            >
-              <KeyRound size={14} />
-              Privacy details
             </Button>
           </div>
         </div>

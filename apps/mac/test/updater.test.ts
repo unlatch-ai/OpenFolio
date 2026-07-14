@@ -14,9 +14,9 @@ describe("updater helpers", () => {
     });
   });
 
-  it("treats unpackaged builds as unsupported for auto updates", () => {
+  it("keeps auto updates unsupported in every build", () => {
     expect(isAutoUpdateSupported(false)).toBe(false);
-    expect(isAutoUpdateSupported(true)).toBe(true);
+    expect(isAutoUpdateSupported(true)).toBe(false);
   });
 
   it("detects the no published release updater case", () => {

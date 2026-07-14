@@ -1,32 +1,58 @@
 import { describe, expect, it } from "vitest";
-import { isAllowedExternalUrl, shouldOpenExternalUrl } from "../src/navigation";
+import {
+  createRuntimeNetworkPolicy,
+  isAllowedExternalUrl,
+  isNavigationAllowed,
+  isRuntimeRequestAllowed,
+  isSafeSystemSettingsUrl,
+} from "../src/navigation";
 
-describe("navigation helpers", () => {
-  it("keeps same-origin app routes inside the Electron window", () => {
-    expect(shouldOpenExternalUrl("http://localhost:5173/account", "http://localhost:5173/")).toBe(false);
+describe("Network Lock policy", () => {
+  it("creates an immutable production deny-all policy", () => {
+    const policy = createRuntimeNetworkPolicy(true, "https://evil.example");
+
+    expect(policy).toEqual({ mode: "production-deny-all", rendererOrigin: null });
+    expect(Object.isFrozen(policy)).toBe(true);
+    expect(isRuntimeRequestAllowed("file:///Applications/OpenFolio.app/index.html", policy)).toBe(true);
+    expect(isRuntimeRequestAllowed("data:image/png;base64,AA==", policy)).toBe(true);
+    expect(isRuntimeRequestAllowed("https://openfolio.ai", policy)).toBe(false);
+    expect(isRuntimeRequestAllowed("wss://openfolio.ai/socket", policy)).toBe(false);
+    expect(isRuntimeRequestAllowed("http://127.0.0.1:5173", policy)).toBe(false);
+    expect(isRuntimeRequestAllowed("ftp://127.0.0.1/file", policy)).toBe(false);
   });
 
-  it("opens different origins in the external browser", () => {
-    expect(shouldOpenExternalUrl("https://blessed-pig-525.convex.site/api/auth/signin/google", "http://localhost:5173/")).toBe(true);
-    expect(shouldOpenExternalUrl("https://accounts.google.com/o/oauth2/v2/auth", "http://localhost:5173/")).toBe(true);
+  it("allows only the exact configured loopback development origin", () => {
+    const policy = createRuntimeNetworkPolicy(false, "http://127.0.0.1:5173/app");
+
+    expect(isRuntimeRequestAllowed("http://127.0.0.1:5173/@vite/client", policy)).toBe(true);
+    expect(isRuntimeRequestAllowed("ws://127.0.0.1:5173/?token=dev", policy)).toBe(true);
+    expect(isRuntimeRequestAllowed("http://localhost:5173/@vite/client", policy)).toBe(false);
+    expect(isRuntimeRequestAllowed("http://127.0.0.1:5174/", policy)).toBe(false);
+    expect(isRuntimeRequestAllowed("https://example.com/", policy)).toBe(false);
   });
 
-  it("opens all http urls externally from packaged file builds", () => {
-    expect(shouldOpenExternalUrl("https://openfolio.ai/account", "file:///Applications/OpenFolio.app/index.html")).toBe(true);
+  it("rejects a non-loopback development renderer", () => {
+    expect(() => createRuntimeNetworkPolicy(false, "https://example.com/app")).toThrow(/loopback/i);
   });
 
-  it("only allows external URL schemes and loopback http targets that OpenFolio expects", () => {
-    expect(isAllowedExternalUrl("https://openfolio.ai/docs/privacy")).toBe(true);
-    expect(isAllowedExternalUrl("https://github.com/unlatch-ai/OpenFolio/releases")).toBe(true);
-    expect(isAllowedExternalUrl("https://accounts.google.com/o/oauth2/v2/auth")).toBe(true);
-    expect(isAllowedExternalUrl("https://blessed-pig-525.convex.site/api/auth/signin/google")).toBe(true);
-    expect(isAllowedExternalUrl("http://127.0.0.1:1234/auth/callback")).toBe(true);
-    expect(isAllowedExternalUrl("http://localhost:1234/auth/callback")).toBe(true);
-    expect(isAllowedExternalUrl("https://evil.example/login")).toBe(false);
-    expect(isAllowedExternalUrl("http://evil.example/auth/callback")).toBe(false);
-    expect(isAllowedExternalUrl("http://127.0.0.1:1234/not-auth")).toBe(false);
-    expect(isAllowedExternalUrl("file:///Users/me/.ssh/id_rsa")).toBe(false);
-    expect(isAllowedExternalUrl("javascript:alert(1)")).toBe(false);
-    expect(isAllowedExternalUrl("not a url")).toBe(false);
+  it("allows same-origin development navigation and no external delegation", () => {
+    const development = createRuntimeNetworkPolicy(false, "http://localhost:5173/");
+    const production = createRuntimeNetworkPolicy(true);
+
+    expect(isNavigationAllowed("http://localhost:5173/settings", "http://localhost:5173/", development)).toBe(true);
+    expect(isNavigationAllowed("https://openfolio.ai", "http://localhost:5173/", development)).toBe(false);
+    expect(isNavigationAllowed("https://openfolio.ai", "file:///Applications/OpenFolio.app/index.html", production)).toBe(false);
+    expect(isAllowedExternalUrl("https://github.com/unlatch-ai/OpenFolio/releases")).toBe(false);
+  });
+
+  it("preserves only local macOS System Settings actions", () => {
+    expect(isSafeSystemSettingsUrl("x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts")).toBe(true);
+    expect(isSafeSystemSettingsUrl("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")).toBe(true);
+    expect(isSafeSystemSettingsUrl("x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")).toBe(false);
+    expect(isSafeSystemSettingsUrl("x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts&url=https://evil.example")).toBe(false);
+    expect(isSafeSystemSettingsUrl("x-apple.systempreferences:com.apple.preference.security/../network?Privacy_Contacts")).toBe(false);
+    expect(isSafeSystemSettingsUrl("x-apple.systempreferences://com.apple.preference.security?Privacy_Contacts")).toBe(false);
+    expect(isSafeSystemSettingsUrl("https://support.apple.com")).toBe(false);
+    expect(isSafeSystemSettingsUrl("file:///Users/me/.ssh/id_rsa")).toBe(false);
   });
 });
