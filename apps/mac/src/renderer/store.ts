@@ -141,7 +141,10 @@ export const useAppStore = create<AppState>((set) => ({
     semanticMessage: null,
     resultCount: 0,
   },
-  setSearchQuery: (query) => set((state) => ({ search: { ...state.search, query } })),
+  setSearchQuery: (query) =>
+    set((state) => ({
+      search: { ...state.search, query, selectedResultId: null },
+    })),
   setSearchResults: (results) => set((state) => ({
     search: { ...state.search, results, resultCount: results.length },
   })),

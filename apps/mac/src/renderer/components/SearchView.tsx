@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   ArrowRight,
-  CalendarDays,
   MessageSquare,
   Search,
+  SlidersHorizontal,
   User,
   X,
 } from "lucide-react";
@@ -154,6 +154,7 @@ export function SearchView() {
     selectPerson,
   } = useAppStore();
   const [people, setPeople] = useState<Person[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef(0);
   const selected = search.results.find(
@@ -270,7 +271,9 @@ export function SearchView() {
                   ? "This year"
                   : search.filters.date === "last-year"
                     ? "Last year"
-                    : `${search.filters.customStart || "Start"} – ${search.filters.customEnd || "End"}`,
+                    : search.filters.customStart || search.filters.customEnd
+                      ? `${search.filters.customStart || "Start"} – ${search.filters.customEnd || "End"}`
+                      : "Custom dates",
             }
           : null,
       ].filter(Boolean) as Array<{
@@ -290,9 +293,8 @@ export function SearchView() {
     <main className={`search-view ${selected ? "has-evidence" : ""}`}>
       <section className="search-main">
         <div className={`search-opening ${pristine ? "pristine" : ""}`}>
-          <p className="eyebrow">Private iMessage search</p>
           <h1>
-            {pristine ? "OpenFolio remembers who told you what." : "Search"}
+            {pristine ? "Find the message you remember." : "Search"}
           </h1>
           <form
             className="archive-search-form"
@@ -331,6 +333,17 @@ export function SearchView() {
           </form>
         </div>
 
+        {pristine && applied.length > 0 && (
+          <div className="search-scope" role="status">
+            <span>
+              Searching within {applied.map((filter) => filter.label).join(", ")}
+            </span>
+            <button type="button" onClick={clearSearchFilters}>
+              Clear filters
+            </button>
+          </div>
+        )}
+
         {pristine ? (
           <div className="search-pristine">
             <p>Try something you remember clearly.</p>
@@ -348,96 +361,118 @@ export function SearchView() {
           </div>
         ) : (
           <>
-            <div className="filter-bar" aria-label="Search filters">
-              <label>
-                Type
-                <select
-                  value={search.filters.type}
-                  onChange={(event) =>
-                    setSearchFilters({
-                      type: event.target.value as typeof search.filters.type,
-                    })
-                  }
-                >
-                  <option value="all">All</option>
-                  <option value="messages">Messages</option>
-                  <option value="people">People</option>
-                  <option value="conversations">Conversations</option>
-                </select>
-              </label>
-              <label>
-                Person
-                <select
-                  value={search.filters.personId ?? ""}
-                  onChange={(event) =>
-                    setSearchFilters({ personId: event.target.value || null })
-                  }
-                >
-                  <option value="">Anyone</option>
-                  {people.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.displayName ||
-                        person.primaryHandle ||
-                        "Unknown contact"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Conversation
-                <select
-                  value={search.filters.threadId ?? ""}
-                  onChange={(event) =>
-                    setSearchFilters({ threadId: event.target.value || null })
-                  }
-                >
-                  <option value="">Any conversation</option>
-                  {threads.map((thread) => (
-                    <option key={thread.threadId} value={thread.threadId}>
-                      {thread.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Date
-                <select
-                  value={search.filters.date}
-                  onChange={(event) =>
-                    setSearchFilters({
-                      date: event.target.value as typeof search.filters.date,
-                    })
-                  }
-                >
-                  <option value="any">Any time</option>
-                  <option value="this-year">This year</option>
-                  <option value="last-year">Last year</option>
-                  <option value="custom">Custom range</option>
-                </select>
-              </label>
-              {search.filters.date === "custom" && (
-                <div className="custom-date-range" aria-label="Custom date range">
-                  <label>
-                    From
-                    <input
-                      type="date"
-                      value={search.filters.customStart}
-                      max={search.filters.customEnd || undefined}
-                      onChange={(event) => setSearchFilters({ customStart: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    To
-                    <input
-                      type="date"
-                      value={search.filters.customEnd}
-                      min={search.filters.customStart || undefined}
-                      onChange={(event) => setSearchFilters({ customEnd: event.target.value })}
-                    />
-                  </label>
-                </div>
-              )}
+            <div className="search-tools">
+              <Button
+                className="search-filter-trigger"
+                size="sm"
+                variant={showFilters ? "secondary" : "ghost"}
+                aria-expanded={showFilters}
+                onClick={() => setShowFilters((visible) => !visible)}
+              >
+                <SlidersHorizontal data-icon="inline-start" />
+                Filters{applied.length ? ` · ${applied.length}` : ""}
+              </Button>
+              <span>Searches exact words and related meaning.</span>
             </div>
+            {showFilters && (
+              <div className="filter-bar" aria-label="Search filters">
+                <label>
+                  Type
+                  <select
+                    value={search.filters.type}
+                    onChange={(event) =>
+                      setSearchFilters({
+                        type: event.target.value as typeof search.filters.type,
+                      })
+                    }
+                  >
+                    <option value="all">All</option>
+                    <option value="messages">Messages</option>
+                    <option value="people">People</option>
+                    <option value="conversations">Conversations</option>
+                  </select>
+                </label>
+                <label>
+                  Person
+                  <select
+                    value={search.filters.personId ?? ""}
+                    onChange={(event) =>
+                      setSearchFilters({ personId: event.target.value || null })
+                    }
+                  >
+                    <option value="">Anyone</option>
+                    {people.map((person) => (
+                      <option key={person.id} value={person.id}>
+                        {person.displayName ||
+                          person.primaryHandle ||
+                          "Unknown contact"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Conversation
+                  <select
+                    value={search.filters.threadId ?? ""}
+                    onChange={(event) =>
+                      setSearchFilters({ threadId: event.target.value || null })
+                    }
+                  >
+                    <option value="">Any conversation</option>
+                    {threads.map((thread) => (
+                      <option key={thread.threadId} value={thread.threadId}>
+                        {thread.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Date
+                  <select
+                    value={search.filters.date}
+                    onChange={(event) =>
+                      setSearchFilters({
+                        date: event.target.value as typeof search.filters.date,
+                      })
+                    }
+                  >
+                    <option value="any">Any time</option>
+                    <option value="this-year">This year</option>
+                    <option value="last-year">Last year</option>
+                    <option value="custom">Custom range</option>
+                  </select>
+                </label>
+                {search.filters.date === "custom" && (
+                  <div
+                    className="custom-date-range"
+                    aria-label="Custom date range"
+                  >
+                    <label>
+                      From
+                      <input
+                        type="date"
+                        value={search.filters.customStart}
+                        max={search.filters.customEnd || undefined}
+                        onChange={(event) =>
+                          setSearchFilters({ customStart: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label>
+                      To
+                      <input
+                        type="date"
+                        value={search.filters.customEnd}
+                        min={search.filters.customStart || undefined}
+                        onChange={(event) =>
+                          setSearchFilters({ customEnd: event.target.value })
+                        }
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
             {applied.length > 0 && (
               <div className="filter-chips">
                 {applied.map((filter) => (
@@ -470,13 +505,15 @@ export function SearchView() {
             <div className="result-status" aria-live="polite">
               <strong>
                 {search.resultCount}{" "}
-                {search.resultCount === 1 ? "match" : "matches"}
+                {search.resultCount === 1 ? "result" : "results"}
               </strong>
               <span>
                 {search.searching
                   ? "Searching…"
                   : search.semanticMessage ||
-                    `${search.retrievalMode === "hybrid" ? "Exact + related wording" : "Exact search"} · ${search.semanticStatus}`}
+                    (search.retrievalMode === "hybrid"
+                      ? "Exact words + meaning"
+                      : "Exact words")}
               </span>
             </div>
             {search.error && (
@@ -565,9 +602,12 @@ export function SearchView() {
                             ),
                         )}
                       </span>
-                      <span className="match-reason">
-                        {formatMatchReason(result.matchReason)}
-                      </span>
+                      {(result.matchReason === "exact_words" ||
+                        result.matchReason === "related_wording") && (
+                        <span className="match-reason">
+                          {formatMatchReason(result.matchReason)}
+                        </span>
+                      )}
                     </span>
                     <ArrowRight aria-hidden="true" />
                   </button>

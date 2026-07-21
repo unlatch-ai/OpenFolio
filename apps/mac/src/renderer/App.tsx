@@ -23,7 +23,7 @@ function RendererShell() {
   useAppData();
 
   if (!state.initialized) {
-    return <div className="gate-shell"><div className="gate-card"><p>Preparing your private archive</p><h1>OpenFolio</h1></div></div>;
+    return <div className="gate-shell"><div className="gate-card"><p>Preparing your local library</p><h1>OpenFolio</h1></div></div>;
   }
 
   const onboarding = getOnboardingState({
@@ -40,7 +40,7 @@ function RendererShell() {
         {onboarding.shouldShow ? (
           <OnboardingView />
         ) : (
-          <SidebarProvider defaultOpen style={{ height: "100vh", "--sidebar-width": "232px", "--sidebar-width-icon": "56px" } as React.CSSProperties}>
+          <SidebarProvider defaultOpen style={{ height: "100vh", "--sidebar-width": "216px", "--sidebar-width-icon": "56px" } as React.CSSProperties}>
             <AppSidebar />
             <SidebarInset className="renderer-canvas">
               <>

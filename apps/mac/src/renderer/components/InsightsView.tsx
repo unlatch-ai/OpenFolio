@@ -101,9 +101,11 @@ export function InsightsView() {
   const [wrapped, setWrapped] = useState<WrappedSummary | null>(null);
   const [heatmap, setHeatmap] = useState<MessageHeatmapEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const { setView, selectPerson } = useAppStore();
   const load = useCallback(async (value: number) => {
     setLoading(true);
+    setError(false);
     try {
       const [summary, days] = await Promise.all([
         window.openfolio.insights.getWrappedSummary(value),
@@ -111,6 +113,8 @@ export function InsightsView() {
       ]);
       setWrapped(summary);
       setHeatmap(days);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -139,13 +143,29 @@ export function InsightsView() {
         <Skeleton className="wrapped-artifact-skeleton" />
       </main>
     );
+  if (error)
+    return (
+      <main className="wrapped-view">
+        <header className="wrapped-header">
+          <div>
+            <h1>Year in review</h1>
+            <p className="page-description">A local summary of your message history</p>
+          </div>
+        </header>
+        <div className="archive-empty">
+          <h2>Year in review could not load.</h2>
+          <p>Your message library is unchanged. Try loading the summary again.</p>
+          <Button variant="secondary" onClick={() => void load(year)}>Try again</Button>
+        </div>
+      </main>
+    );
   if (!wrapped || wrapped.totalMessages === 0)
     return (
       <main className="wrapped-view">
         <header className="wrapped-header">
           <div>
-            <p className="eyebrow">Your messages in {year}</p>
             <h1>Year in review</h1>
+            <p className="page-description">A local summary of your message history</p>
           </div>
           <div className="year-nav">
             <Button
@@ -180,8 +200,8 @@ export function InsightsView() {
     <main className="wrapped-view">
       <header className="wrapped-header">
         <div>
-          <p className="eyebrow">Your messages in {year}</p>
           <h1>Year in review</h1>
+          <p className="page-description">A local summary of your message history</p>
         </div>
         <div className="year-nav">
           <Button
@@ -210,7 +230,7 @@ export function InsightsView() {
           </p>
           <h2>
             {wrapped.busiestMonth
-              ? `This was a ${monthName(wrapped.busiestMonth.month)} year.`
+              ? `${monthName(wrapped.busiestMonth.month)} was your busiest month.`
               : `Your messages in ${year}.`}
           </h2>
           {wrapped.busiestMonth && (

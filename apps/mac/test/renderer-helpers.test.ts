@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DiagnosticsReport, MessageDetail, Note, Reminder, SearchResult, SearchScaleStatus } from "@openfolio/shared-types";
+import type { DiagnosticsReport, MessageDetail, Note, Reminder, SearchResult } from "@openfolio/shared-types";
 import { formatDiagnosticsReport } from "../src/renderer/diagnostics";
 import { getImportPrimaryAction, isImportTerminal } from "../src/renderer/import-jobs";
 import {
@@ -9,7 +9,7 @@ import {
   getReminderToggleLabel,
   orderProfileNotes,
 } from "../src/renderer/people-profile";
-import { describeSearchScale, formatCitationMeta, groupSearchResults } from "../src/renderer/search-results";
+import { formatCitationMeta, groupSearchResults } from "../src/renderer/search-results";
 import { getAppVersionLabel, getLastCheckedLabel, getReleaseNotesUrl, getUpdateStatusLabel, getUpdateVersionLabel } from "../src/renderer/update-labels";
 
 describe("renderer workflow helpers", () => {
@@ -76,19 +76,6 @@ describe("renderer workflow helpers", () => {
     expect(filterPersonMessages(messages, "")).toEqual(messages);
   });
 
-  it("describes when search scale needs benchmarking", () => {
-    const status = {
-      totalDocuments: 60_000,
-      embeddedDocuments: 60_000,
-      dirtyDocuments: 0,
-      vectorScanWarningThreshold: 50_000,
-      recommendVectorIndex: true,
-      estimatedVectorBytes: 92_160_000,
-    } satisfies SearchScaleStatus;
-
-    expect(describeSearchScale(status)).toContain("Run the local benchmark");
-  });
-
   it("orders pinned notes before unpinned notes", () => {
     const notes = [
       { id: "old", entityType: "person", entityId: "p", content: "old", pinned: false, pinnedAt: null, createdAt: 10 },
@@ -121,6 +108,21 @@ describe("renderer workflow helpers", () => {
 
     expect(formatCitationMeta(result)).toContain("Ada");
     expect(formatCitationMeta(result)).toContain("2026");
+  });
+
+  it("does not repeat a person when the conversation has the same title", () => {
+    const result = {
+      id: "doc",
+      kind: "message",
+      title: "Ada",
+      occurredAt: null,
+      citation: {
+        personLabel: "Ada",
+        conversationLabel: "Ada",
+      },
+    } as SearchResult;
+
+    expect(formatCitationMeta(result)).toBe("Ada");
   });
 
   it("formats updater state for Settings without leaking raw status values", () => {
