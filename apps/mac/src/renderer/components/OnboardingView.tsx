@@ -64,23 +64,28 @@ function StepRow({
         </div>
         <p>{step.description}</p>
       </div>
-      {showAction && (
-        <Button
-          size="xs"
-          variant={step.status === "complete" ? "secondary" : "default"}
-          onClick={onAction}
-          disabled={busy}
-        >
-          {step.status === "running" ? (
-            <RefreshCw size={12} className="animate-spin" />
-          ) : null}
-          {step.actionLabel}
-        </Button>
-      )}
-      {step.id === "contacts" && step.status !== "complete" && onSkip && (
-        <Button size="xs" variant="ghost" onClick={onSkip} disabled={busy}>
-          Skip
-        </Button>
+      {(showAction ||
+        (step.id === "contacts" && step.status !== "complete" && onSkip)) && (
+        <div className="setup-step-actions">
+          {showAction && (
+            <Button
+              size="xs"
+              variant={step.status === "complete" ? "secondary" : "default"}
+              onClick={onAction}
+              disabled={busy}
+            >
+              {step.status === "running" ? (
+                <RefreshCw size={12} className="animate-spin" />
+              ) : null}
+              {step.actionLabel}
+            </Button>
+          )}
+          {step.id === "contacts" && step.status !== "complete" && onSkip && (
+            <Button size="xs" variant="ghost" onClick={onSkip} disabled={busy}>
+              Skip
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -279,8 +284,8 @@ export function OnboardingView() {
     <div className="setup-shell">
       <div className="setup-main">
         <div className="setup-hero">
-          <FolioMark number="00" label="ARCHIVE SETUP" />
-          <Badge variant="secondary">Private archive setup</Badge>
+          <FolioMark label="SETUP" />
+          <Badge variant="secondary">Private, on this Mac</Badge>
           <h1>Remember who told you what.</h1>
           <p>
             Search your iMessage history privately on this Mac, then verify

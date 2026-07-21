@@ -22,7 +22,6 @@ import {
 } from "../search-results";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
-import { FolioMark } from "./FolioMark";
 
 const EXAMPLES = [
   "the ramen place Jordan recommended",
@@ -70,7 +69,6 @@ function EvidencePreview({
     <aside className="evidence-preview" aria-label="Source evidence">
       <header>
         <div>
-          <FolioMark number="01A" label="SOURCE LEAF" />
           <p className="eyebrow">Evidence</p>
           <h2>{result.title}</h2>
           <p>{formatCitationMeta(result)}</p>
@@ -127,7 +125,7 @@ function EvidencePreview({
       </div>
       <Button onClick={onOpen}>
         {result.kind === "person"
-          ? "Open person dossier"
+          ? "Open person"
           : result.kind === "thread"
             ? "Open conversation"
             : "Open in conversation"}
@@ -292,7 +290,6 @@ export function SearchView() {
     <main className={`search-view ${selected ? "has-evidence" : ""}`}>
       <section className="search-main">
         <div className={`search-opening ${pristine ? "pristine" : ""}`}>
-          <FolioMark number="01" label="RECALL INDEX" />
           <p className="eyebrow">Private iMessage search</p>
           <h1>
             {pristine ? "OpenFolio remembers who told you what." : "Search"}

@@ -9,7 +9,6 @@ import { useAppStore } from "../store";
 import { ContactAvatar } from "./ContactAvatar";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
-import { FolioMark } from "./FolioMark";
 
 function exactDate(value: number) {
   return new Date(value).toLocaleDateString(undefined, {
@@ -138,8 +137,7 @@ function ConversationArchive({
           <ArrowLeft />
         </button>
         <div>
-          <FolioMark number="03A" label="SOURCE THREAD" />
-          <p className="eyebrow">Evidence archive</p>
+          <p className="eyebrow">Original messages</p>
           <h1>{detail.thread.displayName || "Conversation"}</h1>
           <p>
             {detail.participants
@@ -278,7 +276,6 @@ export function InboxView() {
     >
       <aside className="conversation-index">
         <header>
-          <FolioMark number="03" label="THREAD INDEX" />
           <p className="eyebrow">Original records</p>
           <h1>Conversations</h1>
           <label className="compact-search">
@@ -317,8 +314,8 @@ export function InboxView() {
             <Archive />
             <h2>Select a conversation</h2>
             <p>
-              Read the original archive. There is no composer and nothing can be
-              sent from OpenFolio.
+              Read the original messages. OpenFolio is read-only and cannot send
+              anything.
             </p>
           </div>
         )}

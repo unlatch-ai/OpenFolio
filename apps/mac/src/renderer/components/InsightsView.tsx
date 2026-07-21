@@ -8,7 +8,6 @@ import { useAppStore } from "../store";
 import { personColor } from "./ContactAvatar";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
-import { FolioMark } from "./FolioMark";
 
 const MONTHS = [
   "January",
@@ -145,9 +144,8 @@ export function InsightsView() {
       <main className="wrapped-view">
         <header className="wrapped-header">
           <div>
-            <FolioMark number="04" label="ANNUAL FOLIO" />
-            <p className="eyebrow">Your archive in {year}</p>
-            <h1>Wrapped</h1>
+            <p className="eyebrow">Your messages in {year}</p>
+            <h1>Year in review</h1>
           </div>
           <div className="year-nav">
             <Button
@@ -171,8 +169,8 @@ export function InsightsView() {
         <div className="archive-empty">
           <h2>No messages recorded in {year}.</h2>
           <p>
-            Choose another year. Wrapped only describes records in your local
-            archive.
+            Choose another year. This view only summarizes messages stored on
+            this Mac.
           </p>
         </div>
       </main>
@@ -182,9 +180,8 @@ export function InsightsView() {
     <main className="wrapped-view">
       <header className="wrapped-header">
         <div>
-          <FolioMark number="04" label="ANNUAL FOLIO" />
-          <p className="eyebrow">Your archive in {year}</p>
-          <h1>Wrapped</h1>
+          <p className="eyebrow">Your messages in {year}</p>
+          <h1>Year in review</h1>
         </div>
         <div className="year-nav">
           <Button
@@ -214,20 +211,20 @@ export function InsightsView() {
           <h2>
             {wrapped.busiestMonth
               ? `This was a ${monthName(wrapped.busiestMonth.month)} year.`
-              : `Your ${year} archive.`}
+              : `Your messages in ${year}.`}
           </h2>
           {wrapped.busiestMonth && (
             <p>
               {monthName(wrapped.busiestMonth.month)} held{" "}
               {wrapped.busiestMonth.count.toLocaleString()} messages, the
-              busiest month in the archive for this year.
+              busiest month that year.
             </p>
           )}
           <Strata data={wrapped.messagesByMonth} />
         </section>
         <div className="wrapped-grid">
           <section className="wrapped-module">
-            <p className="eyebrow">Measured totals</p>
+            <p className="eyebrow">Totals</p>
             <dl className="wrapped-totals">
               <div>
                 <dt>Messages</dt>

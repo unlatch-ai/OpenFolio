@@ -8,7 +8,7 @@ const surfaces = [
   {
     index: "01",
     title: "Search",
-    body: "Describe the detail you remember. OpenFolio ranks exact words and meaning-based matches from your local archive.",
+    body: "Search with the words you remember. OpenFolio ranks exact and meaning-based matches from your local archive.",
   },
   {
     index: "02",
@@ -22,7 +22,7 @@ const surfaces = [
   },
   {
     index: "04",
-    title: "Wrapped",
+    title: "Year in review",
     body: "Revisit a year through deterministic totals, rhythms, and people—not generated interpretations.",
   },
 ];
@@ -44,12 +44,12 @@ export default function HomePage() {
 
       <section className="hero section-frame" aria-labelledby="hero-title">
         <div className="hero-copy">
-          <p className="eyebrow"><span>Folio 001</span><span>Private message recall</span></p>
-          <h1 id="hero-title">OpenFolio remembers who told you what.</h1>
+          <p className="eyebrow"><span>Open source</span><span>Private iMessage search</span></p>
+          <h1 id="hero-title">Search every iMessage on your Mac.</h1>
           <p className="hero-deck">
-            Search your entire iMessage history on your Mac. Find the person,
-            fact, or message you remember, then verify it in the original
-            conversation.
+            Find the person, fact, or message you remember, even when you do
+            not remember the exact words. Every result links back to the
+            original conversation.
           </p>
           <div className="hero-actions">
             <a className="button button-primary" href="https://github.com/unlatch-ai/OpenFolio/releases/latest">
@@ -69,18 +69,18 @@ export default function HomePage() {
 
       <section className="statement-band" aria-label="Product principle">
         <div className="section-frame statement-grid">
-          <p className="folio-mark">OF / 01</p>
+          <p className="folio-mark">What it does</p>
           <p className="statement-copy">
-            It is not a relationship score or an AI answer engine. It is a
-            private evidence archive for details buried across years of messages.
+            OpenFolio turns years of messages into a private, searchable archive.
+            It finds evidence. It does not invent answers or score relationships.
           </p>
         </div>
       </section>
 
       <section className="section-frame editorial-section" aria-labelledby="workflow-title">
         <div className="section-heading">
-          <p className="eyebrow"><span>Method</span><span>Recall to source</span></p>
-          <h2 id="workflow-title">One clear loop.</h2>
+          <p className="eyebrow"><span>How it works</span><span>Recall to source</span></p>
+          <h2 id="workflow-title">Remember. Find. Verify.</h2>
         </div>
         <ol className="process-grid">
           <li><span>01</span><h3>Remember</h3><p>Describe a phrase, place, plan, or person—even if you do not remember the exact words.</p></li>
@@ -92,10 +92,10 @@ export default function HomePage() {
       <section className="section-frame editorial-section surfaces-section" aria-labelledby="surfaces-title">
         <div className="section-heading split-heading">
           <div>
-            <p className="eyebrow"><span>Archive</span><span>Four views</span></p>
+            <p className="eyebrow"><span>Your archive</span><span>Four views</span></p>
             <h2 id="surfaces-title">Search comes first.</h2>
           </div>
-          <p>People organize memory. Conversations preserve evidence. Wrapped creates reflection.</p>
+          <p>People organize memory. Conversations preserve evidence. Year in review creates reflection.</p>
         </div>
         <div className="surface-index">
           {surfaces.map((surface) => (
@@ -112,7 +112,7 @@ export default function HomePage() {
         <div className="section-frame privacy-grid">
           <div className="privacy-intro">
             <ShieldCheck aria-hidden="true" />
-            <p className="eyebrow"><span>Privacy</span><span>Local by construction</span></p>
+            <p className="eyebrow"><span>Privacy</span><span>Local by design</span></p>
             <h2 id="privacy-title">Your archive stays on your Mac.</h2>
             <p>
               The production app is built to deny network access. It reads
@@ -130,7 +130,7 @@ export default function HomePage() {
       </section>
 
       <section className="section-frame release-note" aria-labelledby="release-title">
-        <p className="folio-mark">OF / NOTE</p>
+        <p className="folio-mark">Updates</p>
         <div>
           <h2 id="release-title">No background updater.</h2>
           <p>
