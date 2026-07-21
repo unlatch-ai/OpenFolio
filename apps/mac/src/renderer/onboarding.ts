@@ -1,135 +1,34 @@
 import type {
-  ContactsAccessStatus,
-  ContactsSyncSummary,
-  EmbeddingSyncStatus,
   MessagesAccessStatus,
   MessagesImportJob,
 } from "@openfolio/shared-types";
 
-export type OnboardingStepId = "messages" | "import" | "contacts" | "embeddings";
-export type OnboardingStepStatus = "complete" | "active" | "blocked" | "waiting" | "running" | "optional";
+export type OnboardingStage = "messages" | "import" | "ready";
 
 export interface OnboardingInput {
   messagesStatus: MessagesAccessStatus | null;
-  contactsStatus: ContactsAccessStatus | null;
   threadCount: number;
   importJob: MessagesImportJob | null;
-  contactsSync: ContactsSyncSummary | null;
-  embeddingSync: EmbeddingSyncStatus | null;
   setupDismissed: boolean;
-}
-
-export interface OnboardingStep {
-  id: OnboardingStepId;
-  title: string;
-  description: string;
-  status: OnboardingStepStatus;
-  required: boolean;
-  actionLabel: string | null;
-}
-
-function messagesStep(input: OnboardingInput): OnboardingStep {
-  const granted = input.messagesStatus?.status === "granted";
-  return {
-    id: "messages",
-    title: "Allow read-only access to Messages",
-    description: granted
-      ? "OpenFolio can read the Messages database already stored on this Mac."
-      : "OpenFolio needs Full Disk Access to read Messages on this Mac. Enable access, then return here and try again.",
-    status: granted ? "complete" : "active",
-    required: true,
-    actionLabel: granted ? "Recheck" : "Grant access",
-  };
-}
-
-function importStep(input: OnboardingInput, messagesGranted: boolean): OnboardingStep {
-  const importCompleted = input.importJob?.status === "completed";
-  const imported = input.threadCount > 0 || importCompleted;
-  const running = input.importJob?.status === "running";
-  const cancelling = input.importJob?.status === "cancelling";
-  const failed = input.importJob?.status === "failed";
-  const cancelled = input.importJob?.status === "cancelled";
-  const importedThreadCount = input.threadCount || input.importJob?.importedThreads || 0;
-  return {
-    id: "import",
-    title: "Build your private archive",
-    description: failed
-      ? "The import did not finish. Retry once. If it fails again, restart OpenFolio, recheck Messages access, and try again."
-      : cancelled
-        ? "Import was cancelled. Retry when you are ready."
-        : imported
-      ? importedThreadCount > 0
-        ? `${importedThreadCount} conversations are ready.`
-        : "Import finished. No local conversations were found yet."
-      : "Read conversations, resolve participants, and prepare exact search. OpenFolio never changes Messages.",
-    status: imported ? "complete" : running || cancelling ? "running" : messagesGranted ? "active" : "blocked",
-    required: true,
-    actionLabel: running ? "Cancel import" : cancelling ? "Cancelling..." : imported ? "Import again" : failed || cancelled ? "Retry import" : "Import messages",
-  };
-}
-
-function contactsStep(input: OnboardingInput, requiredDone: boolean): OnboardingStep {
-  const granted = input.contactsStatus?.status === "granted";
-  const synced = Boolean(input.contactsSync && input.contactsSync.importedContacts >= 0);
-  const needsSettings = input.contactsStatus?.status === "denied" || input.contactsStatus?.status === "restricted";
-  return {
-    id: "contacts",
-    title: "Put names to numbers",
-    description: synced
-      ? `${input.contactsSync?.importedContacts ?? 0} contacts synced locally.`
-      : needsSettings || input.contactsStatus?.status === "unsupported"
-        ? "Contacts access is unavailable. You can continue without it or change access in System Settings."
-      : "Apple Contacts can match phone numbers and email addresses to names. Contact data stays on this Mac.",
-    status: synced ? "complete" : granted ? "active" : needsSettings ? "blocked" : requiredDone ? "optional" : "waiting",
-    required: false,
-    actionLabel: granted ? "Sync contacts" : needsSettings ? "Open Settings" : "Allow and sync",
-  };
-}
-
-function embeddingsStep(input: OnboardingInput, imported: boolean): OnboardingStep {
-  const sync = input.embeddingSync;
-  const complete = Boolean(sync && sync.totalDocuments > 0 && sync.dirtyDocuments === 0);
-  const progress = sync && sync.totalDocuments > 0
-    ? `${sync.embeddedDocuments}/${sync.totalDocuments} documents embedded`
-    : "Semantic index will build after import.";
-
-  return {
-    id: "embeddings",
-    title: "Prepare meaning-based search",
-    description: complete ? "Meaning-based search is ready and runs entirely on this Mac." : progress,
-    status: complete ? "complete" : sync?.syncing ? "running" : imported ? "active" : "waiting",
-    required: false,
-    actionLabel: complete ? "Refresh" : imported ? "Build index" : null,
-  };
 }
 
 export function getOnboardingState(input: OnboardingInput) {
   const messagesGranted = input.messagesStatus?.status === "granted";
   const imported = input.threadCount > 0 || input.importJob?.status === "completed";
   const requiredDone = messagesGranted && imported;
-
-  const steps = [
-    messagesStep(input),
-    importStep(input, messagesGranted),
-    contactsStep(input, requiredDone),
-    embeddingsStep(input, imported),
-  ];
-
-  const activeStep = steps.find((step) => step.status === "active")
-    ?? steps.find((step) => step.status === "optional")
-    ?? steps.find((step) => step.status === "running")
-    ?? steps[0];
+  const stage: OnboardingStage = !messagesGranted
+    ? "messages"
+    : !imported
+      ? "import"
+      : "ready";
 
   const shouldShow = !input.setupDismissed || !requiredDone;
 
   return {
     shouldShow,
     canEnterApp: requiredDone,
-    activeStepId: activeStep.id,
-    steps,
-    progress: {
-      completedRequired: steps.filter((step) => step.required && step.status === "complete").length,
-      totalRequired: steps.filter((step) => step.required).length,
-    },
+    stage,
+    messagesGranted,
+    imported,
   };
 }

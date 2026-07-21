@@ -28,11 +28,8 @@ function RendererShell() {
 
   const onboarding = getOnboardingState({
     messagesStatus: state.messagesStatus,
-    contactsStatus: state.contactsStatus,
-    contactsSync: state.contactsSync,
     importJob: state.importJob,
     threadCount: state.threads.length,
-    embeddingSync: state.embeddingSync,
     setupDismissed: state.setupDismissed,
   });
 
@@ -40,10 +37,12 @@ function RendererShell() {
     <TooltipProvider delayDuration={300}>
       <div className="app-shell">
         <div className="window-drag-region" />
-        <SidebarProvider defaultOpen style={{ height: "100vh", "--sidebar-width": "232px", "--sidebar-width-icon": "56px" } as React.CSSProperties}>
-          <AppSidebar />
-          <SidebarInset className="renderer-canvas">
-            {onboarding.shouldShow ? <OnboardingView /> : (
+        {onboarding.shouldShow ? (
+          <OnboardingView />
+        ) : (
+          <SidebarProvider defaultOpen style={{ height: "100vh", "--sidebar-width": "232px", "--sidebar-width-icon": "56px" } as React.CSSProperties}>
+            <AppSidebar />
+            <SidebarInset className="renderer-canvas">
               <>
                 {state.view === "search" && <SearchView />}
                 {state.view === "people" && <PeopleView />}
@@ -51,9 +50,9 @@ function RendererShell() {
                 {state.view === "wrapped" && <InsightsView />}
                 {state.view === "settings" && <SettingsView />}
               </>
-            )}
-          </SidebarInset>
-        </SidebarProvider>
+            </SidebarInset>
+          </SidebarProvider>
+        )}
         <Toaster position="bottom-right" />
       </div>
     </TooltipProvider>

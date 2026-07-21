@@ -22,6 +22,14 @@ function writeSetupDismissed(value: boolean) {
   if (typeof localStorage !== "undefined") localStorage.setItem("openfolio.setupDismissed", value ? "1" : "0");
 }
 
+function readIntroSeen() {
+  return typeof localStorage !== "undefined" && localStorage.getItem("openfolio.introSeen") === "1";
+}
+
+function writeIntroSeen(value: boolean) {
+  if (typeof localStorage !== "undefined") localStorage.setItem("openfolio.introSeen", value ? "1" : "0");
+}
+
 export type View = "search" | "people" | "conversations" | "wrapped" | "settings";
 export type SearchType = "all" | "messages" | "people" | "conversations";
 export type SearchDate = "any" | "this-year" | "last-year" | "custom";
@@ -94,6 +102,8 @@ export interface AppState {
   setInitialized: (initialized: boolean) => void;
   setupDismissed: boolean;
   setSetupDismissed: (dismissed: boolean) => void;
+  introSeen: boolean;
+  setIntroSeen: (seen: boolean) => void;
 }
 
 const initialFilters: SearchFilters = {
@@ -180,5 +190,10 @@ export const useAppStore = create<AppState>((set) => ({
   setSetupDismissed: (setupDismissed) => {
     writeSetupDismissed(setupDismissed);
     set({ setupDismissed });
+  },
+  introSeen: readIntroSeen(),
+  setIntroSeen: (introSeen) => {
+    writeIntroSeen(introSeen);
+    set({ introSeen });
   },
 }));

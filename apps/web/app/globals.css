@@ -97,7 +97,7 @@ button, input { font: inherit; }
 .demo-results small { color: var(--muted-foreground); font-size: 11px; }
 mark { padding: 1px 2px; background: var(--accent); color: var(--accent-foreground); }
 .demo-evidence { background: color-mix(in srgb, var(--paper) 55%, var(--chalk)); }
-.demo-date { margin: 30px 0 16px; color: var(--muted-foreground); font-size: 11px; text-align: center; text-transform: uppercase; letter-spacing: .08em; }
+.demo-date { margin: 30px 0 16px; color: var(--muted-foreground); font-size: 11px; text-align: center; }
 .demo-evidence blockquote { margin: 14px 0; padding: 11px; border-left: 2px solid var(--interaction-accent); background: var(--chalk); font-size: 12px; line-height: 1.5; }
 .context-line { margin: 11px 0; color: var(--muted-foreground); line-height: 1.45; }
 .demo-evidence button { display: flex; align-items: center; gap: 6px; margin-top: 24px; padding: 0; border: 0; background: transparent; color: var(--interaction-accent); font-size: 11px; font-weight: 650; }

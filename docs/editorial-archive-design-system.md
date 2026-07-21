@@ -194,8 +194,14 @@ Avoid bubble decoration when a simple aligned transcript is clearer.
 ### Settings and onboarding
 
 Group settings by task with headings and rules, not nested cards. Put status
-beside the control it explains. Onboarding is one calm column or split layout,
-at most two actions per step, and always explains access before requesting it.
+beside the control it explains. Before required setup is complete, do not render
+the application shell or inactive navigation. Onboarding is one centered task
+at a time: welcome, Messages access, local indexing, then ready. The welcome
+screen has one primary action. Permission copy explains read-only access and
+the enforced zero-network boundary before opening System Settings. Never show
+raw filesystem errors, decorative sequence numbers, dashboards, optional
+Contacts setup, or progress accounting such as “0 of 2 required” in first-run
+onboarding.
 
 ### Public website
 
