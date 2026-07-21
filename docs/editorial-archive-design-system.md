@@ -1,427 +1,228 @@
-# Editorial Archive Design System
+# OpenFolio Design System
 
 Status: implemented foundation July 2026
 Depends on: [product-contract.md](./product-contract.md)
 
 ## Direction
 
-OpenFolio is an **Editorial Archive**: a dark graphite Mac shell presenting warm paper records. The interface is 90% monochrome and 10% controlled person/data color. Oxidized teal indicates interaction without reading as electric or purple. The user's message history supplies the expressive color and texture.
+OpenFolio is a quiet local search tool. Its interface should make private data
+feel legible and trustworthy without turning it into a themed artifact.
 
-It should feel sophisticated enough for private data and human enough for personal history. It must not look like an iMessage clone, CRM, generic dashboard, developer console, luxury-fashion site, or scrapbook.
+The visual system is grayscale-first: two close neutral surfaces, clear type,
+hairline structure, and generous spacing. Color carries meaning rather than
+decoration. A restrained steel blue marks focus, selection, links, and cited
+evidence. Red, green, and amber are reserved for real error, success, and
+warning states.
 
-## Token contract
+The product should feel calm, precise, and native to the Mac. It must not look
+like an iMessage clone, CRM, generic dashboard, developer console, scrapbook,
+or luxury editorial site.
 
-All app and website components consume semantic tokens. Raw palette values belong only in `packages/shared-tokens/tokens.css`. Page components must not introduce one-off hex values.
+## Source of truth
 
-### Primitive color palette
+All app and website components consume the semantic tokens in
+`packages/shared-tokens/tokens.css`. Component and page styles may compose or
+mix tokens, but must not create a second palette.
+
+The Mac app and public website share the same visual grammar. Their layouts can
+differ, but the meaning of surface, text, rule, action, focus, selection, and
+status colors cannot drift.
+
+## Color
+
+### Neutral surfaces
 
 | Token | Value | Role |
 | --- | --- | --- |
-| `ink` | `#0B0B0B` | deepest shell and graphic black |
-| `carbon` | `#151515` | sidebar and dark card |
-| `graphite` | `#292927` | elevated dark surface |
-| `ash` | `#686864` | secondary dark metadata |
-| `mist` | `#D9D7D1` | rules and disabled structure |
-| `paper` | `#F3F1EB` | primary light canvas |
-| `chalk` | `#FAF9F6` | elevated paper surface |
-| `paper-ink` | `#141412` | primary text on paper |
-| `shell-ink` | `#F5F4F0` | primary text on dark shell |
-| `interaction-accent` | `#36575A` | primary interaction |
-| `interaction-accent-hover` | `#294548` | hover/pressed interaction |
-| `interaction-accent-soft` | `#DFE8E5` | selected surface on paper |
-| `critical` | `#9B353D` | destructive/error |
-| `critical-soft` | `#F3E3E3` | error background |
-| `success` | `#56715B` | verified local-ready state |
-| `success-soft` | `#E4EAE3` | success background |
-| `warning` | `#9A6A27` | blocked/partial state |
-| `warning-soft` | `#F0E7D7` | warning background |
+| `paper` | `#F9F9F7` | page canvas |
+| `chalk` | `#FCFCFB` | sidebar and raised content surface |
+| `muted` | `#F1F1EE` | selected-neutral and section surface |
+| `border` | `#E1E0D9` | default hairline |
+| `input` | `#CFCEC7` | stronger control edge |
+| `paper-ink` | `#0B0B0B` | primary text and action |
+| `muted-foreground` | `#686762` | secondary text |
+| `ash` | `#898781` | tertiary structure |
 
-Relationship/data colors:
+Use surface changes and rules before adding a card. Standard content regions
+have no shadow. Avoid large dark bands, decorative gradients, tinted page
+backgrounds, and permanent dark navigation.
 
-| Token | Value |
-| --- | --- |
-| `person-lilac` | `#A999E8` |
-| `person-rose` | `#C88791` |
-| `person-moss` | `#7D947C` |
-| `person-amber` | `#C89A55` |
-| `person-slate` | `#7389A9` |
-| `person-clay` | `#B77759` |
+### Interaction and status
 
-Person colors are assigned deterministically from the canonical person ID, not display name, so identity color survives renaming. They appear in avatars, a 2px dossier marker, selected data series, and Wrapped. Never color an entire standard page by person.
-
-### Semantic light-canvas tokens
-
-| Semantic token | Maps to |
-| --- | --- |
-| `background` | `paper` |
-| `foreground` | `paper-ink` |
-| `card` | `chalk` |
-| `card-foreground` | `paper-ink` |
-| `muted` | `#E9E6DE` |
-| `muted-foreground` | `#686760` |
-| `border` | `rgba(20,20,18,0.13)` |
-| `input` | `rgba(20,20,18,0.18)` |
-| `primary` | `interaction-accent` |
-| `primary-foreground` | `#FFFFFF` |
-| `secondary` | `#EAE7E0` |
-| `secondary-foreground` | `paper-ink` |
-| `accent` | `interaction-accent-soft` |
-| `accent-foreground` | `#243F42` |
-| `ring` | `interaction-accent` |
-| `destructive` | `critical` |
-
-### Semantic dark-canvas tokens
-
-The sidebar remains dark in every mode. Dark appearance converts the content canvas rather than inverting every primitive.
-
-| Semantic token | Maps to |
-| --- | --- |
-| `background` | `carbon` |
-| `foreground` | `shell-ink` |
-| `card` | `#1D1D1B` |
-| `card-foreground` | `shell-ink` |
-| `muted` | `graphite` |
-| `muted-foreground` | `#A7A59F` |
-| `border` | `rgba(255,255,255,0.12)` |
-| `input` | `rgba(255,255,255,0.18)` |
-| `primary` | `#6F9192` |
-| `primary-foreground` | `#0B0B0B` |
-| `secondary` | `graphite` |
-| `secondary-foreground` | `shell-ink` |
-| `accent` | `#243B3D` |
-| `accent-foreground` | `#CFE0DE` |
-| `ring` | `#8AA4A4` |
-| `destructive` | `#DC6B72` |
-
-Sidebar tokens are fixed: background `ink`, foreground `shell-ink`, muted foreground `#A3A19B`, border `rgba(255,255,255,0.12)`, selected background `rgba(255,255,255,0.09)`, and selected marker `interaction-accent`.
-
-Shared component aliases:
-
-| Semantic token | Light canvas | Dark canvas |
+| Token | Value | Role |
 | --- | --- | --- |
-| `popover` | `chalk` | `#1D1D1B` |
-| `popover-foreground` | `paper-ink` | `shell-ink` |
-| `overlay` | `rgba(11,11,11,0.42)` | `rgba(0,0,0,0.64)` |
-| `selection` | `interaction-accent-soft` | `#243B3D` |
-| `selection-foreground` | `#243F42` | `#CFE0DE` |
-| `sidebar-background` | `ink` | `ink` |
-| `sidebar-foreground` | `shell-ink` | `shell-ink` |
-| `sidebar-primary` | `interaction-accent` | `#6F9192` |
-| `sidebar-primary-foreground` | `#FFFFFF` | `ink` |
-| `sidebar-accent` | `rgba(255,255,255,0.09)` | same |
-| `sidebar-accent-foreground` | `shell-ink` | same |
-| `sidebar-border` | `rgba(255,255,255,0.12)` | same |
-| `sidebar-ring` | `#8AA4A4` | same |
-| `chart-1…6` | person lilac, rose, moss, amber, slate, clay | same primitives, used on dark canvas |
+| `interaction-accent` | `#315F86` | focus, selection, links, cited evidence |
+| `interaction-accent-hover` | `#244B6D` | accent hover/pressed |
+| `interaction-accent-soft` | `#E8F0F6` | selected or cited surface |
+| `critical` | `#B83232` | destructive/error only |
+| `success` | `#207044` | verified/ready only |
+| `warning` | `#9A6518` | blocked/partial only |
 
-Native text selection uses `selection`; the cited-result marker still uses the stronger `primary`. Status surfaces map to the explicit critical/success/warning pairs rather than overloading relationship colors.
+Primary actions are ink, not blue. Blue should answer a specific question:
+where focus is, what is selected, what is linked, or which evidence matched.
+Status colors always appear with text or an icon.
 
-### Typography
+Avatars and ordinary charts are grayscale. Additional series color is allowed
+only when a real analytical view cannot remain legible without it; it must be
+documented as a semantic extension rather than selected from a decorative
+palette.
 
-- Display/editorial: the system-local serif stack `ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif`.
-- Product UI: the system-local stack `-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif`.
-- System truth: the system-local stack `"SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace`.
-- No font may load from a remote CDN. A named product font may replace a stack only after its files are checked into the product and covered by the release artifact checks.
+## Typography
 
-Roles:
+Use the system sans stack for all product and marketing text:
 
-| Role | Size / line | Weight | Face |
-| --- | --- | --- | --- |
-| Display XL | 64 / 64 | 400 | serif |
-| Display L | 48 / 52 | 400 | serif |
-| Page title | 32 / 36 | 400 | serif |
-| Story title | 24 / 28 | 400 | serif |
-| UI title | 20 / 24 | 600 | sans |
-| Section | 14 / 20 | 600 | sans |
-| Body | 14 / 20 | 400 | sans |
-| Compact body | 13 / 20 | 400 | sans |
-| Label | 12 / 16 | 600 | sans |
-| Metadata | 11 / 16 | 450 | sans |
-| Mono metadata | 11 / 16 | 450 | mono |
+`-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif`
 
-Serif is reserved for brand, Search opening statement, dossier title, Wrapped storytelling, and large statistics. It never labels controls, filters, settings rows, or dense lists. Mono is limited to timestamps, years, versions, paths, counts in progress displays, and diagnostics.
+Use the system mono stack only for paths, versions, timestamps, identifiers,
+diagnostics, and fixed-width numeric readouts. No remote font requests are
+allowed. Serif is not part of the current product language.
 
-### Spacing and layout
+| Role | Size / line | Weight |
+| --- | --- | --- |
+| Display | `32 / 38` | 600–650 |
+| Feature | `28 / 34` | 600–650 |
+| Page title | `22 / 28` | 600–650 |
+| Story title | `18 / 24` | 600 |
+| UI title | `16 / 22` | 600 |
+| Body | `13 / 20` | 400 |
+| Label | `12 / 16` | 600 |
+| Metadata | `11 / 16` | 400–600 |
 
-Base unit: 4px. The shared scale is `space-1…12` = `4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96px`. Components use these tokens rather than one-off spacing values.
+Marketing displays may scale above 32px while retaining the same face and
+weight discipline. Interface text must not fall below 11px. Uppercase and
+tracking are limited to short metadata, never paragraphs or main navigation.
 
-- Sidebar: 232px expanded, 56px compact.
-- List pane: 320px default; 280px minimum; 360px maximum.
-- Main content max width: 1180px.
-- Reading column: 680px maximum.
-- Desktop canvas padding: 40px.
-- Compact canvas padding: 24px.
-- Dense list row: 52–64px.
-- Standard control height: 36px; compact: 28px; prominent search: 56px.
-- 12-column desktop grid, 24px gutters; 8-column compact, 16px gutters.
+## Spacing and layout
 
-### Shape, rules, elevation
+The base unit is 4px. Use the shared `space-1` through `space-12` scale:
 
-Radii:
+`4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96px`
 
-- hairline detail: 2px;
-- controls: 4px;
-- panels and message records: 6px;
-- onboarding artifact only: 12px;
-- full pill: only a status dot or a control whose semantics require a capsule;
-- circle: avatars and icon-only controls only.
+- Group label and value at 4–8px.
+- Separate controls within one task at 8–12px.
+- Separate component groups at 16–24px.
+- Separate page regions at 32–48px.
+- Use 64–96px only for public-page sections or intentional empty space.
+- Align repeated rows to the same inset and baseline.
+- Prefer rule-separated rows over isolated cards.
+- Keep reading columns narrow enough to scan; dense data panes may be wider.
 
-Use 1px rules for grouping. Standard cards have no shadow. Elevation tokens:
+Standard control height is 36px, compact control height is 28px, and prominent
+search height is 48–52px. Dense list rows are 52–64px. Desktop content padding
+is 32–40px; compact padding is 20–24px.
 
-- `shadow-floating`: `0 12px 32px rgba(11,11,11,0.14)` for menus/popovers;
-- `shadow-modal`: `0 24px 64px rgba(11,11,11,0.22)` for dialogs/sheets;
-- `shadow-artifact`: `0 18px 50px rgba(11,11,11,0.12)` only when a Wrapped/export artifact is visibly presented above a surface.
+The Mac window supports 900×640 and above. At widths below 1040px, navigation
+collapses to its icon rail and master-detail screens show one pane at a time.
+Flexible text cells always use `min-width: 0`; one-line names and metadata
+truncate, prose wraps, and trailing dates or actions never shrink. Control
+groups wrap before they can force horizontal scrolling.
 
-Folio edges use at most two pseudo-layers, offset 2px and 4px. They cannot become generic stacked-card decoration.
+Page headers use one eyebrow, one title, and at most one metadata line. Do not
+repeat the destination name as a folio mark, eyebrow, and title. Reserve the
+OpenFolio mark for setup and other genuine brand moments.
 
-### Motion
+## Shape and elevation
+
+- Hairline details: 2px radius.
+- Controls and panels: 4px radius.
+- Pills: only status, filters, or true capsule controls.
+- Circles: only avatars, status dots, and icon-only controls.
+- Standard cards and rows: no shadow.
+- Menus/popovers: `shadow-floating`.
+- Dialogs/sheets: `shadow-modal`.
+
+Do not stack rounded rectangles. If a parent surface already groups content,
+use spacing and rules inside it.
+
+## Motion
+
+Motion confirms state; it does not provide atmosphere.
 
 | Token | Duration | Use |
 | --- | --- | --- |
 | `motion-instant` | 80ms | press/selection response |
 | `motion-fast` | 120ms | hover/focus color |
-| `motion-base` | 180ms | pane/result transition |
-| `motion-slow` | 240ms | dialog/sheet |
-| `motion-story` | 420ms | Wrapped reveal only |
+| `motion-base` | 180ms | pane or result transition |
+| `motion-slow` | 240ms | dialog or sheet |
 
-Use cubic bezier `(0.2, 0, 0, 1)` for entry and `(0.4, 0, 1, 1)` for exit. No default spring, bounce, parallax, looping background, or decorative cursor animation. Message-strata import motion may grow only as real progress changes.
+No bounce, parallax, looping background, decorative cursor motion, or default
+spring. Under `prefers-reduced-motion`, remove translation and sequencing.
 
-Under `prefers-reduced-motion: reduce`, remove translation and sequencing; retain immediate opacity/state changes under 80ms.
+## Language
 
-### Layer order
+Name the user’s task directly. Prefer:
 
-Use component-managed overlay layers. Conceptual order: canvas 0, sticky header 10, sidebar 20, popover 40, dialog 50, toast 60, macOS drag region 70. Page code must not invent arbitrary z-index values.
+- Search
+- Evidence
+- People
+- Conversations
+- Year in review
+- Messages access
+- Local index
+- Open original conversation
 
-## Signature motif: message strata
+Do not use faux-archival labels such as “Folio 001,” “Recall Index,” “Source
+Leaf,” “Person Dossier,” or “Evidence Archive.” Avoid language that implies the
+product interprets relationships or generates truth. Keep strong product lines
+when they are concrete, including “Find the message. Keep the context.”
 
-Message strata are thin bars derived from message counts over fixed time buckets.
+Privacy copy distinguishes the installed app from the website and download
+flow. “Zero network” is a release claim backed by the signed-artifact process,
+not a decorative badge.
 
-- Each bar represents the same duration within one instance.
-- Height or darkness represents count normalized within that instance.
-- A gap means zero records, not missing data.
-- Person strata use the assigned person color only for one selected layer; the rest remains monochrome.
-- Global strata use monochrome with oxidized teal only for the selected interval.
-- Always provide a text summary or accessible chart label. The motif is not the only carrier of data.
-- Never describe it as audio, sentiment, heart rate, or relationship strength.
-- Skeletons may imitate the geometry but cannot imply fake data.
+## Core patterns
 
-## Component rules
+### Navigation
 
-The renderer is a Tailwind v4 shadcn project. Reuse existing primitives and add missing shadcn components before making bespoke equivalents. Styling flows through semantic tokens; `className` is for layout/spacing. Forms use accessible grouped field primitives. Dialogs and sheets always have titles. Avatars always have fallbacks.
+The sidebar is a neutral surface divided by one hairline. The selected item has
+a subtle neutral/blue-soft background and a 2px accent marker. Icons and labels
+stay monochrome. Local readiness uses a semantic status with text.
 
-### Shell and navigation
+### Search and evidence
 
-- Sidebar is graphite/ink, flat, and rule-separated.
-- Active item uses a 2px interaction-accent left marker plus a subtle light surface. It is not a large colored pill.
-- Icons are monochrome and 16px. Labels remain visible until compact mode.
-- Local status uses text plus icon; color is never the only status indicator.
+Search is the default page. The field is prominent but flat. Results are
+rule-separated rows. Selection uses the soft accent and a 2px marker. The exact
+cited message uses the same evidence accent; surrounding context stays neutral.
+Match type and timestamps use metadata sizing, never tiny decorative labels.
 
-### Search field
+### People and conversations
 
-- 56px high on pristine Search, 44px after results appear.
-- Leading search icon, text input, clear action when non-empty, `⌘K` hint when empty.
-- 1px border; interaction-accent focus ring; no outer shadow at rest.
-- Submit on Enter. Search-as-you-type starts after 180ms, while Enter runs immediately.
-- A loading spinner may replace the shortcut hint but must not shift layout.
+People are records, not dossiers. Use grayscale avatars, direct headings, and
+stable rows. Conversations prioritize chronology and cited-message navigation.
+Avoid bubble decoration when a simple aligned transcript is clearer.
 
-### Buttons
+### Settings and onboarding
 
-- Primary: interaction-accent fill; one primary action per local region.
-- Secondary: transparent/paper with border.
-- Quiet: text/icon with transparent background.
-- Destructive: critical color only after explicit destructive intent.
-- Rectangular 4px radius; 36px default, 28px compact.
-- Loading state preserves label width, uses spinner, and disables repeat activation.
+Group settings by task with headings and rules, not nested cards. Put status
+beside the control it explains. Onboarding is one calm column or split layout,
+at most two actions per step, and always explains access before requesting it.
 
-### Filters and segmented controls
+### Public website
 
-- 2–7 mutually exclusive options use a segmented/toggle group.
-- Multi-select filters use a popover with checkboxes and a count.
-- Applied values use removable chips.
-- Never render a wall of individually toggled buttons.
+Use one continuous neutral canvas with thin section boundaries. Keep the hero
+type disciplined, the product demo flat, and the main CTA ink. Use the accent
+for links, focus, and selected evidence. The website demonstrates the same
+search-to-source loop as the app and preserves the exact privacy boundary.
 
-### Results and citations
+## Accessibility and review
 
-- Results are separated by rules, not floating cards.
-- Selected result gets an interaction-accent marker and `interaction-accent-soft` surface.
-- Snippet is at most three lines in the list; full context belongs in evidence preview.
-- Matched text uses font weight plus a low-contrast interaction-accent background, never color alone.
-- Citation metadata is compact sans or mono for timestamp.
-- The `Open in conversation` action is always text-labeled.
+- Keyboard focus is always visible with the accent ring.
+- Text and controls meet WCAG AA contrast.
+- Color is never the only state carrier.
+- Icon-only controls have accessible names.
+- Dialogs and sheets have visible or programmatic titles.
+- Layouts remain usable at compact Mac window sizes and mobile web widths.
+- Visual QA covers Search, People, Conversations, Year in review, Settings,
+  onboarding, and the homepage before merge.
 
-### Person identity
+## Anti-patterns
 
-- Avatar uses photo when locally available; fallback initials plus deterministic person color.
-- Dossier header uses one person-color edge and message strata, not a full colorful gradient.
-- Unknown contacts use handle-derived initials or `?` plus an explicit `Unknown contact` label.
-- Identity editing occurs in a titled sheet or edit section, not permanent form fields.
+Reject a change when it introduces:
 
-### Conversation evidence
-
-- Incoming and outgoing records differ through alignment, a subtle surface tone, and sender label in groups.
-- Maximum message block width: 72% on wide panes, 88% compact.
-- Message blocks have 6px corners, no bubble tails, and no bright blue fill.
-- Date separators are horizontal rules with a centered date.
-- The cited message gets a 2px interaction-accent outline and `Source match` label; surrounding messages remain visually quieter.
-- Attachments use a document row with type icon, filename/type, and timestamp. Unsupported attachments are not shown as broken images.
-
-### Cards, empty states, loading, and feedback
-
-- Use full Card composition only for true artifacts or major grouped modules.
-- Use separators/list rows for most settings, results, and data.
-- Empty states use the shadcn Empty pattern, one quiet strata graphic at most, a concrete explanation, and one next action.
-- Loading uses Skeleton for stable layouts and Spinner for indeterminate actions. No fake data values.
-- Alerts explain blocked/partial local states. Toasts confirm completed actions; persistent problems stay inline.
-- Status badges always include readable text (`Ready`, `Partial`, `Needs access`).
-
-### Charts and Wrapped
-
-- Axes, grids, and unselected data are gray.
-- One active series uses oxidized teal; people use deterministic person colors.
-- No gradients, glow, faux 3D, smoothed lines that obscure discrete truth, or default Recharts tooltips.
-- Heatmap scale: paper → mist → graphite → ink; selected cell oxidized teal.
-- Wrapped may use large serif type, asymmetry, cropping, and full-bleed strata, but every statistic remains labeled and deterministic.
-
-## Page wireframes and content hierarchy
-
-### Search, pristine
-
-```text
-┌──────────────┬──────────────────────────────────────────────────────────┐
-│ OpenFolio    │                                                          │
-│              │        OpenFolio remembers who told you what.            │
-│ Search       │        [ Search your iMessage history…            ⌘K ]   │
-│ People       │        the ramen place Jordan recommended                │
-│ Conversations│        who told me about the red-eye to Tokyo            │
-│ Wrapped      │                                                          │
-│              │        Your messages and search index stay on this Mac.  │
-│ On this Mac  │                                                          │
-│ Settings     │                                                          │
-└──────────────┴──────────────────────────────────────────────────────────┘
-```
-
-Hierarchy: statement → query → examples → privacy. No summary cards, recent searches, reminders, or relationship judgments.
-
-### Search, results
-
-```text
-┌──────────────┬──────────────────────────────────────┬───────────────────┐
-│ navigation   │ Search                               │ Evidence          │
-│              │ [ ramen place Jordan…             ] │ Jordan · Dinner   │
-│              │ Type  Person  Conversation  Date     │ Mar 14, 2024      │
-│              │ 18 matches · local semantic ready   │                   │
-│              │ ───────────────────────────────────  │ before context    │
-│              │ Jordan Lee · Mar 14, 2024            │ MATCHED MESSAGE   │
-│              │ “...try the place on Clement...”     │ after context     │
-│              │ Related wording                      │                   │
-│              │ ───────────────────────────────────  │ [Open conversation]│
-│              │ next result                          │                   │
-└──────────────┴──────────────────────────────────────┴───────────────────┘
-```
-
-Below 1180px, evidence opens as a titled Sheet. Below 760px, filters collapse into one `Filters` button and results use the full pane.
-
-### People index and dossier
-
-```text
-┌──────────────┬───────────────────┬──────────────────────────────────────┐
-│ navigation   │ People            │ SARAH KANG DOSSIER                   │
-│              │ [Search people]   │ [avatar] Sarah Kang        [Edit]   │
-│              │ Recent ▾          │ message strata                       │
-│              │ ───────────────   │ 1,284 messages · Jun 2023–Jul 2026  │
-│              │ Sarah Kang        │ ───────────────────────────────────  │
-│              │ Jordan Lee        │ First / Last / Rhythm / Balance      │
-│              │ Unknown contact   │ Conversations                        │
-│              │                   │ [Search Sarah's messages…]           │
-│              │                   │ Identity & aliases                   │
-│              │                   │ Private notes (collapsed)            │
-└──────────────┴───────────────────┴──────────────────────────────────────┘
-```
-
-Hierarchy: identity → evidence-based summary → conversations/search → identity maintenance → secondary private data.
-
-### Conversations
-
-```text
-┌──────────────┬────────────────────┬─────────────────────────────────────┐
-│ navigation   │ Conversations      │ Sarah Kang                          │
-│              │ [Search threads]   │ 1,284 messages · Jun 2023–Jul 2026 │
-│              │ Sarah Kang         │ ───────── Mar 14, 2024 ─────────── │
-│              │ Dinner group       │ Sarah  try the place on Clement     │
-│              │ +1 415…            │        Thu 7:42 PM                  │
-│              │                    │             You  that looks great   │
-│              │                    │        [Source match]                │
-│              │                    │ [Newer] [Older]                     │
-└──────────────┴────────────────────┴─────────────────────────────────────┘
-```
-
-Hierarchy: thread identity → archive context → chronological evidence → paging. No composer.
-
-### Wrapped
-
-```text
-┌──────────────┬──────────────────────────────────────────────────────────┐
-│ navigation   │ YOUR 2026                                      ‹ 2026 › │
-│              │ 7,532 messages across 163 conversations                 │
-│              │                                                          │
-│              │ THIS WAS A MARCH YEAR.                                   │
-│              │ March held 2,104 messages, your busiest month.           │
-│              │                                                          │
-│              │ [message strata — full width]                            │
-│              │ Top people           Monthly arc                         │
-│              │ Daily rhythm         Activity calendar                   │
-└──────────────┴──────────────────────────────────────────────────────────┘
-```
-
-Hierarchy: year → deterministic story → signature motif → supporting evidence. Empty year states remain editorial and factual.
-
-### Settings
-
-```text
-┌──────────────┬──────────────────────────────────────────────────────────┐
-│ navigation   │ Settings                                                 │
-│              │ Privacy & Local Data                                     │
-│              │ Messages database     Read-only · Granted                │
-│              │ OpenFolio database    [Reveal in Finder]                 │
-│              │ Network              No app connections                  │
-│              │ ───────────────────────────────────────────────────────  │
-│              │ Sources / Search Index / Appearance / Advanced / About  │
-│              │ Release address      [Copy address]                      │
-└──────────────┴──────────────────────────────────────────────────────────┘
-```
-
-Hierarchy: privacy truth → source control → search health → appearance → advanced local tools → app version/manual replacement instructions and non-clickable release address.
-
-### Onboarding
-
-One centered 760px folio artifact inside the graphite shell. The left third shows step number and message strata; the right two-thirds contain one title, disclosure, status/progress, and actions. At most two actions per step. Back is available except during a destructive/cancellation confirmation.
-
-### Website
-
-Black outer field; warm paper sections framed as artifacts. Hero uses a 12-column grid: copy spans 6, a Search-to-citation product crop spans 6. Subsequent sections alternate full-width editorial statements and cropped app evidence. Wrapped provides the only substantially colorful section. Mobile ordering is copy → evidence → proof.
-
-## Accessibility
-
-- Target WCAG 2.2 AA. Body text and essential controls meet 4.5:1; large display text 3:1; focus and UI boundaries 3:1 against adjacent colors.
-- Every interactive element is keyboard reachable in a logical order. Visible focus uses a 2px interaction-accent ring with 2px offset.
-- `⌘K` has menu/shortcut semantics; all pointer-only hover information is also available on focus.
-- Minimum target: 36×36px in the desktop app, 44×44px on touch-capable website layouts.
-- Icon-only actions require an accessible name and tooltip; destructive actions require text in confirmation.
-- Color never independently communicates sender, selection, status, heatmap value, or match type.
-- Results and import progress announce updates through polite live regions; do not announce every keystroke.
-- Search highlights use `<mark>` semantics; cited messages expose `aria-current="true"` or equivalent selection state.
-- Charts have a concise summary plus an accessible data table or list.
-- Dates use locale-aware display and machine-readable timestamps. Do not use relative dates without an exact accessible label.
-- Respect macOS increased contrast, reduced transparency, and reduced motion where Electron exposes them.
-
-## Responsiveness
-
-The Mac app supports 760×560 minimum and scales through large desktop windows.
-
-- `≥1180px`: sidebar + list/results + detail/preview when the page benefits from three panes.
-- `900–1179px`: sidebar + primary content; details use Sheet or replace the content pane with a clear Back action.
-- `760–899px`: 56px compact sidebar; single content pane; filters collapse; 24px page padding.
-- Never horizontally compress a reading pane below 420px. Replace panes instead.
-- Wrapped grids move 4 → 2 → 1 columns without reordering the story.
-- Website breakpoints follow content rather than matching the Electron panes; mobile starts below 768px.
-- Text zoom to 200% must not hide controls or require two-dimensional scrolling outside charts/code/path fields.
+- a one-off color, radius, shadow, or spacing scale;
+- blue on a surface that is neither interactive nor evidentiary;
+- semantic red/green/amber as decoration;
+- metadata below 11px in the product UI;
+- a card where spacing and one rule would group the content;
+- editorial metaphors that make the task less clear;
+- public privacy language stronger than the current release evidence.

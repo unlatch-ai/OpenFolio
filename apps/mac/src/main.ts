@@ -200,8 +200,8 @@ function createWindow() {
   const browserWindow = new BrowserWindow({
     width: 1360,
     height: 900,
-    minWidth: 1100,
-    minHeight: 720,
+    minWidth: 900,
+    minHeight: 640,
     titleBarStyle: "hiddenInset",
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.cjs"),

@@ -1,63 +1,63 @@
 :root {
   --ink: #0b0b0b;
-  --carbon: #151515;
-  --graphite: #292927;
-  --ash: #686864;
-  --mist: #d9d7d1;
-  --paper: #f3f1eb;
-  --chalk: #faf9f6;
-  --paper-ink: #141412;
-  --shell-ink: #f5f4f0;
+  --carbon: #1a1a19;
+  --graphite: #52514e;
+  --ash: #898781;
+  --mist: #e1e0d9;
+  --paper: #f9f9f7;
+  --chalk: #fcfcfb;
+  --paper-ink: #0b0b0b;
+  --shell-ink: #0b0b0b;
 
-  /* Oxidized teal: quiet against warm paper, legible on graphite. */
-  --interaction-accent: #36575a;
-  --interaction-accent-hover: #294548;
-  --interaction-accent-soft: #dfe8e5;
+  /* One cool blue marks focus, selection, and source evidence only. */
+  --interaction-accent: #315f86;
+  --interaction-accent-hover: #244b6d;
+  --interaction-accent-soft: #e8f0f6;
 
-  --critical: #9b353d;
-  --critical-soft: #f3e3e3;
-  --success: #56715b;
-  --success-soft: #e4eae3;
-  --warning: #9a6a27;
-  --warning-soft: #f0e7d7;
+  --critical: #b83232;
+  --critical-soft: #f9eaea;
+  --success: #207044;
+  --success-soft: #e9f4ed;
+  --warning: #7c4d0f;
+  --warning-soft: #f8f0df;
 
-  --person-lilac: #a999e8;
-  --person-rose: #c88791;
-  --person-moss: #7d947c;
-  --person-amber: #c89a55;
-  --person-slate: #7389a9;
-  --person-clay: #b77759;
+  --person-lilac: #d6d5d0;
+  --person-rose: #c9c8c2;
+  --person-moss: #dcdbd6;
+  --person-amber: #bdbcb6;
+  --person-slate: #d2d1cc;
+  --person-clay: #c4c3bd;
 
   --background: var(--paper);
   --foreground: var(--paper-ink);
   --card: var(--chalk);
   --card-foreground: var(--paper-ink);
-  --muted: #e9e6de;
-  --muted-foreground: #686760;
-  --border: rgba(20, 20, 18, 0.13);
-  --input: rgba(20, 20, 18, 0.18);
-  --primary: var(--interaction-accent);
-  --primary-hover: var(--interaction-accent-hover);
+  --muted: #f1f1ee;
+  --muted-foreground: #686762;
+  --border: #e1e0d9;
+  --input: #cfcec7;
+  --primary: var(--ink);
+  --primary-hover: var(--graphite);
   --primary-foreground: #ffffff;
-  --secondary: #eae7e0;
+  --secondary: #f1f1ee;
   --secondary-foreground: var(--paper-ink);
   --accent: var(--interaction-accent-soft);
-  --accent-foreground: #243f42;
+  --accent-foreground: #244b6d;
   --ring: var(--interaction-accent);
   --destructive: var(--critical);
   --popover: var(--chalk);
   --popover-foreground: var(--paper-ink);
   --selection: var(--interaction-accent-soft);
-  --selection-foreground: #243f42;
-  --sidebar: var(--ink);
-  --sidebar-background: var(--ink);
-  --sidebar-foreground: var(--shell-ink);
+  --selection-foreground: #183a57;
+  --sidebar: var(--chalk);
+  --sidebar-background: var(--chalk);
+  --sidebar-foreground: var(--paper-ink);
   --sidebar-primary: var(--interaction-accent);
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: rgba(255, 255, 255, 0.09);
-  --sidebar-accent-foreground: var(--shell-ink);
-  --sidebar-border: rgba(255, 255, 255, 0.12);
-  --sidebar-ring: #8aa4a4;
+  --sidebar-accent: #f1f1ee;
+  --sidebar-accent-foreground: var(--paper-ink);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--interaction-accent);
   --radius: 4px;
 
   /* One 4px rhythm. Token names increase by one base unit until 24px,
@@ -77,30 +77,33 @@
 
   --radius-hairline: 2px;
   --radius-control: 4px;
-  --radius-panel: 6px;
-  --radius-onboarding: 12px;
+  --radius-panel: 4px;
+  --radius-onboarding: 4px;
 
   /* System-local stacks keep the zero-network promise true at render time. */
   --font-editorial:
-    ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial,
+    sans-serif;
   --font-interface:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial,
     sans-serif;
   --font-system:
     "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
 
-  --type-display-size: 48px;
-  --type-display-line: 52px;
-  --type-feature-size: 40px;
-  --type-feature-line: 40px;
-  --type-page-size: 32px;
-  --type-page-line: 36px;
-  --type-story-size: 24px;
-  --type-story-line: 28px;
-  --type-ui-title-size: 20px;
-  --type-ui-title-line: 24px;
+  --type-display-size: 32px;
+  --type-display-line: 38px;
+  --type-feature-size: 28px;
+  --type-feature-line: 34px;
+  --type-page-size: 22px;
+  --type-page-line: 28px;
+  --type-story-size: 18px;
+  --type-story-line: 24px;
+  --type-ui-title-size: 16px;
+  --type-ui-title-line: 22px;
   --type-body-size: 13px;
   --type-body-line: 20px;
+  --type-compact-size: 13px;
+  --type-compact-line: 20px;
   --type-label-size: 12px;
   --type-label-line: 16px;
   --type-meta-size: 11px;
@@ -115,14 +118,15 @@
 
   --shadow-floating: 0 12px 32px rgba(11, 11, 11, 0.14);
   --shadow-modal: 0 24px 64px rgba(11, 11, 11, 0.22);
-  --shadow-artifact: 0 18px 50px rgba(11, 11, 11, 0.12);
+  --shadow-artifact: none;
   --motion-instant: 80ms;
   --motion-fast: 120ms;
   --motion-base: 180ms;
   --motion-slow: 240ms;
 }
 
-/* Warm paper is the only shipped content canvas in this visual slice. */
+/* The shipped interface is intentionally light-only until a complete dark
+   neutral system is designed and verified. */
 [data-theme="dark"] {
   color-scheme: light;
 }

@@ -11,7 +11,6 @@ import { describeSearchScale } from "../search-results";
 import { formatDiagnosticsReport } from "../diagnostics";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { FolioMark } from "./FolioMark";
 
 const RELEASE_ADDRESS =
   "https://github.com/unlatch-ai/OpenFolio/releases/latest";
@@ -125,14 +124,13 @@ export function SettingsView() {
   return (
     <main className="settings-view">
       <header className="page-header">
-        <FolioMark number="05" label="LOCAL CONTROL" />
         <p className="eyebrow">Trust & local control</p>
         <h1>Settings</h1>
       </header>
       <div className="settings-content">
         <SettingsSection title="Privacy & Local Data">
           <SettingsRow
-            title="Private archive"
+            title="Local message library"
             detail={
               <p>
                 OpenFolio reads the iMessage database already stored on this Mac
@@ -214,7 +212,7 @@ export function SettingsView() {
               <p>
                 {importJob
                   ? `${importJob.importedMessages.toLocaleString()} messages and ${importJob.importedThreads.toLocaleString()} conversations processed`
-                  : "Build or refresh the private local archive."}
+                  : "Build or refresh the local message library."}
               </p>
             }
           >
@@ -316,12 +314,12 @@ export function SettingsView() {
             title="Content canvas"
             detail={
               <p>
-                Warm paper with a fixed graphite navigation shell. Additional
-                appearance modes are not enabled in this release.
+                A quiet grayscale interface with blue reserved for focus,
+                selection, and source evidence.
               </p>
             }
           >
-            <Badge variant="secondary">Warm paper</Badge>
+            <Badge variant="secondary">Grayscale</Badge>
           </SettingsRow>
         </SettingsSection>
 

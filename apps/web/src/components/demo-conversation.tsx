@@ -24,7 +24,7 @@ export function DemoConversation() {
           <span className="is-active">Search <kbd>⌘K</kbd></span>
           <span>People</span>
           <span>Conversations</span>
-          <span>Wrapped</span>
+          <span>Year in review</span>
         </nav>
         <p className="demo-status"><i /> On this Mac · Ready</p>
       </div>

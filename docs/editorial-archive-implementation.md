@@ -1,7 +1,13 @@
-# Editorial Archive Implementation Plan
+# Evidence-first Implementation Plan
 
-Status: implemented on the current development branch July 2026; signed-release verification pending
+Status: historical implementation plan; core product slices are implemented on
+`main` and the v0.4.0 release candidate is staged as a draft
 Inputs: [product-contract.md](./product-contract.md), [editorial-archive-design-system.md](./editorial-archive-design-system.md)
+
+The original graphite-shell and warm-paper visual direction in this plan has
+been superseded by the current grayscale-first design system. The behavioral,
+privacy, search, and release requirements below remain historical context and
+must not be read as the current visual specification.
 
 ## Ground rules
 

@@ -3,7 +3,7 @@
 The current product direction is defined by:
 
 - [Product contract](./product-contract.md)
-- [Editorial Archive design system](./editorial-archive-design-system.md)
+- [Design system](./editorial-archive-design-system.md)
 - [Implementation plan](./editorial-archive-implementation.md)
 
 ## Current milestone: Evidence-first search
@@ -22,20 +22,20 @@ Status: implemented in `main`; release verification pending.
   calls, no runtime model fetch, no automatic update check/download, and no
   HTTP(S) handoff to another app.
 
-## Editorial Archive renderer
+## Quiet local renderer
 
-Status: implemented in `main`; release verification pending.
+Status: visual-language follow-up in progress after v0.4.0.
 
-- Apply the graphite shell, warm paper canvas, oxidized-teal interaction system, local
-  serif/sans/mono fonts, restrained rules, and message-strata motif.
+- Apply the shared grayscale surfaces, hairline hierarchy, system sans type,
+  restrained steel-blue evidence state, and consistent 4px spacing rhythm.
 - Rebuild onboarding around first successful search.
-- Present People as dossiers and Conversations as the evidence archive.
-- Rebuild Wrapped as a deterministic editorial annual artifact.
+- Present People and Conversations with direct language and evidence-first rows.
+- Present Year in review as deterministic local analytics.
 - Reorganize Settings around privacy truth and local control.
 
 ## Public surface alignment
 
-Status: implemented in `main`; publish with the verified Mac release.
+Status: implemented foundation in v0.4.0; visual-language follow-up in progress.
 
 - Lead the website and README with `OpenFolio remembers who told you what.`
 - Demonstrate query → evidence → original conversation.

@@ -35,7 +35,7 @@ function messagesStep(input: OnboardingInput): OnboardingStep {
     title: "Allow read-only access to Messages",
     description: granted
       ? "OpenFolio can read the Messages database already stored on this Mac."
-      : input.messagesStatus?.details || "OpenFolio needs Full Disk Access to read the Messages database already stored on this Mac.",
+      : "OpenFolio needs Full Disk Access to read Messages on this Mac. Enable access, then return here and try again.",
     status: granted ? "complete" : "active",
     required: true,
     actionLabel: granted ? "Recheck" : "Grant access",
@@ -54,7 +54,7 @@ function importStep(input: OnboardingInput, messagesGranted: boolean): Onboardin
     id: "import",
     title: "Build your private archive",
     description: failed
-      ? input.importJob?.error || "Import failed. Retry after fixing the issue."
+      ? "The import did not finish. Retry once. If it fails again, restart OpenFolio, recheck Messages access, and try again."
       : cancelled
         ? "Import was cancelled. Retry when you are ready."
         : imported
@@ -78,7 +78,7 @@ function contactsStep(input: OnboardingInput, requiredDone: boolean): Onboarding
     description: synced
       ? `${input.contactsSync?.importedContacts ?? 0} contacts synced locally.`
       : needsSettings || input.contactsStatus?.status === "unsupported"
-        ? input.contactsStatus?.details ?? "Contacts access is unavailable."
+        ? "Contacts access is unavailable. You can continue without it or change access in System Settings."
       : "Apple Contacts can match phone numbers and email addresses to names. Contact data stays on this Mac.",
     status: synced ? "complete" : granted ? "active" : needsSettings ? "blocked" : requiredDone ? "optional" : "waiting",
     required: false,

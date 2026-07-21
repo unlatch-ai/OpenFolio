@@ -10,7 +10,6 @@ import { useAppStore } from "../store";
 import { ContactAvatar, personColor } from "./ContactAvatar";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
-import { FolioMark } from "./FolioMark";
 
 function dateLabel(value: number | null) {
   return value
@@ -99,8 +98,7 @@ function PersonDossier({
         >
           <ArrowLeft />
         </button>
-        <FolioMark number="02A" label="PERSON DOSSIER" />
-        <div className="dossier-kicker">PERSON DOSSIER</div>
+        <p className="eyebrow">Person</p>
         <div className="dossier-identity">
           <ContactAvatar
             name={
@@ -111,7 +109,7 @@ function PersonDossier({
             personId={profile.person.id}
             size={64}
           />
-          <div>
+          <div className="dossier-identity-copy">
             <h1>{profile.person.displayName || "Unknown contact"}</h1>
             <p>
               {profile.person.email ||
@@ -135,7 +133,7 @@ function PersonDossier({
           {dateLabel(profile.summary.lastContactAt)}
         </p>
       </header>
-      <section className="dossier-facts" aria-label="Measured archive facts">
+      <section className="dossier-facts" aria-label="Message activity">
         <div>
           <span>First recorded</span>
           <strong>{dateLabel(profile.summary.firstContactAt)}</strong>
@@ -311,8 +309,7 @@ export function PeopleView() {
     <main className={`people-view ${selectedPersonId ? "has-selection" : ""}`}>
       <aside className="people-index">
         <header>
-          <FolioMark number="02" label="PERSON INDEX" />
-          <p className="eyebrow">Human index</p>
+          <p className="eyebrow">Your contacts</p>
           <h1>People</h1>
           <label className="compact-search">
             <Search />
@@ -381,7 +378,7 @@ export function PeopleView() {
           <div className="archive-empty">
             <MessageSquare />
             <h2>Select a person</h2>
-            <p>People organize the records in your archive.</p>
+            <p>Select someone to see your message history with them.</p>
           </div>
         )}
       </section>
