@@ -29,7 +29,7 @@ export function DemoConversation() {
         <p className="demo-status"><i /> On this Mac · Ready</p>
       </div>
       <div className="demo-content">
-        <div className="demo-kicker"><span>Search</span><span>2 matches</span></div>
+        <div className="demo-kicker"><span>Search</span><span>2 results</span></div>
         <label className="demo-search">
           <Search aria-hidden="true" />
           <span className="sr-only">Example search</span>
@@ -46,7 +46,7 @@ export function DemoConversation() {
         </div>
       </div>
       <aside className="demo-evidence">
-        <div className="demo-kicker"><span>Evidence</span><span>01 / 02</span></div>
+        <div className="demo-kicker"><span>Source message</span></div>
         <p className="demo-date">Friday, April 18</p>
         <p className="context-line">Are you still deciding where to go?</p>
         <blockquote>I still think Aziza in the Richmond is the move. Get the basteeya.</blockquote>

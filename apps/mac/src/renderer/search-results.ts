@@ -1,4 +1,4 @@
-import type { SearchMatchReason, SearchResponse, SearchResult, SearchResultType, SearchScaleStatus } from "@openfolio/shared-types";
+import type { SearchMatchReason, SearchResponse, SearchResult, SearchResultType } from "@openfolio/shared-types";
 import type { SearchFilters } from "./store";
 
 export interface EditorialSearchRequest {
@@ -53,19 +53,13 @@ export function groupSearchResults(results: SearchResult[]) {
   }, {});
 }
 
-export function describeSearchScale(status: SearchScaleStatus) {
-  return status.recommendVectorIndex
-    ? `${status.embeddedDocuments} embedded documents. Run the local benchmark before large-release testing.`
-    : `${status.embeddedDocuments} embedded documents. Current local scan path is acceptable for this scale.`;
-}
-
 export function formatCitationMeta(result: SearchResult) {
   const person = result.citation?.personLabel || result.senderLabel;
   const conversation = result.citation?.conversationLabel || result.sourceLabel || result.title;
   const date = result.occurredAt
     ? new Date(result.occurredAt).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
     : null;
-  return [person, conversation, date].filter(Boolean).join(" · ");
+  return [...new Set([person, conversation, date].filter(Boolean))].join(" · ");
 }
 
 export function highlightSnippet(snippet: string, query: string) {

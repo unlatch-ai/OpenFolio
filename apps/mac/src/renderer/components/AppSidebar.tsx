@@ -59,14 +59,13 @@ export function AppSidebar() {
             : importJob?.status === "cancelled"
               ? ["Import cancelled", "warning"]
               : embeddingSync?.syncing
-                ? ["On this Mac · Indexing", "neutral"]
-                : ["On this Mac · Ready", "success"];
+                ? ["Indexing locally", "neutral"]
+                : ["Ready", "success"];
 
   return (
     <Sidebar collapsible="icon" className="archive-sidebar">
       <SidebarHeader className="archive-sidebar-header">
         <span className="archive-wordmark">OpenFolio</span>
-        <span className="archive-edition">PRIVATE · ON THIS MAC</span>
         <span className="archive-monogram">O</span>
       </SidebarHeader>
       <SidebarContent className="archive-sidebar-content">

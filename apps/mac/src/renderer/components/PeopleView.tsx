@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Edit3, MessageSquare, Search } from "lucide-react";
+import { ArrowLeft, Edit3, MessageSquare, Search, X } from "lucide-react";
 import type {
   EditablePersonProfile,
   Person,
@@ -98,7 +98,6 @@ function PersonDossier({
         >
           <ArrowLeft />
         </button>
-        <p className="eyebrow">Person</p>
         <div className="dossier-identity">
           <ContactAvatar
             name={
@@ -122,8 +121,12 @@ function PersonDossier({
             variant="secondary"
             onClick={() => setEditing((value) => !value)}
           >
-            <Edit3 data-icon="inline-start" />
-            Edit identity
+            {editing ? (
+              <X data-icon="inline-start" />
+            ) : (
+              <Edit3 data-icon="inline-start" />
+            )}
+            {editing ? "Close editor" : "Edit identity"}
           </Button>
         </div>
         <MessageStrata profile={profile} />
@@ -153,7 +156,7 @@ function PersonDossier({
       </section>
       {editing && (
         <section className="identity-editor" aria-label="Edit identity">
-          <h2>Identity & aliases</h2>
+          <h2>Identity</h2>
           <div className="identity-grid">
             <label>
               Name
@@ -191,15 +194,47 @@ function PersonDossier({
                 }
               />
             </label>
+            <label>
+              Company
+              <input
+                value={draft.companyName ?? ""}
+                onChange={(event) =>
+                  setDraft({ ...draft, companyName: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              Role
+              <input
+                value={draft.jobTitle ?? ""}
+                onChange={(event) =>
+                  setDraft({ ...draft, jobTitle: event.target.value })
+                }
+              />
+            </label>
+            <label className="identity-field-wide">
+              Location
+              <input
+                value={draft.location ?? ""}
+                onChange={(event) =>
+                  setDraft({ ...draft, location: event.target.value })
+                }
+              />
+            </label>
           </div>
-          <Button onClick={() => void save()}>Save identity</Button>
+          <div className="identity-actions">
+            <Button onClick={() => void save()}>Save changes</Button>
+            <Button variant="ghost" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          </div>
         </section>
       )}
       <section className="dossier-section">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Source threads</p>
             <h2>Conversations</h2>
+            <p className="section-description">Original threads with this person</p>
           </div>
           <Button
             variant="secondary"
@@ -260,23 +295,53 @@ export function PeopleView() {
   const [sort, setSort] = useState<"recent" | "messages" | "az">("recent");
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [listError, setListError] = useState(false);
+  const [loadRequest, setLoadRequest] = useState(0);
 
   useEffect(() => {
     setLoading(true);
+    setListError(false);
     window.openfolio.people
       .list({ limit: 100, query })
       .then((rows) => {
         setPeople(rows);
-        if (!selectedPersonId && rows[0]) selectPerson(rows[0].id);
+        if (
+          !useAppStore.getState().selectedPersonId &&
+          rows[0] &&
+          window.matchMedia("(min-width: 1040px)").matches
+        ) {
+          selectPerson(rows[0].id);
+        }
+      })
+      .catch(() => {
+        setPeople([]);
+        setListError(true);
       })
       .finally(() => setLoading(false));
-  }, [query, selectPerson, selectedPersonId]);
+  }, [loadRequest, query, selectPerson]);
   useEffect(() => {
     if (!selectedPersonId) {
       setProfile(null);
+      setProfileLoading(false);
       return;
     }
-    window.openfolio.people.getProfile(selectedPersonId).then(setProfile);
+    let active = true;
+    setProfileLoading(true);
+    window.openfolio.people
+      .getProfile(selectedPersonId)
+      .then((nextProfile) => {
+        if (active) setProfile(nextProfile);
+      })
+      .catch(() => {
+        if (active) setProfile(null);
+      })
+      .finally(() => {
+        if (active) setProfileLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [selectedPersonId]);
   useEffect(() => {
     if (sort !== "messages") return;
@@ -309,8 +374,8 @@ export function PeopleView() {
     <main className={`people-view ${selectedPersonId ? "has-selection" : ""}`}>
       <aside className="people-index">
         <header>
-          <p className="eyebrow">Your contacts</p>
           <h1>People</h1>
+          <p className="index-summary">{people.length.toLocaleString()} people from Messages</p>
           <label className="compact-search">
             <Search />
             <input
@@ -366,13 +431,30 @@ export function PeopleView() {
                 )}
               </button>
             ))}
-          {!loading && !sorted.length && (
-            <p className="list-empty">No people matched.</p>
+          {!loading && listError && (
+            <div className="list-empty">
+              <strong>People could not load</strong>
+              <span>Your message library is unchanged.</span>
+              <Button size="sm" variant="secondary" onClick={() => setLoadRequest((value) => value + 1)}>
+                Try again
+              </Button>
+            </div>
+          )}
+          {!loading && !listError && !sorted.length && (
+            <div className="list-empty">
+              <strong>{query ? "No matching people" : "No people yet"}</strong>
+              <span>{query ? "Try another name, email, or phone number." : "Import Messages from Settings to build this list."}</span>
+            </div>
           )}
         </div>
       </aside>
       <section className="dossier-reader">
-        {profile ? (
+        {profileLoading ? (
+          <div className="profile-loading" aria-label="Loading person">
+            <Skeleton className="profile-heading-skeleton" />
+            <Skeleton className="profile-body-skeleton" />
+          </div>
+        ) : profile ? (
           <PersonDossier profile={profile} onBack={() => selectPerson(null)} />
         ) : (
           <div className="archive-empty">

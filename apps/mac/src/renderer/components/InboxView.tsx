@@ -60,10 +60,12 @@ function ConversationArchive({
   threadId,
   citationId,
   onBack,
+  onClearCitation,
 }: {
   threadId: string;
   citationId: string | null;
   onBack: () => void;
+  onClearCitation: () => void;
 }) {
   const [detail, setDetail] = useState<ThreadDetail | null>(null);
   const [messages, setMessages] = useState<MessageDetail[]>([]);
@@ -98,7 +100,7 @@ function ConversationArchive({
   }, [citationId, offset, threadId]);
   useEffect(() => {
     setOffset(0);
-  }, [threadId, citationId]);
+  }, [threadId]);
   useEffect(() => {
     if (!loading && citationId)
       citationRef.current?.scrollIntoView({
@@ -137,7 +139,6 @@ function ConversationArchive({
           <ArrowLeft />
         </button>
         <div>
-          <p className="eyebrow">Original messages</p>
           <h1>{detail.thread.displayName || "Conversation"}</h1>
           <p>
             {detail.participants
@@ -152,16 +153,24 @@ function ConversationArchive({
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => setOffset(Math.max(0, offset - pageSize))}
-            disabled={offset === 0}
+            onClick={() => {
+              if (citationId) onClearCitation();
+              setOffset(citationId ? 0 : Math.max(0, offset - pageSize));
+            }}
+            disabled={!citationId && offset === 0}
           >
             Newer
           </Button>
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => setOffset(offset + pageSize)}
-            disabled={offset + pageSize >= detail.totalMessageCount}
+            onClick={() => {
+              if (citationId) onClearCitation();
+              setOffset(citationId ? pageSize : offset + pageSize);
+            }}
+            disabled={
+              !citationId && offset + pageSize >= detail.totalMessageCount
+            }
           >
             Older
           </Button>
@@ -228,8 +237,13 @@ function ConversationArchive({
 }
 
 export function InboxView() {
-  const { threads, selectedThreadId, selectedMessageId, selectThread } =
-    useAppStore();
+  const {
+    threads,
+    selectedThreadId,
+    selectedMessageId,
+    selectThread,
+    selectMessage,
+  } = useAppStore();
   const [query, setQuery] = useState("");
   const filtered = useMemo(
     () =>
@@ -240,6 +254,16 @@ export function InboxView() {
       ),
     [query, threads],
   );
+
+  useEffect(() => {
+    if (
+      !selectedThreadId &&
+      filtered[0] &&
+      window.matchMedia("(min-width: 1040px)").matches
+    ) {
+      selectThread(filtered[0].threadId);
+    }
+  }, [filtered, selectThread, selectedThreadId]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -264,11 +288,12 @@ export function InboxView() {
               ? filtered.length - 1
               : current - 1;
         selectThread(filtered[next].threadId);
+        selectMessage(null);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [filtered, selectThread, selectedThreadId]);
+  }, [filtered, selectMessage, selectThread, selectedThreadId]);
 
   return (
     <main
@@ -276,8 +301,10 @@ export function InboxView() {
     >
       <aside className="conversation-index">
         <header>
-          <p className="eyebrow">Original records</p>
           <h1>Conversations</h1>
+          <p className="index-summary">
+            {threads.length.toLocaleString()} imported threads
+          </p>
           <label className="compact-search">
             <Search />
             <input
@@ -294,11 +321,25 @@ export function InboxView() {
               key={thread.threadId}
               thread={thread}
               selected={selectedThreadId === thread.threadId}
-              onClick={() => selectThread(thread.threadId)}
+              onClick={() => {
+                selectThread(thread.threadId);
+                selectMessage(null);
+              }}
             />
           ))}
           {!filtered.length && (
-            <p className="list-empty">No conversations found.</p>
+            <div className="list-empty">
+              <strong>
+                {threads.length
+                  ? "No matching conversations"
+                  : "No conversations yet"}
+              </strong>
+              <span>
+                {threads.length
+                  ? "Try a different name or handle."
+                  : "Import Messages from Settings to build this list."}
+              </span>
+            </div>
           )}
         </div>
       </aside>
@@ -307,7 +348,11 @@ export function InboxView() {
           <ConversationArchive
             threadId={selectedThreadId}
             citationId={selectedMessageId}
-            onBack={() => selectThread(null)}
+            onClearCitation={() => selectMessage(null)}
+            onBack={() => {
+              selectThread(null);
+              selectMessage(null);
+            }}
           />
         ) : (
           <div className="archive-empty">

@@ -184,18 +184,44 @@ Search is the default page. The field is prominent but flat. Results are
 rule-separated rows. Selection uses the soft accent and a 2px marker. The exact
 cited message uses the same evidence accent; surrounding context stays neutral.
 Match type and timestamps use metadata sizing, never tiny decorative labels.
+Secondary filters stay collapsed until requested; active filters remain visible
+and removable without reopening the panel. Search results show user-facing
+retrieval language, never raw provider or index status values.
 
 ### People and conversations
 
 People are records, not dossiers. Use grayscale avatars, direct headings, and
 stable rows. Conversations prioritize chronology and cited-message navigation.
 Avoid bubble decoration when a simple aligned transcript is clearer.
+At desktop widths, master-detail views open the most relevant first record so
+the reader is not a dead end. At compact widths, they begin with the index and
+open one reader pane at a time with an explicit back action. Long names,
+handles, previews, dates, and actions must be tested together.
 
 ### Settings and onboarding
 
 Group settings by task with headings and rules, not nested cards. Put status
-beside the control it explains. Onboarding is one calm column or split layout,
-at most two actions per step, and always explains access before requesting it.
+beside the control it explains. Before required setup is complete, do not render
+the application shell or inactive navigation. Onboarding is one centered task
+at a time: welcome, Messages access, local indexing, then ready. The welcome
+screen has one primary action. Permission copy explains read-only access and
+the enforced zero-network boundary before opening System Settings. Never show
+raw filesystem errors, decorative sequence numbers, dashboards, optional
+Contacts setup, or progress accounting such as “0 of 2 required” in first-run
+onboarding.
+
+Settings explain user-controlled behavior rather than the implementation. Raw
+permission errors, database strategy recommendations, renderer styling notes,
+and internal search status values do not belong in the default view. Advanced
+details remain behind a disclosure.
+
+### Screen states
+
+Every primary screen has intentional loading, empty, populated, long-content,
+and recoverable-error states. Empty states explain the next useful action; they
+do not present a blank reader or claim that a failed request returned no data.
+Development-only populated previews exercise these states without reading the
+developer's real Messages database.
 
 ### Public website
 

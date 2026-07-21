@@ -3,17 +3,25 @@ import { Copy, FolderOpen, RefreshCw } from "lucide-react";
 import type {
   LocalDataStatus,
   McpSetupStatus,
+  MessagesAccessStatus,
   SearchScaleStatus,
 } from "@openfolio/shared-types";
 import { toast } from "sonner";
 import { useAppStore } from "../store";
-import { describeSearchScale } from "../search-results";
 import { formatDiagnosticsReport } from "../diagnostics";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 
 const RELEASE_ADDRESS =
   "https://github.com/unlatch-ai/OpenFolio/releases/latest";
+
+function messagesAccessCopy(status: MessagesAccessStatus | null) {
+  if (!status) return "Checking read-only Messages access…";
+  if (status.status === "granted") {
+    return "OpenFolio can read the Messages database on this Mac. It cannot send, edit, or delete messages.";
+  }
+  return "Messages access is off. OpenFolio cannot read or index conversations until Full Disk Access is enabled.";
+}
 
 function SettingsSection({
   title,
@@ -72,18 +80,23 @@ export function SettingsView() {
   const [scale, setScale] = useState<SearchScaleStatus | null>(null);
   const [mcp, setMcp] = useState<McpSetupStatus | null>(null);
   const [mcpAcknowledged, setMcpAcknowledged] = useState(false);
+  const [statusError, setStatusError] = useState(false);
+  const [statusRequest, setStatusRequest] = useState(0);
 
   useEffect(() => {
+    setStatusError(false);
     void Promise.all([
       window.openfolio.localData.getStatus(),
       window.openfolio.search.getScaleStatus(),
       window.openfolio.mcp.getSetup(),
-    ]).then(([data, status, setup]) => {
-      setLocalData(data);
-      setScale(status);
-      setMcp(setup);
-    });
-  }, []);
+    ])
+      .then(([data, status, setup]) => {
+        setLocalData(data);
+        setScale(status);
+        setMcp(setup);
+      })
+      .catch(() => setStatusError(true));
+  }, [statusRequest]);
 
   const importMessages = async () => {
     setBusy(true);
@@ -116,6 +129,8 @@ export function SettingsView() {
         setContactsSync(summary);
         toast.success("Contacts matched locally");
       }
+    } catch {
+      toast.error("Contacts could not be synced. Your message library is unchanged.");
     } finally {
       setBusy(false);
     }
@@ -124,11 +139,26 @@ export function SettingsView() {
   return (
     <main className="settings-view">
       <header className="page-header">
-        <p className="eyebrow">Trust & local control</p>
         <h1>Settings</h1>
+        <p className="page-description">Privacy, sources, and local search</p>
       </header>
       <div className="settings-content">
-        <SettingsSection title="Privacy & Local Data">
+        {statusError && (
+          <div className="settings-status-error" role="status">
+            <span>
+              Some local status could not be read. The controls below are still
+              safe to use.
+            </span>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setStatusRequest((value) => value + 1)}
+            >
+              Try again
+            </Button>
+          </div>
+        )}
+        <SettingsSection title="Privacy and local data">
           <SettingsRow
             title="Local message library"
             detail={
@@ -180,9 +210,7 @@ export function SettingsView() {
         <SettingsSection title="Sources">
           <SettingsRow
             title="Messages"
-            detail={
-              <p>{messagesStatus?.details || "Checking read-only access…"}</p>
-            }
+            detail={<p>{messagesAccessCopy(messagesStatus)}</p>}
           >
             <Badge
               variant={
@@ -253,7 +281,7 @@ export function SettingsView() {
           </SettingsRow>
         </SettingsSection>
 
-        <SettingsSection title="Search Index">
+        <SettingsSection title="Search index">
           <SettingsRow
             title="Exact search"
             detail={
@@ -277,16 +305,18 @@ export function SettingsView() {
           >
             <Badge
               variant={
-                embeddingSync?.lastError
+                !embeddingSync || embeddingSync.lastError
                   ? "secondary"
-                  : embeddingSync?.dirtyDocuments
+                  : embeddingSync.dirtyDocuments
                     ? "secondary"
                     : "success"
               }
             >
-              {embeddingSync?.lastError
+              {!embeddingSync
+                ? "Checking"
+                : embeddingSync.lastError
                 ? "Unavailable"
-                : embeddingSync?.dirtyDocuments
+                : embeddingSync.dirtyDocuments
                   ? "Partial"
                   : "Ready"}
             </Badge>
@@ -301,31 +331,11 @@ export function SettingsView() {
               Refresh
             </Button>
           </SettingsRow>
-          {scale && (
-            <SettingsRow
-              title="Index scale"
-              detail={<p>{describeSearchScale(scale)}</p>}
-            />
-          )}
-        </SettingsSection>
-
-        <SettingsSection title="Appearance">
-          <SettingsRow
-            title="Content canvas"
-            detail={
-              <p>
-                A quiet grayscale interface with blue reserved for focus,
-                selection, and source evidence.
-              </p>
-            }
-          >
-            <Badge variant="secondary">Grayscale</Badge>
-          </SettingsRow>
         </SettingsSection>
 
         <SettingsSection title="Advanced">
           <details className="advanced-disclosure">
-            <summary>Local diagnostics and later interfaces</summary>
+            <summary>Diagnostics and local integrations</summary>
             <SettingsRow
               title="Diagnostics"
               detail={

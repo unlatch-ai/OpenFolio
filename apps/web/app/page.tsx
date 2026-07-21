@@ -44,7 +44,6 @@ export default function HomePage() {
 
       <section className="hero section-frame" aria-labelledby="hero-title">
         <div className="hero-copy">
-          <p className="eyebrow"><span>Open source</span><span>Private iMessage search</span></p>
           <h1 id="hero-title">Search every iMessage on your Mac.</h1>
           <p className="hero-deck">
             Find the person, fact, or message you remember, even when you do
@@ -79,7 +78,7 @@ export default function HomePage() {
 
       <section className="section-frame editorial-section" aria-labelledby="workflow-title">
         <div className="section-heading">
-          <p className="eyebrow"><span>How it works</span><span>Recall to source</span></p>
+          <p className="eyebrow"><span>How it works</span></p>
           <h2 id="workflow-title">Remember. Find. Verify.</h2>
         </div>
         <ol className="process-grid">
@@ -92,7 +91,7 @@ export default function HomePage() {
       <section className="section-frame editorial-section surfaces-section" aria-labelledby="surfaces-title">
         <div className="section-heading split-heading">
           <div>
-            <p className="eyebrow"><span>Your archive</span><span>Four views</span></p>
+            <p className="eyebrow"><span>The app</span></p>
             <h2 id="surfaces-title">Search comes first.</h2>
           </div>
           <p>People organize memory. Conversations preserve evidence. Year in review creates reflection.</p>
@@ -112,7 +111,7 @@ export default function HomePage() {
         <div className="section-frame privacy-grid">
           <div className="privacy-intro">
             <ShieldCheck aria-hidden="true" />
-            <p className="eyebrow"><span>Privacy</span><span>Local by design</span></p>
+            <p className="eyebrow"><span>Privacy</span></p>
             <h2 id="privacy-title">Your archive stays on your Mac.</h2>
             <p>
               The production app is built to deny network access. It reads
@@ -148,7 +147,7 @@ export default function HomePage() {
 
       <section className="closing-section">
         <div className="section-frame closing-grid">
-          <p className="eyebrow"><span>Open source</span><span>AGPL-3.0</span></p>
+          <p className="eyebrow"><span>Open source · AGPL-3.0</span></p>
           <h2>Find the message.<br />Keep the context.</h2>
           <div className="closing-actions">
             <a className="button button-light" href="https://github.com/unlatch-ai/OpenFolio/releases/latest">
