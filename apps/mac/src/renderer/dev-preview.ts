@@ -447,6 +447,7 @@ const completedImport = {
 const embeddingStatus = {
   totalDocuments: 28_743,
   embeddedDocuments: 28_743,
+  semanticIndexedDocuments: 28_743,
   dirtyDocuments: 0,
   provider: "local" as const,
   model: "all-MiniLM-L6-v2",
@@ -480,7 +481,7 @@ const embeddingPlan = {
 
 const updateState = {
   status: "unsupported" as const,
-  currentVersion: "0.4.3",
+  currentVersion: "0.4.4",
   availableVersion: null,
   downloadedVersion: null,
   progress: null,

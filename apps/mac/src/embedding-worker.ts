@@ -1,4 +1,6 @@
-import { LocalEmbeddingEngine } from "@openfolio/core";
+import { installNodeNetworkLock, LocalEmbeddingEngine } from "@openfolio/core";
+
+installNodeNetworkLock();
 
 type EmbeddingWorkerRequest = {
   type: "embed";

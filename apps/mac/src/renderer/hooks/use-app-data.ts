@@ -74,6 +74,7 @@ export function useAppData() {
       setEmbeddingSync({
         totalDocuments: onboardingPreview === "ready" ? 28743 : 0,
         embeddedDocuments: onboardingPreview === "ready" ? 28743 : 0,
+        semanticIndexedDocuments: onboardingPreview === "ready" ? 28743 : 0,
         dirtyDocuments: 0,
         provider: onboardingPreview === "ready" ? "local" : null,
         model: onboardingPreview === "ready" ? "all-MiniLM-L6-v2" : null,
