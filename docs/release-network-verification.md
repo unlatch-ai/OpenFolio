@@ -8,7 +8,7 @@ draft release. Use a clean macOS account or VM with other applications closed.
 1. Record the candidate and environment:
 
    ```bash
-   shasum -a 256 OpenFolio-0.4.2-arm64.dmg OpenFolio-0.4.2-arm64.zip | tee artifact-sha256.txt
+   shasum -a 256 OpenFolio-0.4.3-arm64.dmg OpenFolio-0.4.3-arm64.zip | tee artifact-sha256.txt
    { sw_vers; uname -m; } | tee environment.txt
    codesign -dv --verbose=4 /Applications/OpenFolio.app 2>codesign.txt
    xcrun stapler validate /Applications/OpenFolio.app | tee stapler.txt
@@ -19,7 +19,7 @@ draft release. Use a clean macOS account or VM with other applications closed.
    process name and PID metadata. Keep it running through shutdown:
 
    ```bash
-   sudo tcpdump -i pktap,all -n -U -k NP -w openfolio-v0.4.2.pcap
+   sudo tcpdump -i pktap,all -n -U -k NP -w openfolio-v0.4.3.pcap
    ```
 
 3. In a third terminal, capture network summaries:
@@ -56,9 +56,9 @@ draft release. Use a clean macOS account or VM with other applications closed.
 ## Analysis
 
 ```bash
-tcpdump -nn -r openfolio-v0.4.2.pcap -k NP > openfolio-packets.txt
+tcpdump -nn -r openfolio-v0.4.3.pcap -k NP > openfolio-packets.txt
 rg -n -i 'OpenFolio|openfolio|chrome_crashpad_handler|ShipIt' openfolio-processes-and-sockets.txt
-shasum -a 256 openfolio-v0.4.2.pcap openfolio-nettop.csv openfolio-processes-and-sockets.txt artifact-sha256.txt environment.txt codesign.txt stapler.txt gatekeeper.txt > evidence-sha256.txt
+shasum -a 256 openfolio-v0.4.3.pcap openfolio-nettop.csv openfolio-processes-and-sockets.txt artifact-sha256.txt environment.txt codesign.txt stapler.txt gatekeeper.txt > evidence-sha256.txt
 ```
 
 Use the timestamped `ps` snapshots to identify every OpenFolio root PID and

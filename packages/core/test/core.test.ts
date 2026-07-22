@@ -275,13 +275,43 @@ describe("OpenFolioCore", () => {
 
     const rawDb = new DatabaseSync(dbPath, { allowExtension: true });
     sqliteVec.load(rawDb);
-    rawDb.exec("DELETE FROM search_document_vectors");
+    rawDb.exec(`
+      DELETE FROM search_document_vectors;
+      DELETE FROM search_document_vector_rows;
+    `);
     rawDb.close();
+    core.db.setSetting("search_vector_backfill_cursor", "999999999");
 
     expect(core.db.getSearchVectorIndexStatus()).toMatchObject({ embeddedDocuments: 1, indexedDocuments: 0 });
     expect(core.db.backfillSearchVectorIndex()).toBe(1);
     expect(core.db.getSearchVectorIndexStatus()).toMatchObject({ embeddedDocuments: 1, indexedDocuments: 1 });
     expect(core.db.search("unrelated words", 5, testEmbedding(0))[0]?.kind).toBe("message");
+  });
+
+  it("advances vector backfill with a durable cursor instead of rescanning indexed rows", async () => {
+    appendManyMessages(chatDbPath, 500);
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    for (const document of core.db.getDirtySearchDocuments(1_000)) {
+      if (document.kind === "message") {
+        core.db.markSearchDocumentEmbedded(document.id, testEmbedding(0), "local", "test");
+      }
+    }
+
+    const rawDb = new DatabaseSync(dbPath, { allowExtension: true });
+    sqliteVec.load(rawDb);
+    rawDb.exec(`
+      DELETE FROM search_document_vectors;
+      DELETE FROM search_document_vector_rows;
+    `);
+    rawDb.close();
+    core.db.setSetting("search_vector_backfill_cursor", "0");
+
+    expect(core.db.backfillSearchVectorIndex(100)).toBe(100);
+    const firstCursor = Number(core.db.getSetting("search_vector_backfill_cursor"));
+    expect(core.db.backfillSearchVectorIndex(100)).toBe(100);
+    expect(Number(core.db.getSetting("search_vector_backfill_cursor"))).toBeGreaterThan(firstCursor);
+    expect(core.db.getSearchVectorIndexStatus()).toMatchObject({ indexedDocuments: 200 });
   });
 
   it("hydrates only a bounded set of semantic candidates", async () => {
