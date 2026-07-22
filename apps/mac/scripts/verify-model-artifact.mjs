@@ -93,6 +93,26 @@ if (onnxBinaries.length === 0) {
   }
 }
 
+const sqliteVectorBinaries = walk(path.join(resourcesDir, "app.asar.unpacked", "node_modules"))
+  .filter((file) => path.basename(file) === "vec0.dylib");
+if (sqliteVectorBinaries.length !== 1) {
+  errors.push(`expected exactly one local SQLite vector binary, found ${sqliteVectorBinaries.length}`);
+} else if (process.platform === "darwin") {
+  try {
+    const vectorArchitectures = execFileSync("lipo", ["-archs", sqliteVectorBinaries[0]], { encoding: "utf8" })
+      .trim()
+      .split(/\s+/)
+      .map((architecture) => architecture === "x86_64" ? "x64" : architecture);
+    if (!targetArchitectures.every((architecture) => vectorArchitectures.includes(architecture))) {
+      errors.push(
+        `SQLite vector binary architecture mismatch: app=${targetArchitectures.join(",")}, vector=${vectorArchitectures.join(",")}`,
+      );
+    }
+  } catch (error) {
+    errors.push(`could not inspect SQLite vector binary: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 for (const updaterFile of ["app-update.yml", "latest-mac.yml", "latest.yml"]) {
   if (walk(resourcesDir).some((file) => path.basename(file) === updaterFile)) {
     errors.push(`forbidden updater metadata found: ${updaterFile}`);
@@ -186,5 +206,5 @@ if (errors.length > 0) {
 
 const modelBytes = manifest.files.reduce((total, file) => total + file.size, 0);
 process.stdout.write(
-  `Verified ${path.resolve(appPath)} v${expectedVersion}: ${manifest.files.length} model/license files, ${modelBytes} bytes, one weight copy, no updater metadata, forbidden network SDK, host, or entitlement\n`,
+  `Verified ${path.resolve(appPath)} v${expectedVersion}: ${manifest.files.length} model/license files, ${modelBytes} bytes, one weight copy, one local SQLite vector binary, no updater metadata, forbidden network SDK, host, or entitlement\n`,
 );

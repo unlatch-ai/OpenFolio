@@ -144,7 +144,12 @@ export function useAppData() {
   ]);
 
   useEffect(() => {
-    if (!setupDismissed || !embeddingSync || embeddingSync.dirtyDocuments === 0 || embeddingSync.lastError) return;
+    if (
+      !setupDismissed
+      || !embeddingSync
+      || (embeddingSync.dirtyDocuments === 0 && !embeddingSync.syncing)
+      || embeddingSync.lastError
+    ) return;
 
     let checking = false;
     const advanceSemanticIndex = async () => {
@@ -166,7 +171,13 @@ export function useAppData() {
     void advanceSemanticIndex();
     const interval = window.setInterval(advanceSemanticIndex, 1500);
     return () => window.clearInterval(interval);
-  }, [setupDismissed, Boolean(embeddingSync?.dirtyDocuments), embeddingSync?.lastError, setEmbeddingSync]);
+  }, [
+    setupDismissed,
+    Boolean(embeddingSync?.dirtyDocuments),
+    embeddingSync?.syncing,
+    embeddingSync?.lastError,
+    setEmbeddingSync,
+  ]);
 
   // Update state listener
   useEffect(() => {
