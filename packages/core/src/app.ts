@@ -48,15 +48,19 @@ export class OpenFolioCore {
 
   private readonly vectorIndexSyncRunner: ((dbPath: string) => Promise<number>) | null;
 
+  private readonly interactiveSearchRunner: ((dbPath: string, input: SearchQueryInput, queryEmbedding?: number[]) => Promise<SearchResult[]>) | null;
+
   constructor(options?: {
     dbPath?: string;
     enableLocalEmbeddings?: boolean;
     embeddingEngine?: EmbeddingEngine;
     networkPolicy?: "offline";
     vectorIndexSync?: (dbPath: string) => Promise<number>;
+    interactiveSearch?: (dbPath: string, input: SearchQueryInput, queryEmbedding?: number[]) => Promise<SearchResult[]>;
   }) {
     this.db = new OpenFolioDatabase(options?.dbPath);
     this.vectorIndexSyncRunner = options?.vectorIndexSync ?? null;
+    this.interactiveSearchRunner = options?.interactiveSearch ?? null;
     const storedEmbeddingRate = Number(this.db.getSetting("embedding_documents_per_second"));
     this.embeddingDocumentsPerSecond = Number.isFinite(storedEmbeddingRate) && storedEmbeddingRate > 0
       ? storedEmbeddingRate
@@ -106,7 +110,23 @@ export class OpenFolioCore {
   }
 
   async search(text: string, limit = 10, scope?: SearchScope): Promise<SearchResult[]> {
-    const embedding = await this.ai.embed(text);
+    // The local model worker serializes requests. Do not put an interactive
+    // query behind an in-flight background batch; exact search remains ready
+    // while the archive is being embedded.
+    const syncStatus = this.getEmbeddingSyncStatus();
+    const backgroundEmbeddingActive = this.embeddingSyncInFlight !== null
+      || this.vectorIndexSyncInFlight !== null
+      || syncStatus.dirtyDocuments > 0
+      || syncStatus.semanticIndexedDocuments < syncStatus.embeddedDocuments;
+    const embedding = backgroundEmbeddingActive ? null : await this.ai.embed(text);
+    if (this.interactiveSearchRunner) {
+      return this.interactiveSearchRunner(this.db.dbPath, {
+        text,
+        limit,
+        personIds: scope?.personId ? [scope.personId] : undefined,
+        threadId: scope?.threadId ?? undefined,
+      }, embedding ?? undefined);
+    }
     return this.db.search(text, limit, embedding ?? undefined, scope);
   }
 
@@ -144,10 +164,17 @@ export class OpenFolioCore {
       };
     }
 
-    const embedding = await this.ai.embed(text);
+    const initialSyncStatus = this.getEmbeddingSyncStatus();
+    const backgroundEmbeddingActive = this.embeddingSyncInFlight !== null
+      || this.vectorIndexSyncInFlight !== null
+      || initialSyncStatus.dirtyDocuments > 0
+      || initialSyncStatus.semanticIndexedDocuments < initialSyncStatus.embeddedDocuments;
+    const embedding = backgroundEmbeddingActive ? null : await this.ai.embed(text);
     let results: SearchResult[];
     try {
-      results = this.db.searchRecords({ ...input, text }, embedding ?? undefined);
+      results = this.interactiveSearchRunner
+        ? await this.interactiveSearchRunner(this.db.dbPath, { ...input, text }, embedding ?? undefined)
+        : this.db.searchRecords({ ...input, text }, embedding ?? undefined);
     } catch (error) {
       return {
         state: "error",
@@ -163,6 +190,22 @@ export class OpenFolioCore {
         },
       };
     }
+
+    if (backgroundEmbeddingActive) {
+      const indexFailed = initialSyncStatus.lastError != null;
+      return {
+        state: results.length > 0 ? "results" : "empty",
+        results,
+        resultCount: results.length,
+        retrievalMode: "exact",
+        semanticStatus: indexFailed ? "unavailable" : "indexing",
+        semanticMessage: indexFailed
+          ? "Exact search is ready. The local meaning index paused; try Build index again."
+          : "Search is ready. Meaning-based matches will improve as indexing finishes.",
+        error: null,
+      };
+    }
+
     const [localStatus, syncStatus] = await Promise.all([
       this.localEmbeddings.getStatus(),
       Promise.resolve(this.getEmbeddingSyncStatus()),
@@ -300,7 +343,7 @@ export class OpenFolioCore {
     return { embedded, skipped: dirtyDocuments.length - embedded };
   }
 
-  async syncAllDirtySearchDocuments(batchSize = 50, maxBatches = 200) {
+  async syncAllDirtySearchDocuments(batchSize = 8, maxBatches = Number.POSITIVE_INFINITY) {
     let embedded = 0;
     let skipped = 0;
 
@@ -313,7 +356,7 @@ export class OpenFolioCore {
       }
       // Keep the Electron main process responsive between local SQLite writes
       // and the next worker request.
-      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+      await new Promise<void>((resolve) => setTimeout(resolve, 25));
     }
 
     return { embedded, skipped };
@@ -338,6 +381,12 @@ export class OpenFolioCore {
     return this.embeddingSyncInFlight;
   }
 
+  async queueLocalIndexSync(options?: { batchSize?: number; maxBatches?: number }) {
+    const embeddings = await this.queueEmbeddingSync(options);
+    const indexed = await this.queueSearchVectorIndexSync();
+    return { ...embeddings, indexed };
+  }
+
   private async syncSearchVectorIndex(batchSize = 250) {
     let indexed = 0;
     while (true) {
@@ -347,6 +396,12 @@ export class OpenFolioCore {
       // Keep the Electron main process responsive during one-time upgrades from
       // the legacy JSON-only embedding store.
       await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+    while (true) {
+      const batchIndexed = this.db.backfillSearchBinaryVectorIndex(Math.max(500, batchSize));
+      indexed += batchIndexed;
+      if (batchIndexed === 0) break;
+      await new Promise<void>((resolve) => setTimeout(resolve, 15));
     }
     return indexed;
   }

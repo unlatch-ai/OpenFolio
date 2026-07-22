@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import * as sqliteVec from "sqlite-vec";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SearchDocumentRecord } from "@openfolio/shared-types";
-import { findDuplicatePeople, OpenFolioCore } from "../src/index.js";
+import { findDuplicatePeople, OpenFolioCore, OpenFolioDatabase } from "../src/index.js";
 
 function tempPath(name: string) {
   return path.join(fs.mkdtempSync(path.join(os.tmpdir(), "openfolio-")), name);
@@ -75,8 +75,8 @@ function appendSecondPersonThread(chatDbPath: string) {
   const db = new DatabaseSync(chatDbPath);
   db.prepare("INSERT INTO handle(ROWID, id) VALUES (2, '+15555550124')").run();
   db.prepare("INSERT INTO chat(ROWID, chat_identifier, service_name) VALUES (2, 'Bob', 'iMessage')").run();
-  db.prepare("INSERT INTO message(ROWID, text, handle_id, is_from_me, date, service) VALUES (300, 'bob private planning', 2, 0, 300000, 'iMessage')").run();
-  db.prepare("INSERT INTO chat_message_join(chat_id, message_id) VALUES (2, 300)").run();
+  db.prepare("INSERT INTO message(ROWID, text, handle_id, is_from_me, date, service) VALUES (3000, 'bob private planning', 2, 0, 3000000, 'iMessage')").run();
+  db.prepare("INSERT INTO chat_message_join(chat_id, message_id) VALUES (2, 3000)").run();
   db.close();
 }
 
@@ -180,7 +180,36 @@ describe("OpenFolioCore", () => {
     expect(core.db.query<{ count: number }>("SELECT COUNT(*) AS count FROM search_documents")[0]?.count).toBe(0);
 
     const backupDir = path.join(path.dirname(dbPath), "backups");
-    expect(fs.readdirSync(backupDir).some((entry) => entry.includes("before-schema-2-to-3"))).toBe(true);
+    expect(fs.readdirSync(backupDir).some((entry) => entry.includes("before-schema-2-to-4"))).toBe(true);
+  });
+
+  it("upgrades schema 3 without discarding embedded search documents", async () => {
+    const original = new OpenFolioCore({ dbPath });
+    await original.startMessagesImport();
+    const messageDocument = original.db.getDirtySearchDocuments().find((document) => document.kind === "message")!;
+    original.db.markSearchDocumentEmbedded(messageDocument.id, testEmbedding(0), "local", "test");
+    original.db.close();
+
+    const legacyDb = new DatabaseSync(dbPath, { allowExtension: true });
+    sqliteVec.load(legacyDb);
+    legacyDb.exec(`
+      PRAGMA user_version = 3;
+      DROP TRIGGER IF EXISTS search_documents_vector_bu;
+      DROP TRIGGER IF EXISTS search_documents_vector_au_insert;
+      DROP TABLE IF EXISTS search_document_binary_vectors;
+      DROP TABLE IF EXISTS search_document_binary_vector_rows;
+    `);
+    legacyDb.close();
+
+    const upgraded = new OpenFolioDatabase(dbPath);
+    expect(upgraded.query<{ version: number }>("SELECT user_version AS version FROM pragma_user_version")[0]?.version).toBe(4);
+    expect(upgraded.query<{ count: number }>("SELECT COUNT(*) AS count FROM search_documents")[0]?.count).toBeGreaterThan(0);
+    expect(upgraded.backfillSearchBinaryVectorIndex()).toBe(1);
+    expect(upgraded.search("unrelated words", 5, testEmbedding(0))[0]?.kind).toBe("message");
+    upgraded.close();
+
+    const backupDir = path.join(path.dirname(dbPath), "backups");
+    expect(fs.readdirSync(backupDir).some((entry) => entry.includes("before-schema-3-to-4"))).toBe(true);
   });
 
   it("refuses to open a database from a newer schema without resetting it", () => {
@@ -288,6 +317,30 @@ describe("OpenFolioCore", () => {
     expect(core.db.search("unrelated words", 5, testEmbedding(0))[0]?.kind).toBe("message");
   });
 
+  it("backfills the compact semantic index and keeps it in sync with embedding changes", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const messageDocument = core.db.getDirtySearchDocuments().find((document) => document.kind === "message")!;
+    core.db.markSearchDocumentEmbedded(messageDocument.id, testEmbedding(0), "local", "test");
+
+    const rawDb = new DatabaseSync(dbPath, { allowExtension: true });
+    sqliteVec.load(rawDb);
+    rawDb.exec(`
+      DELETE FROM search_document_binary_vectors;
+      DELETE FROM search_document_binary_vector_rows;
+    `);
+    rawDb.close();
+
+    expect(core.db.backfillSearchBinaryVectorIndex()).toBe(1);
+    expect(core.db.search("unrelated words", 5, testEmbedding(0))[0]?.kind).toBe("message");
+
+    core.db.markSearchDocumentEmbedded(messageDocument.id, testEmbedding(1), "local", "test");
+    expect(core.db.search("unrelated words", 5, testEmbedding(1))[0]?.kind).toBe("message");
+    expect(core.db.query<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM search_document_binary_vector_rows",
+    )[0]?.count).toBe(1);
+  });
+
   it("advances vector backfill with a durable cursor instead of rescanning indexed rows", async () => {
     appendManyMessages(chatDbPath, 500);
     const core = new OpenFolioCore({ dbPath });
@@ -333,6 +386,32 @@ describe("OpenFolioCore", () => {
     expect(results).toHaveLength(5);
     expect(navigationSpy.mock.calls.length).toBeLessThanOrEqual(80);
   });
+
+  it("filters relationship-scoped semantic search before applying a global candidate cutoff", async () => {
+    appendManyMessages(chatDbPath, 900);
+    appendSecondPersonThread(chatDbPath);
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const bob = core.db.listPeople().find((person) => person.primaryHandle === "+15555550124")!;
+    for (const document of core.db.getDirtySearchDocuments(2_000)) {
+      core.db.markSearchDocumentEmbedded(
+        document.id,
+        document.content.includes("bob private planning") ? testEmbedding(1) : testEmbedding(0),
+        "local",
+        "test",
+      );
+    }
+
+    const results = core.db.searchRecords({
+      text: "unrelated words",
+      limit: 5,
+      resultTypes: ["message"],
+      personIds: [bob.id],
+    }, testEmbedding(1));
+
+    expect(results[0]?.snippet).toContain("bob private planning");
+    expect(results[0]?.personId).toBe(bob.id);
+  }, 15_000);
 
   it("only marks successfully embedded documents and reports skipped documents", async () => {
     const core = new OpenFolioCore({ dbPath });
@@ -381,6 +460,45 @@ describe("OpenFolioCore", () => {
     const status = core.getEmbeddingSyncStatus();
     expect(status.syncing).toBe(false);
     expect(status.dirtyDocuments).toBe(0);
+  });
+
+  it("keeps interactive search exact and responsive while a background embedding batch is active", async () => {
+    let core!: OpenFolioCore;
+    const interactiveSearch = vi.fn(async (_dbPath: string, input: Parameters<OpenFolioCore["searchArchive"]>[0]) =>
+      core.db.searchRecords(input));
+    core = new OpenFolioCore({ dbPath, interactiveSearch });
+    await core.startMessagesImport();
+
+    let releaseEmbedding!: () => void;
+    const embeddingStarted = new Promise<void>((resolve) => {
+      core.ai = {
+        embed: vi.fn(async () => testEmbedding(0)),
+        embedDocuments: async (documents: SearchDocumentRecord[]) => {
+          resolve();
+          await new Promise<void>((release) => {
+            releaseEmbedding = release;
+          });
+          return documents.map(() => testEmbedding(0));
+        },
+        getEmbeddingMetadata: () => ({ provider: "local", model: "test" }),
+      } as unknown as OpenFolioCore["ai"];
+    });
+
+    const queued = core.queueEmbeddingSync({ batchSize: 10, maxBatches: 10 });
+    await embeddingStarted;
+    const response = await core.searchArchive({ text: "hello", resultTypes: ["message"] });
+
+    expect(core.ai.embed).not.toHaveBeenCalled();
+    expect(interactiveSearch).toHaveBeenCalledOnce();
+    expect(response).toMatchObject({
+      state: "results",
+      retrievalMode: "exact",
+      semanticStatus: "indexing",
+      error: null,
+    });
+
+    releaseEmbedding();
+    await queued;
   });
 
   it("reports when embedded-document scale needs a local vector index benchmark", async () => {
@@ -637,7 +755,7 @@ describe("OpenFolioCore", () => {
     const response = await core.searchArchive({ text: "hello ada", resultTypes: ["message"] });
     const hit = response.results[0];
 
-    expect(response).toMatchObject({ state: "results", retrievalMode: "exact", semanticStatus: "unavailable" });
+    expect(response).toMatchObject({ state: "results", retrievalMode: "exact", semanticStatus: "indexing" });
     expect(hit).toMatchObject({
       resultType: "message",
       matchReason: "exact_words",

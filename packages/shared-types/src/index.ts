@@ -501,6 +501,7 @@ export interface LocalEmbeddingStatus {
 export interface EmbeddingSyncStatus {
   totalDocuments: number;
   embeddedDocuments: number;
+  semanticIndexedDocuments: number;
   dirtyDocuments: number;
   provider: EmbeddingProvider | null;
   model: string | null;

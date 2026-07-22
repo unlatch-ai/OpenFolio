@@ -39,7 +39,7 @@ import {
 import { contentHash, createId, normalizeHandle, normalizeQueryForFts, now } from "./utils.js";
 
 const DEFAULT_DB_DIR = path.join(os.homedir(), "Library", "Application Support", "OpenFolio");
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 
 function stringify(value: unknown) {
   return JSON.stringify(value ?? null);
@@ -211,19 +211,22 @@ export class OpenFolioDatabase {
 
   private readonly db: DatabaseSync;
 
-  constructor(dbPath = process.env.OPENFOLIO_LOCAL_DB_PATH || path.join(DEFAULT_DB_DIR, "openfolio.sqlite")) {
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  constructor(
+    dbPath = process.env.OPENFOLIO_LOCAL_DB_PATH || path.join(DEFAULT_DB_DIR, "openfolio.sqlite"),
+    options?: { readOnly?: boolean },
+  ) {
+    if (!options?.readOnly) fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     this.dbPath = dbPath;
-    this.db = new DatabaseSync(dbPath, { allowExtension: true });
+    this.db = new DatabaseSync(dbPath, { allowExtension: true, readOnly: options?.readOnly ?? false });
     const sqliteVectorPath = sqliteVec
       .getLoadablePath()
       .replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
     this.db.loadExtension(sqliteVectorPath);
     this.db.enableLoadExtension(false);
-    this.db.exec(`
-      PRAGMA journal_mode = WAL;
-      PRAGMA busy_timeout = 5000;
-    `);
+    this.db.exec(options?.readOnly
+      ? "PRAGMA busy_timeout = 5000; PRAGMA mmap_size = 536870912; PRAGMA cache_size = -65536;"
+      : "PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA mmap_size = 536870912; PRAGMA cache_size = -65536;");
+    if (options?.readOnly) return;
     this.migrateSchema();
     this.bootstrap();
   }
@@ -287,6 +290,15 @@ export class OpenFolioDatabase {
   }
 
   private runMigrationStep(fromVersion: number, toVersion: number) {
+    if (fromVersion === 3 && toVersion === 4) {
+      this.db.exec(`
+        DROP TRIGGER IF EXISTS search_documents_vector_bu;
+        DROP TRIGGER IF EXISTS search_documents_vector_au_insert;
+        DROP TABLE IF EXISTS search_document_binary_vectors;
+        DROP TABLE IF EXISTS search_document_binary_vector_rows;
+      `);
+      return;
+    }
     if (toVersion <= CURRENT_SCHEMA_VERSION) {
       this.resetDerivedSearchState();
       return;
@@ -541,6 +553,13 @@ export class OpenFolioDatabase {
         document_rowid INTEGER PRIMARY KEY
       );
 
+      CREATE VIRTUAL TABLE IF NOT EXISTS search_document_binary_vectors
+      USING vec0(embedding bit[384], kind TEXT);
+
+      CREATE TABLE IF NOT EXISTS search_document_binary_vector_rows (
+        document_rowid INTEGER PRIMARY KEY
+      );
+
       DROP TRIGGER IF EXISTS search_documents_vector_ai;
       CREATE TRIGGER search_documents_vector_ai
       AFTER INSERT ON search_documents
@@ -550,20 +569,36 @@ export class OpenFolioDatabase {
         VALUES (new.rowid, new.embedding);
         INSERT INTO search_document_vector_rows(document_rowid)
         VALUES (new.rowid);
+        INSERT INTO search_document_binary_vectors(rowid, embedding, kind)
+        VALUES (new.rowid, vec_quantize_binary(vec_f32(new.embedding)), new.kind);
+        INSERT INTO search_document_binary_vector_rows(document_rowid)
+        VALUES (new.rowid);
       END;
 
       DROP TRIGGER IF EXISTS search_documents_vector_au;
-      CREATE TRIGGER search_documents_vector_au
-      AFTER UPDATE OF embedding ON search_documents
+      DROP TRIGGER IF EXISTS search_documents_vector_bu;
+      CREATE TRIGGER search_documents_vector_bu
+      BEFORE UPDATE OF embedding ON search_documents
       BEGIN
         DELETE FROM search_document_vectors WHERE rowid = old.rowid;
         DELETE FROM search_document_vector_rows WHERE document_rowid = old.rowid;
+        DELETE FROM search_document_binary_vectors WHERE rowid = old.rowid;
+        DELETE FROM search_document_binary_vector_rows WHERE document_rowid = old.rowid;
+      END;
+
+      DROP TRIGGER IF EXISTS search_documents_vector_au_insert;
+      CREATE TRIGGER search_documents_vector_au_insert
+      AFTER UPDATE OF embedding ON search_documents
+      WHEN new.embedding IS NOT NULL AND length(new.embedding) > 0
+      BEGIN
         INSERT INTO search_document_vectors(rowid, embedding)
-        SELECT new.rowid, new.embedding
-        WHERE new.embedding IS NOT NULL AND length(new.embedding) > 0;
+        VALUES (new.rowid, new.embedding);
         INSERT INTO search_document_vector_rows(document_rowid)
-        SELECT new.rowid
-        WHERE new.embedding IS NOT NULL AND length(new.embedding) > 0;
+        VALUES (new.rowid);
+        INSERT INTO search_document_binary_vectors(rowid, embedding, kind)
+        VALUES (new.rowid, vec_quantize_binary(vec_f32(new.embedding)), new.kind);
+        INSERT INTO search_document_binary_vector_rows(document_rowid)
+        VALUES (new.rowid);
       END;
 
       DROP TRIGGER IF EXISTS search_documents_vector_ad;
@@ -572,9 +607,12 @@ export class OpenFolioDatabase {
       BEGIN
         DELETE FROM search_document_vectors WHERE rowid = old.rowid;
         DELETE FROM search_document_vector_rows WHERE document_rowid = old.rowid;
+        DELETE FROM search_document_binary_vectors WHERE rowid = old.rowid;
+        DELETE FROM search_document_binary_vector_rows WHERE document_rowid = old.rowid;
       END;
     `);
     this.reconcileSearchVectorRows();
+    this.reconcileSearchBinaryVectorRows();
   }
 
   backfillSearchVectorIndex(limit = 250) {
@@ -640,6 +678,64 @@ export class OpenFolioDatabase {
     return candidates.length;
   }
 
+  backfillSearchBinaryVectorIndex(limit = 500) {
+    const normalizedLimit = Math.max(1, Math.min(2_000, Math.floor(limit)));
+    const loadCandidates = () => {
+      const storedCursor = Number(this.getSetting("search_binary_vector_backfill_cursor") ?? 0);
+      const cursor = Number.isSafeInteger(storedCursor) && storedCursor >= 0 ? storedCursor : 0;
+      return this.db.prepare(`
+        SELECT d.rowid AS documentRowid, d.embedding, d.kind
+        FROM search_documents d
+        LEFT JOIN search_document_binary_vector_rows vector_rows
+          ON vector_rows.document_rowid = d.rowid
+        WHERE d.embedding IS NOT NULL
+          AND length(d.embedding) > 0
+          AND d.rowid > ?
+          AND vector_rows.document_rowid IS NULL
+        ORDER BY d.rowid ASC
+        LIMIT ?
+      `)
+        .all(cursor, normalizedLimit) as Array<{ documentRowid: number; embedding: string; kind: string }>;
+    };
+    let candidates = loadCandidates();
+    if (candidates.length === 0) {
+      let shouldRetry = this.reconcileSearchBinaryVectorRows();
+      if (!shouldRetry) {
+        const status = this.getSearchBinaryVectorIndexStatus();
+        const storedCursor = Number(this.getSetting("search_binary_vector_backfill_cursor") ?? 0);
+        if (status.embeddedDocuments > status.indexedDocuments && storedCursor > 0) {
+          this.setSetting("search_binary_vector_backfill_cursor", "0");
+          shouldRetry = true;
+        }
+      }
+      if (shouldRetry) candidates = loadCandidates();
+    }
+    if (candidates.length === 0) return 0;
+
+    const insertVector = this.db.prepare(
+      "INSERT INTO search_document_binary_vectors(rowid, embedding, kind) VALUES (?, vec_quantize_binary(?), ?)",
+    );
+    const markIndexed = this.db.prepare(
+      "INSERT INTO search_document_binary_vector_rows(document_rowid) VALUES (?)",
+    );
+    this.db.exec("BEGIN;");
+    try {
+      for (const candidate of candidates) {
+        insertVector.run(BigInt(candidate.documentRowid), candidate.embedding, candidate.kind);
+        markIndexed.run(candidate.documentRowid);
+      }
+      this.setSetting(
+        "search_binary_vector_backfill_cursor",
+        String(candidates[candidates.length - 1]!.documentRowid),
+      );
+      this.db.exec("COMMIT;");
+    } catch (error) {
+      this.db.exec("ROLLBACK;");
+      throw error;
+    }
+    return candidates.length;
+  }
+
   private reconcileSearchVectorRows() {
     const counts = this.db
       .prepare(`
@@ -666,11 +762,43 @@ export class OpenFolioDatabase {
     return true;
   }
 
+  private reconcileSearchBinaryVectorRows() {
+    const counts = this.db
+      .prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM search_document_binary_vectors) AS vectorCount,
+          (SELECT COUNT(*) FROM search_document_binary_vector_rows) AS markerCount
+      `)
+      .get() as { vectorCount: number; markerCount: number };
+    if (Number(counts.vectorCount) === Number(counts.markerCount)) return false;
+    this.db.exec(`
+      DELETE FROM search_document_binary_vector_rows;
+      INSERT INTO search_document_binary_vector_rows(document_rowid)
+      SELECT rowid FROM search_document_binary_vectors;
+    `);
+    this.setSetting("search_binary_vector_backfill_cursor", "0");
+    return true;
+  }
+
+  getSearchBinaryVectorIndexStatus() {
+    const row = this.db
+      .prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM search_documents WHERE dirty = 0) AS embeddedDocuments,
+          (SELECT COUNT(*) FROM search_document_binary_vector_rows) AS indexedDocuments
+      `)
+      .get() as { embeddedDocuments: number; indexedDocuments: number };
+    return {
+      embeddedDocuments: Number(row.embeddedDocuments),
+      indexedDocuments: Number(row.indexedDocuments),
+    };
+  }
+
   getSearchVectorIndexStatus() {
     const row = this.db
       .prepare(`
         SELECT
-          (SELECT COUNT(*) FROM search_documents WHERE embedding IS NOT NULL AND length(embedding) > 0) AS embeddedDocuments,
+          (SELECT COUNT(*) FROM search_documents WHERE dirty = 0) AS embeddedDocuments,
           (SELECT COUNT(*) FROM search_document_vector_rows) AS indexedDocuments
       `)
       .get() as { embeddedDocuments: number; indexedDocuments: number };
@@ -1875,7 +2003,7 @@ export class OpenFolioDatabase {
       params.push(...dateParams);
     }
 
-    return { sql: clauses.join(" AND "), params };
+    return { sql: clauses.join(" AND "), params, kinds };
   }
 
   searchRecords(input: SearchQueryInput, queryEmbedding?: number[]) {
@@ -1883,7 +2011,7 @@ export class OpenFolioDatabase {
     const limit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 20)));
     if (!query) return [];
     const candidateLimit = Math.min(1_000, Math.max(40, limit * 4));
-    const semanticCandidateLimit = Math.min(10_000, Math.max(2_000, candidateLimit * 10));
+    const semanticCandidateLimit = Math.min(2_000, Math.max(800, candidateLimit * 10));
     const documentFilter = this.buildSearchDocumentFilter(input);
     const safeQuery = normalizeQueryForFts(query);
     const textRows = safeQuery
@@ -1897,7 +2025,7 @@ export class OpenFolioDatabase {
               d.content,
               bm25(search_documents_fts) AS textScore
             FROM search_documents_fts
-            JOIN search_documents d ON d.rowid = search_documents_fts.rowid
+            CROSS JOIN search_documents d ON d.rowid = search_documents_fts.rowid
             WHERE search_documents_fts MATCH ? AND ${documentFilter.sql}
             ORDER BY textScore, d.id ASC
             LIMIT ?
@@ -1919,13 +2047,47 @@ export class OpenFolioDatabase {
           .all(`%${escapedQuery}%`, `%${escapedQuery}%`, ...documentFilter.params, candidateLimit) as Array<Record<string, unknown>>)
       : textRows;
 
-    const semanticRows = queryEmbedding
-      ? (this.db
+    let semanticRows: Array<Record<string, unknown>> = [];
+    if (queryEmbedding) {
+      const queryVector = new Uint8Array(Float32Array.from(queryEmbedding).buffer);
+      const hasRelationalScope = Boolean(
+        input.threadId
+        || input.personIds?.length
+        || input.dateRange?.startAt != null
+        || input.dateRange?.endAt != null,
+      );
+      if (hasRelationalScope) {
+        // Relationship/date constraints cannot be represented inside vec0.
+        // Filter first so a relevant scoped result cannot be discarded by a
+        // global approximate candidate cutoff, then rank the bounded scope.
+        semanticRows = this.db
           .prepare(`
-            WITH semantic_matches AS (
-              SELECT rowid, distance
-              FROM search_document_vectors
-              WHERE embedding MATCH ? AND k = ?
+            SELECT
+              d.id,
+              d.kind,
+              d.entity_id AS entityId,
+              d.title,
+              d.content,
+              NULL AS textScore,
+              MAX(0, 1.0 - vec_distance_cosine(d.embedding, ?)) AS semanticScore
+            FROM search_documents d
+            WHERE d.embedding IS NOT NULL
+              AND length(d.embedding) > 0
+              AND ${documentFilter.sql}
+            ORDER BY semanticScore DESC
+            LIMIT ?
+          `)
+          .all(queryVector, ...documentFilter.params, candidateLimit) as Array<Record<string, unknown>>;
+      } else {
+        const kindFilter = documentFilter.kinds.map(() => "kind = ?").join(" OR ");
+        semanticRows = this.db
+          .prepare(`
+            WITH semantic_matches AS MATERIALIZED (
+              SELECT rowid
+              FROM search_document_binary_vectors
+              WHERE embedding MATCH vec_quantize_binary(?)
+                AND k = ?
+                AND (${kindFilter})
             )
             SELECT
               d.id,
@@ -1934,20 +2096,23 @@ export class OpenFolioDatabase {
               d.title,
               d.content,
               NULL AS textScore,
-              MAX(0, 1.0 - semantic_matches.distance) AS semanticScore
+              MAX(0, 1.0 - vec_distance_cosine(d.embedding, ?)) AS semanticScore
             FROM semantic_matches
-            JOIN search_documents d ON d.rowid = semantic_matches.rowid
+            CROSS JOIN search_documents d ON d.rowid = semantic_matches.rowid
             WHERE ${documentFilter.sql}
-            ORDER BY semantic_matches.distance ASC
+            ORDER BY semanticScore DESC
             LIMIT ?
           `)
           .all(
-            new Uint8Array(Float32Array.from(queryEmbedding).buffer),
+            queryVector,
             semanticCandidateLimit,
+            ...documentFilter.kinds,
+            queryVector,
             ...documentFilter.params,
             candidateLimit,
-          ) as Array<Record<string, unknown>>)
-      : [];
+          ) as Array<Record<string, unknown>>;
+      }
+    }
 
     const byId = new Map<string, Record<string, unknown> & { exactMatch?: boolean }>();
     for (const row of fallbackRows) {
@@ -2064,18 +2229,21 @@ export class OpenFolioDatabase {
     const row = this.db
       .prepare(`
         SELECT
-          COUNT(*) AS totalDocuments,
-          SUM(CASE WHEN embedding IS NOT NULL AND embedding != '' THEN 1 ELSE 0 END) AS embeddedDocuments,
-          SUM(CASE WHEN dirty = 1 THEN 1 ELSE 0 END) AS dirtyDocuments,
-          MAX(embedding_provider) AS provider,
-          MAX(embedding_model) AS model
-        FROM search_documents
+          (SELECT COUNT(*) FROM search_documents) AS totalDocuments,
+          (SELECT COUNT(*) FROM search_document_vector_rows) AS embeddedDocuments,
+          (SELECT COUNT(*) FROM search_document_binary_vector_rows) AS semanticIndexedDocuments,
+          (SELECT COUNT(*) FROM search_documents WHERE dirty = 1) AS dirtyDocuments,
+          (SELECT embedding_provider FROM search_documents
+            WHERE dirty = 0 AND embedding_provider IS NOT NULL LIMIT 1) AS provider,
+          (SELECT embedding_model FROM search_documents
+            WHERE dirty = 0 AND embedding_model IS NOT NULL LIMIT 1) AS model
       `)
       .get() as Record<string, unknown>;
 
     return {
       totalDocuments: Number(row.totalDocuments ?? 0),
       embeddedDocuments: Number(row.embeddedDocuments ?? 0),
+      semanticIndexedDocuments: Number(row.semanticIndexedDocuments ?? 0),
       dirtyDocuments: Number(row.dirtyDocuments ?? 0),
       provider: (row.provider as SearchDocumentRecord["embeddingProvider"]) ?? null,
       model: (row.model as string | null) ?? null,
@@ -2089,10 +2257,9 @@ export class OpenFolioDatabase {
     const row = this.db
       .prepare(`
         SELECT
-          COUNT(*) AS totalDocuments,
-          SUM(CASE WHEN embedding IS NOT NULL AND embedding != '' THEN 1 ELSE 0 END) AS embeddedDocuments,
-          SUM(CASE WHEN dirty = 1 THEN 1 ELSE 0 END) AS dirtyDocuments
-        FROM search_documents
+          (SELECT COUNT(*) FROM search_documents) AS totalDocuments,
+          (SELECT COUNT(*) FROM search_document_vector_rows) AS embeddedDocuments,
+          (SELECT COUNT(*) FROM search_documents WHERE dirty = 1) AS dirtyDocuments
       `)
       .get() as Record<string, unknown>;
 

@@ -38,6 +38,7 @@ import {
 } from "./navigation";
 import { getBackupDirectoryPath, getLocalDataStatus } from "./local-data";
 import { EmbeddingWorkerClient } from "./embedding-worker-client";
+import { SearchWorkerClient } from "./search-worker-client";
 import { VectorIndexWorkerClient } from "./vector-index-worker-client";
 
 installNodeNetworkLock();
@@ -48,10 +49,21 @@ const embeddingWorker = new EmbeddingWorkerClient(
 const vectorIndexWorker = new VectorIndexWorkerClient(
   path.join(__dirname, "vector-index-worker.js"),
 );
+const searchWorker = new SearchWorkerClient(
+  path.join(__dirname, "search-worker.js"),
+);
 const core = new OpenFolioCore({
   embeddingEngine: embeddingWorker,
   networkPolicy: "offline",
   vectorIndexSync: (dbPath) => app.whenReady().then(() => vectorIndexWorker.sync(dbPath)),
+  interactiveSearch: (dbPath, input, queryEmbedding) => app.whenReady().then(async () => {
+    await vectorIndexWorker.pause();
+    try {
+      return await searchWorker.search(dbPath, input, queryEmbedding);
+    } finally {
+      vectorIndexWorker.resume();
+    }
+  }),
 });
 const mcpController = new LocalMcpController();
 const MANUAL_UPDATE_MESSAGE = "OpenFolio does not connect to the Internet or check for updates. Download the newest version independently and replace OpenFolio.app. Your private library remains in Application Support on this Mac.";
@@ -248,6 +260,10 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
+  searchWorker.close();
 });
 
 const api: OpenFolioBridge = {
@@ -572,7 +588,7 @@ const api: OpenFolioBridge = {
     setPriority: async (priority: EmbeddingPriority) => core.setEmbeddingPriority(priority),
     syncNow: async () => {
       logAppDebug("embeddings", "syncNow");
-      void core.queueEmbeddingSync()
+      void core.queueLocalIndexSync()
         .then((result) => logAppDebug("embeddings", "syncResult", result))
         .catch((error) => {
           console.error("[openfolio-core] Background embedding sync failed:", error);
