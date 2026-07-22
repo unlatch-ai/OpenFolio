@@ -220,7 +220,10 @@ export class OpenFolioDatabase {
       .replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
     this.db.loadExtension(sqliteVectorPath);
     this.db.enableLoadExtension(false);
-    this.db.exec("PRAGMA journal_mode = WAL;");
+    this.db.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA busy_timeout = 5000;
+    `);
     this.migrateSchema();
     this.bootstrap();
   }
@@ -534,6 +537,10 @@ export class OpenFolioDatabase {
       CREATE VIRTUAL TABLE IF NOT EXISTS search_document_vectors
       USING vec0(embedding float[384] distance_metric=cosine);
 
+      CREATE TABLE IF NOT EXISTS search_document_vector_rows (
+        document_rowid INTEGER PRIMARY KEY
+      );
+
       DROP TRIGGER IF EXISTS search_documents_vector_ai;
       CREATE TRIGGER search_documents_vector_ai
       AFTER INSERT ON search_documents
@@ -541,6 +548,8 @@ export class OpenFolioDatabase {
       BEGIN
         INSERT INTO search_document_vectors(rowid, embedding)
         VALUES (new.rowid, new.embedding);
+        INSERT INTO search_document_vector_rows(document_rowid)
+        VALUES (new.rowid);
       END;
 
       DROP TRIGGER IF EXISTS search_documents_vector_au;
@@ -548,8 +557,12 @@ export class OpenFolioDatabase {
       AFTER UPDATE OF embedding ON search_documents
       BEGIN
         DELETE FROM search_document_vectors WHERE rowid = old.rowid;
+        DELETE FROM search_document_vector_rows WHERE document_rowid = old.rowid;
         INSERT INTO search_document_vectors(rowid, embedding)
         SELECT new.rowid, new.embedding
+        WHERE new.embedding IS NOT NULL AND length(new.embedding) > 0;
+        INSERT INTO search_document_vector_rows(document_rowid)
+        SELECT new.rowid
         WHERE new.embedding IS NOT NULL AND length(new.embedding) > 0;
       END;
 
@@ -558,28 +571,99 @@ export class OpenFolioDatabase {
       AFTER DELETE ON search_documents
       BEGIN
         DELETE FROM search_document_vectors WHERE rowid = old.rowid;
+        DELETE FROM search_document_vector_rows WHERE document_rowid = old.rowid;
       END;
     `);
+    this.reconcileSearchVectorRows();
   }
 
   backfillSearchVectorIndex(limit = 250) {
     const normalizedLimit = Math.max(1, Math.min(2_000, Math.floor(limit)));
-    const result = this.db
-      .prepare(`
-        INSERT INTO search_document_vectors(rowid, embedding)
-        SELECT d.rowid, d.embedding
+    const loadCandidates = () => {
+      const storedCursor = Number(this.getSetting("search_vector_backfill_cursor") ?? 0);
+      const cursor = Number.isSafeInteger(storedCursor) && storedCursor >= 0 ? storedCursor : 0;
+      return this.db
+        .prepare(`
+        SELECT d.rowid AS documentRowid, d.embedding
         FROM search_documents d
+        LEFT JOIN search_document_vector_rows vector_rows
+          ON vector_rows.document_rowid = d.rowid
         WHERE d.embedding IS NOT NULL
           AND length(d.embedding) > 0
-          AND NOT EXISTS (
-            SELECT 1 FROM search_document_vectors vector_index
-            WHERE vector_index.rowid = d.rowid
-          )
-        ORDER BY d.embedding_priority ASC, d.embedded_at DESC
+          AND d.rowid > ?
+          AND vector_rows.document_rowid IS NULL
+        ORDER BY d.rowid ASC
         LIMIT ?
       `)
-      .run(normalizedLimit);
-    return Number(result.changes);
+        .all(cursor, normalizedLimit) as Array<{ documentRowid: number; embedding: string }>;
+    };
+
+    let candidates = loadCandidates();
+    if (candidates.length === 0) {
+      let shouldRetry = this.reconcileSearchVectorRows();
+      if (!shouldRetry) {
+        const status = this.getSearchVectorIndexStatus();
+        const storedCursor = Number(this.getSetting("search_vector_backfill_cursor") ?? 0);
+        if (status.embeddedDocuments > status.indexedDocuments && storedCursor > 0) {
+          this.setSetting("search_vector_backfill_cursor", "0");
+          shouldRetry = true;
+        }
+      }
+      if (shouldRetry) candidates = loadCandidates();
+    }
+    if (candidates.length === 0) return 0;
+
+    const insertVector = this.db.prepare(
+      "INSERT INTO search_document_vectors(rowid, embedding) VALUES (?, ?)",
+    );
+    const markIndexed = this.db.prepare(
+      "INSERT INTO search_document_vector_rows(document_rowid) VALUES (?)",
+    );
+
+    this.db.exec("BEGIN;");
+    try {
+      for (const candidate of candidates) {
+        // sqlite-vec requires virtual-table primary keys to be bound as
+        // 64-bit integers rather than JavaScript numbers.
+        insertVector.run(BigInt(candidate.documentRowid), candidate.embedding);
+        markIndexed.run(candidate.documentRowid);
+      }
+      this.setSetting(
+        "search_vector_backfill_cursor",
+        String(candidates[candidates.length - 1]!.documentRowid),
+      );
+      this.db.exec("COMMIT;");
+    } catch (error) {
+      this.db.exec("ROLLBACK;");
+      throw error;
+    }
+    return candidates.length;
+  }
+
+  private reconcileSearchVectorRows() {
+    const counts = this.db
+      .prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM search_document_vectors) AS vectorCount,
+          (SELECT COUNT(*) FROM search_document_vector_rows) AS markerCount
+      `)
+      .get() as { vectorCount: number; markerCount: number };
+    if (Number(counts.vectorCount) === Number(counts.markerCount)) return false;
+
+    this.db.exec("BEGIN;");
+    try {
+      this.db.exec(`
+        DELETE FROM search_document_vector_rows;
+        INSERT INTO search_document_vector_rows(document_rowid)
+        SELECT rowid FROM search_document_vectors;
+      `);
+      this.setSetting("search_vector_backfill_cursor", "0");
+      this.db.exec("COMMIT;");
+    } catch (error) {
+      this.db.exec("ROLLBACK;");
+      throw error;
+    }
+    return true;
   }
 
   getSearchVectorIndexStatus() {
@@ -587,7 +671,7 @@ export class OpenFolioDatabase {
       .prepare(`
         SELECT
           (SELECT COUNT(*) FROM search_documents WHERE embedding IS NOT NULL AND length(embedding) > 0) AS embeddedDocuments,
-          (SELECT COUNT(*) FROM search_document_vectors) AS indexedDocuments
+          (SELECT COUNT(*) FROM search_document_vector_rows) AS indexedDocuments
       `)
       .get() as { embeddedDocuments: number; indexedDocuments: number };
     return {

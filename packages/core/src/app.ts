@@ -46,13 +46,17 @@ export class OpenFolioCore {
 
   private embeddingDocumentsPerSecond: number | null = null;
 
+  private readonly vectorIndexSyncRunner: ((dbPath: string) => Promise<number>) | null;
+
   constructor(options?: {
     dbPath?: string;
     enableLocalEmbeddings?: boolean;
     embeddingEngine?: EmbeddingEngine;
     networkPolicy?: "offline";
+    vectorIndexSync?: (dbPath: string) => Promise<number>;
   }) {
     this.db = new OpenFolioDatabase(options?.dbPath);
+    this.vectorIndexSyncRunner = options?.vectorIndexSync ?? null;
     const storedEmbeddingRate = Number(this.db.getSetting("embedding_documents_per_second"));
     this.embeddingDocumentsPerSecond = Number.isFinite(storedEmbeddingRate) && storedEmbeddingRate > 0
       ? storedEmbeddingRate
@@ -351,7 +355,10 @@ export class OpenFolioCore {
     if (this.vectorIndexSyncInFlight) return this.vectorIndexSyncInFlight;
 
     this.vectorIndexSyncLastError = null;
-    this.vectorIndexSyncInFlight = this.syncSearchVectorIndex()
+    const sync = this.vectorIndexSyncRunner
+      ? this.vectorIndexSyncRunner(this.db.dbPath)
+      : this.syncSearchVectorIndex();
+    this.vectorIndexSyncInFlight = sync
       .catch((error) => {
         this.vectorIndexSyncLastError = error instanceof Error ? error.message : "Local vector index sync failed.";
         throw error;

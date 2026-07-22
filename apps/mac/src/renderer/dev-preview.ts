@@ -480,7 +480,7 @@ const embeddingPlan = {
 
 const updateState = {
   status: "unsupported" as const,
-  currentVersion: "0.4.2",
+  currentVersion: "0.4.3",
   availableVersion: null,
   downloadedVersion: null,
   progress: null,

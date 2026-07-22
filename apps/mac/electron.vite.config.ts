@@ -11,6 +11,7 @@ export default defineConfig({
         entry: {
           main: path.resolve(__dirname, "src/main.ts"),
           "embedding-worker": path.resolve(__dirname, "src/embedding-worker.ts"),
+          "vector-index-worker": path.resolve(__dirname, "src/vector-index-worker.ts"),
         },
       },
     },

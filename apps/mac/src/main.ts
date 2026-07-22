@@ -38,13 +38,21 @@ import {
 } from "./navigation";
 import { getBackupDirectoryPath, getLocalDataStatus } from "./local-data";
 import { EmbeddingWorkerClient } from "./embedding-worker-client";
+import { VectorIndexWorkerClient } from "./vector-index-worker-client";
 
 installNodeNetworkLock();
 const embeddingWorker = new EmbeddingWorkerClient(
   path.join(process.resourcesPath, "models"),
   path.join(__dirname, "embedding-worker.js"),
 );
-const core = new OpenFolioCore({ embeddingEngine: embeddingWorker, networkPolicy: "offline" });
+const vectorIndexWorker = new VectorIndexWorkerClient(
+  path.join(__dirname, "vector-index-worker.js"),
+);
+const core = new OpenFolioCore({
+  embeddingEngine: embeddingWorker,
+  networkPolicy: "offline",
+  vectorIndexSync: (dbPath) => app.whenReady().then(() => vectorIndexWorker.sync(dbPath)),
+});
 const mcpController = new LocalMcpController();
 const MANUAL_UPDATE_MESSAGE = "OpenFolio does not connect to the Internet or check for updates. Download the newest version independently and replace OpenFolio.app. Your private library remains in Application Support on this Mac.";
 
