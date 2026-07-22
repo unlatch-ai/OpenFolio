@@ -142,6 +142,31 @@ describe("OpenFolioCore", () => {
     expect(messageHit?.messageId).toBeTruthy();
   });
 
+  it("persists a resumable embedding priority and reports its local estimate", async () => {
+    appendManyMessages(chatDbPath, 8);
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+
+    const initial = core.getEmbeddingPlanStats();
+    expect(initial.priorityConfigured).toBe(false);
+    expect(initial.selectedMessages).toBe(9);
+    expect(initial.timeline.length).toBeGreaterThan(0);
+
+    const narrowed = core.setEmbeddingPriority({
+      startAt: initial.latestMessageAt,
+      endAt: (initial.latestMessageAt ?? 0) + 1,
+      personIds: [],
+    });
+    expect(narrowed.priorityConfigured).toBe(true);
+    expect(narrowed.selectedMessages).toBe(1);
+    expect(narrowed.selectedDirtyDocuments).toBe(1);
+    expect(narrowed.estimatedSeconds).toBeGreaterThanOrEqual(1);
+
+    const reopened = new OpenFolioCore({ dbPath }).getEmbeddingPlanStats();
+    expect(reopened.priority).toEqual(narrowed.priority);
+    expect(reopened.selectedMessages).toBe(1);
+  });
+
   it("backs up and preserves durable local data during schema migration", () => {
     seedLegacyLocalDb(dbPath);
     const core = new OpenFolioCore({ dbPath });
@@ -208,9 +233,15 @@ describe("OpenFolioCore", () => {
     expect(result.importedMessages).toBeGreaterThan(0);
     expect(result.importedMessages).toBeLessThan(9);
 
+    const interruptedDb = new DatabaseSync(dbPath);
+    interruptedDb.exec("DELETE FROM search_documents");
+    interruptedDb.close();
     const retry = await core.retryMessagesImport(result.id);
     expect(retry.status).toBe("completed");
     expect(retry.lastCursor).toBe(9);
+    expect(
+      core.db.query<{ count: number }>("SELECT COUNT(*) AS count FROM search_documents WHERE kind = 'message'")[0]?.count,
+    ).toBe(9);
     delete process.env.OPENFOLIO_IMPORT_BATCH_SIZE;
   });
 

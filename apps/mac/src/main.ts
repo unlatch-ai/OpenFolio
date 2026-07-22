@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import { spawn } from "node:child_process";
 import { app, BrowserWindow, ipcMain, nativeImage, session, shell } from "electron";
 import os from "node:os";
 import path from "node:path";
@@ -9,6 +8,7 @@ import type {
   ContactsAccessStatus,
   DiagnosticsReport,
   EditablePersonProfile,
+  EmbeddingPriority,
   LocalDataStatus,
   McpSetupStatus,
   MessagesAccessStatus,
@@ -37,9 +37,14 @@ import {
   type RuntimeNetworkPolicy,
 } from "./navigation";
 import { getBackupDirectoryPath, getLocalDataStatus } from "./local-data";
+import { EmbeddingWorkerClient } from "./embedding-worker-client";
 
 installNodeNetworkLock();
-const core = new OpenFolioCore({ enableLocalEmbeddings: true, networkPolicy: "offline" });
+const embeddingWorker = new EmbeddingWorkerClient(
+  path.join(process.resourcesPath, "models"),
+  path.join(__dirname, "embedding-worker.js"),
+);
+const core = new OpenFolioCore({ embeddingEngine: embeddingWorker, networkPolicy: "offline" });
 const mcpController = new LocalMcpController();
 const MANUAL_UPDATE_MESSAGE = "OpenFolio does not connect to the Internet or check for updates. Download the newest version independently and replace OpenFolio.app. Your private library remains in Application Support on this Mac.";
 
@@ -122,26 +127,6 @@ async function openMessagesFullDiskAccessSettings() {
     console.warn("[openfolio] Failed to open Full Disk Access settings:", error);
     return false;
   }
-}
-
-function getPermissionGuideAppPath() {
-  const basePath = app.isPackaged ? process.resourcesPath : app.getAppPath();
-  return path.join(basePath, "bin", "OpenFolio Setup.app");
-}
-
-function openMessagesPermissionGuide() {
-  const guideAppPath = getPermissionGuideAppPath();
-  if (!fs.existsSync(guideAppPath)) {
-    return false;
-  }
-
-  const target = getMessagesAccessTarget();
-  const child = spawn("open", ["-na", guideAppPath, "--args", "--app-path", target.revealPath], {
-    detached: true,
-    stdio: "ignore",
-  });
-  child.unref();
-  return true;
 }
 
 function getGuidedMessagesAccessStatus(
@@ -278,9 +263,12 @@ const api: OpenFolioBridge = {
         return status;
       }
 
-      const openedGuide = openMessagesPermissionGuide();
-      const openedSettings = openedGuide || await openMessagesFullDiskAccessSettings();
-      const revealedInFinder = openedGuide ? false : revealMessagesAccessTargetInFinder();
+      // The app added to Full Disk Access must be the process that reads
+      // chat.db. A separate setup helper is the wrong TCC identity even when
+      // it visually represents OpenFolio, so reveal the exact target bundle
+      // and let the user add that bundle in System Settings.
+      const openedSettings = await openMessagesFullDiskAccessSettings();
+      const revealedInFinder = revealMessagesAccessTargetInFinder();
       const status = getGuidedMessagesAccessStatus(access, { openedSettings, revealedInFinder });
       logAppDebug("messages", "requestAccessResult", status);
       return status;
@@ -567,11 +555,20 @@ const api: OpenFolioBridge = {
     getStatus: async () => {
       return core.getLocalEmbeddingStatus();
     },
-    getSyncStatus: async () => core.getEmbeddingSyncStatus(),
+    getSyncStatus: async () => {
+      const status = core.getEmbeddingSyncStatus();
+      logAppDebug("embeddings", "getSyncStatus", status);
+      return status;
+    },
+    getPlan: async () => core.getEmbeddingPlanStats(),
+    setPriority: async (priority: EmbeddingPriority) => core.setEmbeddingPriority(priority),
     syncNow: async () => {
-      void core.queueEmbeddingSync().catch((error) => {
-        console.error("[openfolio-core] Background embedding sync failed:", error);
-      });
+      logAppDebug("embeddings", "syncNow");
+      void core.queueEmbeddingSync()
+        .then((result) => logAppDebug("embeddings", "syncResult", result))
+        .catch((error) => {
+          console.error("[openfolio-core] Background embedding sync failed:", error);
+        });
       return core.getEmbeddingSyncStatus();
     },
   },
@@ -662,6 +659,8 @@ safeHandle("openfolio:sync:stopWatcher", () => api.sync.stopWatcher());
 safeHandle("openfolio:sync:triggerSync", () => api.sync.triggerSync());
 safeHandle("openfolio:embeddings:getStatus", () => api.embeddings.getStatus());
 safeHandle("openfolio:embeddings:getSyncStatus", () => api.embeddings.getSyncStatus());
+safeHandle("openfolio:embeddings:getPlan", () => api.embeddings.getPlan());
+safeHandle("openfolio:embeddings:setPriority", (_event, priority: EmbeddingPriority) => api.embeddings.setPriority(priority));
 safeHandle("openfolio:embeddings:syncNow", () => api.embeddings.syncNow());
 safeHandle("openfolio:insights:getWrappedSummary", (_, year?: number) => api.insights.getWrappedSummary(year));
 safeHandle("openfolio:insights:getTopContacts", (_, limit?: number) => api.insights.getTopContacts(limit));

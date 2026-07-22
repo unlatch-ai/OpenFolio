@@ -73,6 +73,7 @@ export function SettingsView() {
     setContactsSync,
     setImportJob,
     setEmbeddingSync,
+    setSetupDismissed,
     setBusy,
     busy,
   } = useAppStore();
@@ -238,9 +239,11 @@ export function SettingsView() {
             title="Messages import"
             detail={
               <p>
-                {importJob
+                {importJob && importJob.importedMessages > 0
                   ? `${importJob.importedMessages.toLocaleString()} messages and ${importJob.importedThreads.toLocaleString()} conversations processed`
-                  : "Build or refresh the local message library."}
+                  : scale && scale.totalDocuments > 0
+                    ? `${scale.totalDocuments.toLocaleString()} local records are available. Refresh to import newer messages.`
+                    : "Build or refresh the local message library."}
               </p>
             }
           >
@@ -249,7 +252,7 @@ export function SettingsView() {
               disabled={busy || messagesStatus?.status !== "granted"}
             >
               <RefreshCw data-icon="inline-start" />
-              {importJob?.status === "failed" ? "Retry import" : "Import now"}
+              {importJob?.status === "failed" ? "Retry import" : scale?.totalDocuments ? "Refresh" : "Import now"}
             </Button>
           </SettingsRow>
           <SettingsRow
@@ -329,6 +332,9 @@ export function SettingsView() {
               }
             >
               Refresh
+            </Button>
+            <Button variant="secondary" onClick={() => setSetupDismissed(false)}>
+              Change coverage
             </Button>
           </SettingsRow>
         </SettingsSection>

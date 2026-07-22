@@ -44,6 +44,10 @@ function getBuildScriptPath() {
   return path.join(app.getAppPath(), "native", "contacts-bridge.build.sh");
 }
 
+function getHelperWorkingDirectory() {
+  return app.isPackaged ? process.resourcesPath : app.getAppPath();
+}
+
 async function ensureHelperBinary() {
   const helperAppPath = getHelperAppPath();
   if (fs.existsSync(helperAppPath)) {
@@ -75,7 +79,7 @@ async function runHelper<T>(command: "status" | "request" | "export"): Promise<T
   const helperAppPath = await ensureHelperBinary();
   const outputPath = path.join(os.tmpdir(), `openfolio-contacts-${process.pid}-${Date.now()}.json`);
   const { stderr } = await execFileAsync("open", ["-n", helperAppPath, "--args", command, "--output", outputPath], {
-    cwd: app.getAppPath(),
+    cwd: getHelperWorkingDirectory(),
     maxBuffer: 16 * 1024 * 1024,
   });
 

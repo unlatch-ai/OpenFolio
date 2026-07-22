@@ -8,7 +8,10 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       lib: {
-        entry: path.resolve(__dirname, "src/main.ts"),
+        entry: {
+          main: path.resolve(__dirname, "src/main.ts"),
+          "embedding-worker": path.resolve(__dirname, "src/embedding-worker.ts"),
+        },
       },
     },
     resolve: {

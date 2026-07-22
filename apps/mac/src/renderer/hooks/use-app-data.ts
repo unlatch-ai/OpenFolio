@@ -14,6 +14,8 @@ export function useAppData() {
     ? requestedPreview
     : null;
   const {
+    embeddingSync,
+    setupDismissed,
     setMessagesStatus,
     setContactsStatus,
     setMcpStatus,
@@ -82,29 +84,35 @@ export function useAppData() {
 
     async function bootstrap() {
       try {
-        const [messagesStatus, contactsStatus, mcpStatus, threads, summaries, watcherState, embeddingSync, activeImport] =
+        // Messages access and the existing local index are the setup-critical
+        // state. Load them independently from optional integrations so a
+        // Contacts or MCP helper failure cannot reset onboarding.
+        const [messagesStatus, threads, activeImport] =
           await Promise.all([
             window.openfolio.messages.getAccessStatus(),
-            window.openfolio.contacts.getAccessStatus(),
-            window.openfolio.mcp.getStatus(),
             window.openfolio.threads.list({ limit: 50 }),
-            window.openfolio.dashboard.getThreadSummaries(10),
-            window.openfolio.sync.getWatcherState(),
-            window.openfolio.embeddings.getSyncStatus(),
             window.openfolio.messages.getActiveImport(),
           ]);
 
         setMessagesStatus(messagesStatus);
-        setContactsStatus(contactsStatus);
-        setMcpStatus(mcpStatus);
         setThreads(threads);
-        setThreadSummaries(summaries);
-        setWatcherState(watcherState);
-        setEmbeddingSync(embeddingSync);
         setImportJob(activeImport);
 
+        const [contactsStatus, mcpStatus, summaries, watcherState, embeddingSync] = await Promise.all([
+          window.openfolio.contacts.getAccessStatus().catch(() => null),
+          window.openfolio.mcp.getStatus().catch(() => null),
+          window.openfolio.dashboard.getThreadSummaries(10).catch(() => []),
+          window.openfolio.sync.getWatcherState().catch(() => null),
+          window.openfolio.embeddings.getSyncStatus().catch(() => null),
+        ]);
+        if (contactsStatus) setContactsStatus(contactsStatus);
+        if (mcpStatus) setMcpStatus(mcpStatus);
+        setThreadSummaries(summaries);
+        if (watcherState) setWatcherState(watcherState);
+        if (embeddingSync) setEmbeddingSync(embeddingSync);
+
         // Auto-start watcher if messages access is granted
-        if (messagesStatus.status === "granted" && !watcherState.watching) {
+        if (messagesStatus.status === "granted" && watcherState && !watcherState.watching) {
           const started = await window.openfolio.sync.startWatcher();
           setWatcherState(started);
         }
@@ -131,6 +139,31 @@ export function useAppData() {
     setSetupDismissed,
     onboardingPreview,
   ]);
+
+  useEffect(() => {
+    if (!setupDismissed || !embeddingSync || embeddingSync.dirtyDocuments === 0 || embeddingSync.lastError) return;
+
+    let checking = false;
+    const advanceSemanticIndex = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        let status = await window.openfolio.embeddings.getSyncStatus();
+        if (!status.syncing && status.dirtyDocuments > 0) {
+          status = await window.openfolio.embeddings.syncNow();
+        }
+        setEmbeddingSync(status);
+      } catch (error) {
+        console.error("[openfolio] Semantic indexing status failed:", error);
+      } finally {
+        checking = false;
+      }
+    };
+
+    void advanceSemanticIndex();
+    const interval = window.setInterval(advanceSemanticIndex, 1500);
+    return () => window.clearInterval(interval);
+  }, [setupDismissed, Boolean(embeddingSync?.dirtyDocuments), embeddingSync?.lastError, setEmbeddingSync]);
 
   // Update state listener
   useEffect(() => {
@@ -159,7 +192,11 @@ export function useAppData() {
           .getThreadSummaries(10)
           .then(setThreadSummaries)
           .catch(console.error);
+        window.openfolio.embeddings
+          .getSyncStatus()
+          .then(setEmbeddingSync)
+          .catch(console.error);
       }
     });
-  }, [onboardingPreview, setImportJob, setThreads, setThreadSummaries]);
+  }, [onboardingPreview, setImportJob, setThreads, setThreadSummaries, setEmbeddingSync]);
 }

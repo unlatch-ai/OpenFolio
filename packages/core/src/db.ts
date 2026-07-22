@@ -5,6 +5,8 @@ import { DatabaseSync } from "node:sqlite";
 import type {
   ConnectorSyncResult,
   EditablePersonProfile,
+  EmbeddingPlanStats,
+  EmbeddingPriority,
   MessageAttachment,
   MessageThread,
   MessagesThreadSummary,
@@ -71,6 +73,50 @@ function parseJsonArray(value: unknown): string[] {
   } catch {
     return [];
   }
+}
+
+const DEFAULT_EMBEDDING_PRIORITY: EmbeddingPriority = {
+  startAt: null,
+  endAt: null,
+  personIds: [],
+};
+
+function normalizeEmbeddingPriority(value: unknown): EmbeddingPriority {
+  if (!value || typeof value !== "object") return { ...DEFAULT_EMBEDDING_PRIORITY };
+  const input = value as Partial<EmbeddingPriority>;
+  return {
+    startAt: typeof input.startAt === "number" && Number.isFinite(input.startAt) ? input.startAt : null,
+    endAt: typeof input.endAt === "number" && Number.isFinite(input.endAt) ? input.endAt : null,
+    personIds: Array.isArray(input.personIds)
+      ? [...new Set(input.personIds.filter((id): id is string => typeof id === "string" && id.length > 0))]
+      : [],
+  };
+}
+
+function buildMessagePriorityPredicate(priority: EmbeddingPriority, messageAlias = "mm") {
+  const clauses: string[] = [];
+  const args: Array<string | number> = [];
+  if (priority.startAt != null) {
+    clauses.push(`${messageAlias}.occurred_at >= ?`);
+    args.push(priority.startAt);
+  }
+  if (priority.endAt != null) {
+    clauses.push(`${messageAlias}.occurred_at < ?`);
+    args.push(priority.endAt);
+  }
+  const dateClause = clauses.length > 0 ? `(${clauses.join(" AND ")})` : null;
+  const peopleClause = priority.personIds.length > 0
+    ? `EXISTS (
+        SELECT 1 FROM message_participants priority_participant
+        WHERE priority_participant.thread_id = ${messageAlias}.thread_id
+          AND priority_participant.person_id IN (${priority.personIds.map(() => "?").join(", ")})
+      )`
+    : null;
+  if (peopleClause) args.push(...priority.personIds);
+  return {
+    sql: [dateClause, peopleClause].filter(Boolean).join(" OR ") || "1 = 1",
+    args,
+  };
 }
 
 function mapPerson(row: Record<string, unknown>): Person {
@@ -423,6 +469,15 @@ export class OpenFolioDatabase {
       CREATE UNIQUE INDEX IF NOT EXISTS search_documents_kind_entity_idx
       ON search_documents(kind, entity_id);
 
+      CREATE INDEX IF NOT EXISTS search_documents_dirty_updated_idx
+      ON search_documents(dirty, updated_at DESC);
+
+      CREATE INDEX IF NOT EXISTS message_messages_occurred_at_idx
+      ON message_messages(occurred_at DESC);
+
+      CREATE INDEX IF NOT EXISTS message_participants_person_thread_idx
+      ON message_participants(person_id, thread_id);
+
       CREATE INDEX IF NOT EXISTS mm_thread_occurred_idx
       ON message_messages(thread_id, occurred_at DESC);
 
@@ -445,7 +500,8 @@ export class OpenFolioDatabase {
         VALUES('delete', old.rowid, old.title, old.content);
       END;
 
-      CREATE TRIGGER IF NOT EXISTS search_documents_au AFTER UPDATE ON search_documents BEGIN
+      DROP TRIGGER IF EXISTS search_documents_au;
+      CREATE TRIGGER search_documents_au AFTER UPDATE OF title, content ON search_documents BEGIN
         INSERT INTO search_documents_fts(search_documents_fts, rowid, title, content)
         VALUES('delete', old.rowid, old.title, old.content);
         INSERT INTO search_documents_fts(rowid, title, content)
@@ -458,6 +514,11 @@ export class OpenFolioDatabase {
     this.ensureSearchDocumentColumn("content_hash", "TEXT NOT NULL DEFAULT ''");
     this.ensureSearchDocumentColumn("embedded_at", "INTEGER");
     this.ensureSearchDocumentColumn("dirty", "INTEGER NOT NULL DEFAULT 1");
+    this.ensureSearchDocumentColumn("embedding_priority", "INTEGER NOT NULL DEFAULT 1");
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS search_documents_embedding_queue_idx
+      ON search_documents(dirty, embedding_priority, updated_at DESC);
+    `);
     this.db.exec(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION};`);
   }
 
@@ -1155,6 +1216,136 @@ export class OpenFolioDatabase {
     }
   }
 
+  getEmbeddingPriority(): EmbeddingPriority {
+    const stored = this.getSetting("embedding_priority");
+    if (!stored) return { ...DEFAULT_EMBEDDING_PRIORITY };
+    try {
+      return normalizeEmbeddingPriority(JSON.parse(stored));
+    } catch {
+      return { ...DEFAULT_EMBEDDING_PRIORITY };
+    }
+  }
+
+  setEmbeddingPriority(priority: EmbeddingPriority) {
+    const normalized = normalizeEmbeddingPriority(priority);
+    this.setSetting("embedding_priority", JSON.stringify(normalized));
+    this.setSetting("embedding_priority_applied", "");
+    return normalized;
+  }
+
+  invalidateEmbeddingPriority() {
+    this.setSetting("embedding_priority_applied", "");
+  }
+
+  applyEmbeddingPriority() {
+    const priority = this.getEmbeddingPriority();
+    const serialized = JSON.stringify(priority);
+    if (this.getSetting("embedding_priority_applied") === serialized) return;
+
+    const predicate = buildMessagePriorityPredicate(priority);
+    this.db.exec("BEGIN;");
+    try {
+      this.db.prepare("UPDATE search_documents SET embedding_priority = 1 WHERE dirty = 1 AND embedding_priority != 1").run();
+      this.db.prepare("UPDATE search_documents SET embedding_priority = 0 WHERE dirty = 1 AND kind != 'message' AND embedding_priority != 0").run();
+      this.db
+        .prepare(`
+          UPDATE search_documents
+          SET embedding_priority = 0
+          WHERE dirty = 1 AND kind = 'message' AND embedding_priority != 0 AND EXISTS (
+            SELECT 1 FROM message_messages mm
+            WHERE mm.id = search_documents.entity_id AND (${predicate.sql})
+          )
+        `)
+        .run(...predicate.args);
+      this.db.exec("COMMIT;");
+    } catch (error) {
+      this.db.exec("ROLLBACK;");
+      throw error;
+    }
+    this.setSetting("embedding_priority_applied", serialized);
+  }
+
+  getEmbeddingPlanStats(documentsPerSecond: number | null): EmbeddingPlanStats {
+    const priority = this.getEmbeddingPriority();
+    const predicate = buildMessagePriorityPredicate(priority);
+    const bounds = this.db
+      .prepare(`
+        SELECT MIN(occurred_at) AS earliestMessageAt, MAX(occurred_at) AS latestMessageAt
+        FROM message_messages
+        WHERE body IS NOT NULL AND body != ''
+      `)
+      .get() as Record<string, unknown>;
+    const selected = this.db
+      .prepare(`
+        SELECT COUNT(*) AS selectedMessages, COUNT(DISTINCT mm.thread_id) AS selectedConversations
+        FROM message_messages mm
+        WHERE mm.body IS NOT NULL AND mm.body != '' AND (${predicate.sql})
+      `)
+      .get(...predicate.args) as Record<string, unknown>;
+    const coverage = this.db
+      .prepare(`
+        SELECT
+          SUM(CASE WHEN d.dirty = 1 THEN 1 ELSE 0 END) AS selectedDirtyDocuments,
+          SUM(CASE WHEN d.embedding IS NOT NULL AND d.embedding != '' THEN 1 ELSE 0 END) AS selectedEmbeddedDocuments
+        FROM search_documents d
+        JOIN message_messages mm ON d.kind = 'message' AND d.entity_id = mm.id
+        WHERE ${predicate.sql}
+      `)
+      .get(...predicate.args) as Record<string, unknown>;
+    const timeline = this.db
+      .prepare(`
+        SELECT
+          strftime('%Y-%m', occurred_at / 1000, 'unixepoch') AS month,
+          CAST(strftime('%s', strftime('%Y-%m-01', occurred_at / 1000, 'unixepoch')) AS INTEGER) * 1000 AS startAt,
+          COUNT(*) AS count
+        FROM message_messages
+        WHERE body IS NOT NULL AND body != ''
+        GROUP BY month
+        ORDER BY month ASC
+      `)
+      .all()
+      .map((row) => ({
+        month: String((row as Record<string, unknown>).month),
+        startAt: Number((row as Record<string, unknown>).startAt),
+        count: Number((row as Record<string, unknown>).count),
+      }));
+    const people = this.db
+      .prepare(`
+        SELECT p.id, p.display_name AS displayName, COUNT(DISTINCT mm.id) AS messageCount
+        FROM people p
+        JOIN message_participants mp ON mp.person_id = p.id
+        JOIN message_messages mm ON mm.thread_id = mp.thread_id
+        WHERE mm.body IS NOT NULL AND mm.body != '' AND lower(p.display_name) != 'you'
+        GROUP BY p.id
+        ORDER BY messageCount DESC
+        LIMIT 8
+      `)
+      .all()
+      .map((row) => ({
+        id: String((row as Record<string, unknown>).id),
+        displayName: String((row as Record<string, unknown>).displayName),
+        messageCount: Number((row as Record<string, unknown>).messageCount),
+      }));
+    const selectedDirtyDocuments = Number(coverage.selectedDirtyDocuments ?? 0);
+    const effectiveRate = documentsPerSecond && documentsPerSecond > 0 ? documentsPerSecond : 40;
+
+    return {
+      priority,
+      priorityConfigured: this.getSetting("embedding_priority") != null,
+      earliestMessageAt: bounds.earliestMessageAt == null ? null : Number(bounds.earliestMessageAt),
+      latestMessageAt: bounds.latestMessageAt == null ? null : Number(bounds.latestMessageAt),
+      selectedMessages: Number(selected.selectedMessages ?? 0),
+      selectedConversations: Number(selected.selectedConversations ?? 0),
+      selectedDirtyDocuments,
+      selectedEmbeddedDocuments: Number(coverage.selectedEmbeddedDocuments ?? 0),
+      documentsPerSecond,
+      estimatedSeconds: selectedDirtyDocuments > 0 ? Math.ceil(selectedDirtyDocuments / effectiveRate) : 0,
+      estimateIsCalibrated: documentsPerSecond != null,
+      timeline,
+      people,
+    };
+  }
+
   getDirtySearchDocuments(limit = 50) {
     const rows = this.db
       .prepare(`
@@ -1173,7 +1364,7 @@ export class OpenFolioDatabase {
           updated_at AS updatedAt
         FROM search_documents
         WHERE dirty = 1
-        ORDER BY updated_at DESC
+        ORDER BY embedding_priority ASC, updated_at DESC
         LIMIT ?
       `)
       .all(limit) as Array<Record<string, unknown>>;

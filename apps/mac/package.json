@@ -8,13 +8,12 @@
   "main": "out/main/main.js",
   "scripts": {
     "build:contacts-helper": "if [ \"$(uname)\" = Darwin ]; then bash native/contacts-bridge.build.sh; else echo 'Skipping contacts-helper (not macOS)'; fi",
-    "build:permission-guide": "if [ \"$(uname)\" = Darwin ]; then bash native/permission-guide/build.sh; else echo 'Skipping permission-guide (not macOS)'; fi",
-    "build:native": "pnpm run build:contacts-helper && pnpm run build:permission-guide",
+    "build:native": "pnpm run build:contacts-helper",
     "predev": "pnpm run build:native",
     "model:vendor": "node scripts/model-assets.mjs vendor",
     "model:verify": "node scripts/model-assets.mjs verify",
     "artifact:verify": "node scripts/verify-model-artifact.mjs",
-    "prebuild": "pnpm run build:native && pnpm run model:vendor",
+    "prebuild": "pnpm --filter @openfolio/core build && pnpm run build:native && pnpm run model:vendor",
     "predist:mac": "pnpm run build:native && pnpm run model:verify",
     "prerelease:mac": "pnpm run build:native && pnpm run model:verify",
     "dev": "electron-vite dev",
@@ -71,10 +70,6 @@
       {
         "from": "bin/OpenFolio Contacts.app",
         "to": "bin/OpenFolio Contacts.app"
-      },
-      {
-        "from": "bin/OpenFolio Setup.app",
-        "to": "bin/OpenFolio Setup.app"
       },
       {
         "from": ".model-cache/models/Xenova/all-MiniLM-L6-v2/751bff37182d3f1213fa05d7196b954e230abad9",

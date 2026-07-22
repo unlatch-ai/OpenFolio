@@ -1,10 +1,10 @@
 import type { SearchDocumentRecord } from "@openfolio/shared-types";
-import type { LocalEmbeddingEngine } from "./local-embeddings.js";
+import type { EmbeddingEngine } from "./local-embeddings.js";
 import { normalizeDocumentForEmbedding } from "./embeddings.js";
 
 /** Local retrieval orchestration. This package intentionally has no remote provider. */
 export class AIOrchestrator {
-  constructor(private readonly localEmbeddings?: LocalEmbeddingEngine | null) {}
+  constructor(private readonly localEmbeddings?: EmbeddingEngine | null) {}
 
   getEmbeddingMetadata() {
     if (

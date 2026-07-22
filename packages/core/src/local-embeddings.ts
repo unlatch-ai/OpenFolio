@@ -91,8 +91,29 @@ export function verifyLocalModelDirectory(
 
 type Pipeline = (
   texts: string[],
-  options?: { pooling: string; normalize: boolean },
+  options?: {
+    pooling: string;
+    normalize: boolean;
+    truncation: boolean;
+    max_length: number;
+  },
 ) => Promise<{ tolist: () => number[][] }>;
+
+const EMBEDDING_MAX_TOKENS = 256;
+const EMBEDDING_CHUNK_SIZE = 1;
+
+function embeddingOptions() {
+  return {
+    pooling: "mean",
+    normalize: true,
+    truncation: true,
+    max_length: EMBEDDING_MAX_TOKENS,
+  };
+}
+
+async function yieldToEventLoop() {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+}
 
 export interface LocalEmbeddingStatus {
   ready: boolean;
@@ -100,6 +121,12 @@ export interface LocalEmbeddingStatus {
   modelsDir: string;
   modelDownloaded: boolean;
   error: string | null;
+}
+
+export interface EmbeddingEngine {
+  getStatus(): Promise<LocalEmbeddingStatus>;
+  embed(text: string): Promise<number[] | null>;
+  embedBatch(texts: string[]): Promise<Array<number[] | null>>;
 }
 
 /** Local q8 embedding engine. Assets are accepted only by approved hash. */
@@ -182,7 +209,7 @@ export class LocalEmbeddingEngine {
     const pipe = await this.ensurePipeline();
     if (!pipe) return null;
     try {
-      const output = await pipe([text], { pooling: "mean", normalize: true });
+      const output = await pipe([text], embeddingOptions());
       const vector = output.tolist()[0] ?? null;
       return vector?.length === APPROVED_LOCAL_MODEL.embeddingDimension ? vector : null;
     } catch (error) {
@@ -197,10 +224,10 @@ export class LocalEmbeddingEngine {
     if (!pipe) return texts.map(() => null);
 
     const results: Array<number[] | null> = [];
-    for (let i = 0; i < texts.length; i += 20) {
-      const chunk = texts.slice(i, i + 20);
+    for (let i = 0; i < texts.length; i += EMBEDDING_CHUNK_SIZE) {
+      const chunk = texts.slice(i, i + EMBEDDING_CHUNK_SIZE);
       try {
-        const vectors = (await pipe(chunk, { pooling: "mean", normalize: true })).tolist();
+        const vectors = (await pipe(chunk, embeddingOptions())).tolist();
         for (let j = 0; j < chunk.length; j++) {
           const vector = vectors[j] ?? null;
           results.push(vector?.length === APPROVED_LOCAL_MODEL.embeddingDimension ? vector : null);
@@ -209,6 +236,7 @@ export class LocalEmbeddingEngine {
         console.error("[openfolio-embeddings] Batch embed failed for chunk:", error instanceof Error ? error.message : error);
         results.push(...chunk.map(() => null));
       }
+      await yieldToEventLoop();
     }
     return results;
   }

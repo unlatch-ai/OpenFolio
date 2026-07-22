@@ -508,6 +508,28 @@ export interface EmbeddingSyncStatus {
   lastError: string | null;
 }
 
+export interface EmbeddingPriority {
+  startAt: number | null;
+  endAt: number | null;
+  personIds: string[];
+}
+
+export interface EmbeddingPlanStats {
+  priority: EmbeddingPriority;
+  priorityConfigured: boolean;
+  earliestMessageAt: number | null;
+  latestMessageAt: number | null;
+  selectedMessages: number;
+  selectedConversations: number;
+  selectedDirtyDocuments: number;
+  selectedEmbeddedDocuments: number;
+  documentsPerSecond: number | null;
+  estimatedSeconds: number | null;
+  estimateIsCalibrated: boolean;
+  timeline: Array<{ month: string; startAt: number; count: number }>;
+  people: Array<{ id: string; displayName: string; messageCount: number }>;
+}
+
 /* ─── Analytics types (mirrored from core/analytics.ts) ─── */
 
 export interface RelationshipStats {
@@ -665,6 +687,8 @@ export interface OpenFolioBridge {
   embeddings: {
     getStatus(): Promise<LocalEmbeddingStatus>;
     getSyncStatus(): Promise<EmbeddingSyncStatus>;
+    getPlan(): Promise<EmbeddingPlanStats>;
+    setPriority(priority: EmbeddingPriority): Promise<EmbeddingPlanStats>;
     syncNow(): Promise<EmbeddingSyncStatus>;
   };
   insights: {

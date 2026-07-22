@@ -118,12 +118,14 @@ export class MessagesImporter {
     const source = new DatabaseSync(chatDbPath, { open: true, readOnly: true });
     const cursor = this.database.getCursor("messages") ?? 0;
     let batchCursor = cursor;
-    const importLimit = Number(process.env.OPENFOLIO_IMPORT_BATCH_SIZE ?? 10_000);
+    // Each page runs synchronously against SQLite. Keep pages small enough
+    // that Electron can service renderer IPC and paint import progress between
+    // them, even for a large Messages library.
+    const importLimit = Number(process.env.OPENFOLIO_IMPORT_BATCH_SIZE ?? 500);
 
     try {
       const seenThreads = new Set<string>();
       const seenPeople = new Set<string>();
-      const importedMessageIds = new Set<string>();
       let maxCursor = cursor;
 
       while (true) {
@@ -164,6 +166,9 @@ export class MessagesImporter {
         }
 
         const grouped = new Map<number, RawMessageRow[]>();
+        const batchThreads = new Set<string>();
+        const batchPeople = new Set<string>();
+        const batchMessages = new Set<string>();
 
         for (const row of rows) {
           const bucket = grouped.get(row.sourceMessageId) ?? [];
@@ -176,12 +181,14 @@ export class MessagesImporter {
           const sourceChatId = String(first.chatId ?? `orphan_${first.sourceMessageId}`);
           const thread = this.database.upsertThread(sourceChatId, first.chatIdentifier ?? null);
           seenThreads.add(thread.id);
+          batchThreads.add(thread.id);
 
           const isFromMe = Boolean(first.isFromMe);
           const rawHandle = isFromMe ? "me" : first.handleValue;
           const handle = normalizeHandle(rawHandle);
           const person = this.database.getOrCreatePerson(handle, isFromMe ? "You" : first.handleValue ?? "Unknown");
           seenPeople.add(person.id);
+          batchPeople.add(person.id);
 
           if (rawHandle) {
             this.database.addParticipant(thread.id, person.id, rawHandle, first.service ?? null);
@@ -210,13 +217,21 @@ export class MessagesImporter {
 
           if (inserted.inserted) {
             job.importedMessages += 1;
-            importedMessageIds.add(inserted.messageId);
           }
+          // Refresh the document even when a cancelled import is retrying an
+          // already-inserted row; the prior run may have stopped before its
+          // search document was written.
+          batchMessages.add(inserted.messageId);
 
           maxCursor = Math.max(maxCursor, first.sourceMessageId);
         }
 
         batchCursor = maxCursor;
+        this.database.refreshSearchDocuments({
+          people: [...batchPeople],
+          threads: [...batchThreads],
+          messages: [...batchMessages],
+        });
         await this.yieldToEventLoop();
         if (rows.length < importLimit) {
           break;
@@ -227,11 +242,6 @@ export class MessagesImporter {
       job.importedPeople = seenPeople.size;
       job.lastCursor = maxCursor;
       this.database.setCursor("messages", maxCursor);
-      this.database.refreshSearchDocuments({
-        people: [...seenPeople],
-        threads: [...seenThreads],
-        messages: [...importedMessageIds],
-      });
       job.status = "completed";
       job.completedAt = now();
       return job;
