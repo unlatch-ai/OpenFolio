@@ -144,7 +144,12 @@ export function useAppData() {
   ]);
 
   useEffect(() => {
-    if (!setupDismissed || !embeddingSync || embeddingSync.dirtyDocuments === 0 || embeddingSync.lastError) return;
+    if (
+      !setupDismissed
+      || !embeddingSync
+      || (embeddingSync.dirtyDocuments === 0 && !embeddingSync.syncing)
+      || embeddingSync.lastError
+    ) return;
 
     let checking = false;
     const advanceSemanticIndex = async () => {

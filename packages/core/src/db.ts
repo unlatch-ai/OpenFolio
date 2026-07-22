@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import * as sqliteVec from "sqlite-vec";
 import type {
   ConnectorSyncResult,
   EditablePersonProfile,
@@ -35,7 +36,7 @@ import {
   buildReminderSearchContent,
   buildThreadSearchContent,
 } from "./embeddings.js";
-import { contentHash, cosineSimilarity, createId, normalizeHandle, normalizeQueryForFts, now } from "./utils.js";
+import { contentHash, createId, normalizeHandle, normalizeQueryForFts, now } from "./utils.js";
 
 const DEFAULT_DB_DIR = path.join(os.homedir(), "Library", "Application Support", "OpenFolio");
 const CURRENT_SCHEMA_VERSION = 3;
@@ -213,7 +214,12 @@ export class OpenFolioDatabase {
   constructor(dbPath = process.env.OPENFOLIO_LOCAL_DB_PATH || path.join(DEFAULT_DB_DIR, "openfolio.sqlite")) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     this.dbPath = dbPath;
-    this.db = new DatabaseSync(dbPath);
+    this.db = new DatabaseSync(dbPath, { allowExtension: true });
+    const sqliteVectorPath = sqliteVec
+      .getLoadablePath()
+      .replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
+    this.db.loadExtension(sqliteVectorPath);
+    this.db.enableLoadExtension(false);
     this.db.exec("PRAGMA journal_mode = WAL;");
     this.migrateSchema();
     this.bootstrap();
@@ -519,7 +525,75 @@ export class OpenFolioDatabase {
       CREATE INDEX IF NOT EXISTS search_documents_embedding_queue_idx
       ON search_documents(dirty, embedding_priority, updated_at DESC);
     `);
+    this.ensureSearchVectorIndex();
     this.db.exec(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION};`);
+  }
+
+  private ensureSearchVectorIndex() {
+    this.db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS search_document_vectors
+      USING vec0(embedding float[384] distance_metric=cosine);
+
+      DROP TRIGGER IF EXISTS search_documents_vector_ai;
+      CREATE TRIGGER search_documents_vector_ai
+      AFTER INSERT ON search_documents
+      WHEN new.embedding IS NOT NULL AND length(new.embedding) > 0
+      BEGIN
+        INSERT INTO search_document_vectors(rowid, embedding)
+        VALUES (new.rowid, new.embedding);
+      END;
+
+      DROP TRIGGER IF EXISTS search_documents_vector_au;
+      CREATE TRIGGER search_documents_vector_au
+      AFTER UPDATE OF embedding ON search_documents
+      BEGIN
+        DELETE FROM search_document_vectors WHERE rowid = old.rowid;
+        INSERT INTO search_document_vectors(rowid, embedding)
+        SELECT new.rowid, new.embedding
+        WHERE new.embedding IS NOT NULL AND length(new.embedding) > 0;
+      END;
+
+      DROP TRIGGER IF EXISTS search_documents_vector_ad;
+      CREATE TRIGGER search_documents_vector_ad
+      AFTER DELETE ON search_documents
+      BEGIN
+        DELETE FROM search_document_vectors WHERE rowid = old.rowid;
+      END;
+    `);
+  }
+
+  backfillSearchVectorIndex(limit = 250) {
+    const normalizedLimit = Math.max(1, Math.min(2_000, Math.floor(limit)));
+    const result = this.db
+      .prepare(`
+        INSERT INTO search_document_vectors(rowid, embedding)
+        SELECT d.rowid, d.embedding
+        FROM search_documents d
+        WHERE d.embedding IS NOT NULL
+          AND length(d.embedding) > 0
+          AND NOT EXISTS (
+            SELECT 1 FROM search_document_vectors vector_index
+            WHERE vector_index.rowid = d.rowid
+          )
+        ORDER BY d.embedding_priority ASC, d.embedded_at DESC
+        LIMIT ?
+      `)
+      .run(normalizedLimit);
+    return Number(result.changes);
+  }
+
+  getSearchVectorIndexStatus() {
+    const row = this.db
+      .prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM search_documents WHERE embedding IS NOT NULL AND length(embedding) > 0) AS embeddedDocuments,
+          (SELECT COUNT(*) FROM search_document_vectors) AS indexedDocuments
+      `)
+      .get() as { embeddedDocuments: number; indexedDocuments: number };
+    return {
+      embeddedDocuments: Number(row.embeddedDocuments),
+      indexedDocuments: Number(row.indexedDocuments),
+    };
   }
 
   private ensureSearchDocumentColumn(column: string, type: string) {
@@ -1724,7 +1798,8 @@ export class OpenFolioDatabase {
     const query = input.text.trim();
     const limit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 20)));
     if (!query) return [];
-    const candidateLimit = Math.min(2_000, Math.max(80, limit * 8));
+    const candidateLimit = Math.min(1_000, Math.max(40, limit * 4));
+    const semanticCandidateLimit = Math.min(10_000, Math.max(2_000, candidateLimit * 10));
     const documentFilter = this.buildSearchDocumentFilter(input);
     const safeQuery = normalizeQueryForFts(query);
     const textRows = safeQuery
@@ -1736,7 +1811,6 @@ export class OpenFolioDatabase {
               d.entity_id AS entityId,
               d.title,
               d.content,
-              d.embedding,
               bm25(search_documents_fts) AS textScore
             FROM search_documents_fts
             JOIN search_documents d ON d.rowid = search_documents_fts.rowid
@@ -1751,7 +1825,7 @@ export class OpenFolioDatabase {
     const fallbackRows = textRows.length === 0
       ? (this.db
           .prepare(`
-            SELECT id, kind, entity_id AS entityId, title, content, embedding, 0 AS textScore
+            SELECT id, kind, entity_id AS entityId, title, content, 0 AS textScore
             FROM search_documents d
             WHERE (d.title LIKE ? ESCAPE '\\' OR d.content LIKE ? ESCAPE '\\')
               AND ${documentFilter.sql}
@@ -1764,11 +1838,31 @@ export class OpenFolioDatabase {
     const semanticRows = queryEmbedding
       ? (this.db
           .prepare(`
-            SELECT id, kind, entity_id AS entityId, title, content, embedding, NULL AS textScore
-            FROM search_documents d
-            WHERE d.embedding IS NOT NULL AND d.embedding != '' AND ${documentFilter.sql}
+            WITH semantic_matches AS (
+              SELECT rowid, distance
+              FROM search_document_vectors
+              WHERE embedding MATCH ? AND k = ?
+            )
+            SELECT
+              d.id,
+              d.kind,
+              d.entity_id AS entityId,
+              d.title,
+              d.content,
+              NULL AS textScore,
+              MAX(0, 1.0 - semantic_matches.distance) AS semanticScore
+            FROM semantic_matches
+            JOIN search_documents d ON d.rowid = semantic_matches.rowid
+            WHERE ${documentFilter.sql}
+            ORDER BY semantic_matches.distance ASC
+            LIMIT ?
           `)
-          .all(...documentFilter.params) as Array<Record<string, unknown>>)
+          .all(
+            new Uint8Array(Float32Array.from(queryEmbedding).buffer),
+            semanticCandidateLimit,
+            ...documentFilter.params,
+            candidateLimit,
+          ) as Array<Record<string, unknown>>)
       : [];
 
     const byId = new Map<string, Record<string, unknown> & { exactMatch?: boolean }>();
@@ -1776,18 +1870,40 @@ export class OpenFolioDatabase {
       byId.set(String(row.id), { ...row, exactMatch: true });
     }
     for (const row of semanticRows) {
-      if (!byId.has(String(row.id))) byId.set(String(row.id), { ...row, exactMatch: false });
+      const id = String(row.id);
+      const existing = byId.get(id);
+      if (existing) {
+        existing.semanticScore = row.semanticScore;
+      } else {
+        byId.set(id, { ...row, exactMatch: false });
+      }
     }
 
-    const ranked = [...byId.values()].flatMap((row) => {
-      const embedding = parseEmbedding(row.embedding);
-      const semanticScore = queryEmbedding && embedding ? cosineSimilarity(queryEmbedding, embedding) : 0;
+    const scored = [...byId.values()].flatMap((row) => {
+      const rawSemanticScore = Number(row.semanticScore ?? 0);
+      const semanticScore = Number.isFinite(rawSemanticScore) ? rawSemanticScore : 0;
       const keywordScore = Number(row.textScore ?? 0);
       const textScore = Number.isFinite(keywordScore) ? Math.max(0, -keywordScore) : 0;
       const exact = row.exactMatch === true;
-      const semantic = Boolean(queryEmbedding && embedding);
+      const semantic = Boolean(queryEmbedding && row.semanticScore != null);
       if (!exact && semanticScore <= 0) return [];
       const combinedScore = (exact ? 2 : 0) + textScore + Math.max(0, semanticScore);
+
+      return [{ row, exact, semantic, semanticScore, textScore, combinedScore }];
+    });
+
+    // Score the local vectors first, then hydrate only the strongest candidates.
+    // Hydrating every embedded document performs one or more SQLite lookups per
+    // row and can block Electron's main process for minutes on a large archive.
+    const hydrationCandidates = scored
+      .sort((left, right) => {
+        if (left.exact !== right.exact) return left.exact ? -1 : 1;
+        if (right.combinedScore !== left.combinedScore) return right.combinedScore - left.combinedScore;
+        return String(left.row.id).localeCompare(String(right.row.id));
+      })
+      .slice(0, candidateLimit);
+
+    const ranked = hydrationCandidates.flatMap(({ row, exact, semantic, semanticScore, textScore, combinedScore }) => {
       const kind = String(row.kind) as SearchResult["kind"];
       const entityId = String(row.entityId);
       const navigation = this.getSearchNavigation(kind, entityId);

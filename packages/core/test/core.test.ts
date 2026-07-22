@@ -2,12 +2,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { beforeEach, describe, expect, it } from "vitest";
+import * as sqliteVec from "sqlite-vec";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SearchDocumentRecord } from "@openfolio/shared-types";
 import { findDuplicatePeople, OpenFolioCore } from "../src/index.js";
 
 function tempPath(name: string) {
   return path.join(fs.mkdtempSync(path.join(os.tmpdir(), "openfolio-")), name);
+}
+
+function testEmbedding(axis = 0) {
+  return Array.from({ length: 384 }, (_, index) => index === axis ? 1 : 0);
 }
 
 function seedMessagesDb(chatDbPath: string) {
@@ -233,7 +238,8 @@ describe("OpenFolioCore", () => {
     expect(result.importedMessages).toBeGreaterThan(0);
     expect(result.importedMessages).toBeLessThan(9);
 
-    const interruptedDb = new DatabaseSync(dbPath);
+    const interruptedDb = new DatabaseSync(dbPath, { allowExtension: true });
+    sqliteVec.load(interruptedDb);
     interruptedDb.exec("DELETE FROM search_documents");
     interruptedDb.close();
     const retry = await core.retryMessagesImport(result.id);
@@ -250,15 +256,52 @@ describe("OpenFolioCore", () => {
     await core.startMessagesImport();
     const dirtyDocs = core.db.getDirtySearchDocuments();
     for (const doc of dirtyDocs) {
-      core.db.markSearchDocumentEmbedded(doc.id, doc.kind === "message" ? [1, 0, 0] : [0, 1, 0], "local", "test");
+      core.db.markSearchDocumentEmbedded(doc.id, doc.kind === "message" ? testEmbedding(0) : testEmbedding(1), "local", "test");
     }
 
-    const results = core.db.search("unrelated words", 5, [1, 0, 0]);
+    const results = core.db.search("unrelated words", 5, testEmbedding(0));
 
     expect(results[0]?.kind).toBe("message");
     expect(results[0]?.snippet).toContain("hello ada");
     expect(results[0]?.matchReason).toBe("related_wording");
     expect(results[0]?.scoreComponents).toMatchObject({ exact: false, semantic: true });
+  });
+
+  it("resumes a missing derived vector index without re-embedding documents", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const messageDocument = core.db.getDirtySearchDocuments().find((document) => document.kind === "message")!;
+    core.db.markSearchDocumentEmbedded(messageDocument.id, testEmbedding(0), "local", "test");
+
+    const rawDb = new DatabaseSync(dbPath, { allowExtension: true });
+    sqliteVec.load(rawDb);
+    rawDb.exec("DELETE FROM search_document_vectors");
+    rawDb.close();
+
+    expect(core.db.getSearchVectorIndexStatus()).toMatchObject({ embeddedDocuments: 1, indexedDocuments: 0 });
+    expect(core.db.backfillSearchVectorIndex()).toBe(1);
+    expect(core.db.getSearchVectorIndexStatus()).toMatchObject({ embeddedDocuments: 1, indexedDocuments: 1 });
+    expect(core.db.search("unrelated words", 5, testEmbedding(0))[0]?.kind).toBe("message");
+  });
+
+  it("hydrates only a bounded set of semantic candidates", async () => {
+    appendManyMessages(chatDbPath, 500);
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    for (const document of core.db.getDirtySearchDocuments(1_000)) {
+      if (document.kind === "message") {
+        core.db.markSearchDocumentEmbedded(document.id, testEmbedding(0), "local", "test");
+      }
+    }
+
+    const navigationSpy = vi.spyOn(
+      core.db as unknown as { getSearchNavigation: (...args: unknown[]) => unknown },
+      "getSearchNavigation",
+    );
+    const results = core.db.search("unrelated words", 5, testEmbedding(0));
+
+    expect(results).toHaveLength(5);
+    expect(navigationSpy.mock.calls.length).toBeLessThanOrEqual(80);
   });
 
   it("only marks successfully embedded documents and reports skipped documents", async () => {
@@ -268,7 +311,7 @@ describe("OpenFolioCore", () => {
     expect(dirtyDocs.length).toBeGreaterThan(1);
 
     core.ai = {
-      embedDocuments: async () => [[1, 0, 0], null],
+      embedDocuments: async () => [testEmbedding(0), null],
       getEmbeddingMetadata: () => ({ provider: "local", model: "test" }),
     } as unknown as OpenFolioCore["ai"];
 
@@ -293,7 +336,7 @@ describe("OpenFolioCore", () => {
           await new Promise<void>((release) => {
             releaseEmbedding = release;
           });
-          return documents.map(() => [1, 0, 0]);
+          return documents.map(() => testEmbedding(0));
         },
         getEmbeddingMetadata: () => ({ provider: "local", model: "test" }),
       } as unknown as OpenFolioCore["ai"];
@@ -652,7 +695,7 @@ describe("OpenFolioCore", () => {
   it("reports partial semantic indexing while exact results remain available", async () => {
     const core = new OpenFolioCore({ dbPath });
     await core.startMessagesImport();
-    core.ai = { embed: async () => [1, 0, 0] } as unknown as OpenFolioCore["ai"];
+    core.ai = { embed: async () => testEmbedding(0) } as unknown as OpenFolioCore["ai"];
 
     const response = await core.searchArchive({ text: "hello", resultTypes: ["message"] });
 

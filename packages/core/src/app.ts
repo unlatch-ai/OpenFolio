@@ -40,6 +40,10 @@ export class OpenFolioCore {
 
   private embeddingSyncLastError: string | null = null;
 
+  private vectorIndexSyncInFlight: Promise<number> | null = null;
+
+  private vectorIndexSyncLastError: string | null = null;
+
   private embeddingDocumentsPerSecond: number | null = null;
 
   constructor(options?: {
@@ -64,6 +68,9 @@ export class OpenFolioCore {
     this.ai = new AIOrchestrator(shouldUseLocal ? this.localEmbeddings : null);
     this.messages = new MessagesImporter(this.db);
     this.analytics = new AnalyticsEngine(this.db);
+    void this.queueSearchVectorIndexSync().catch((error) => {
+      console.error("[openfolio-core] Local vector index sync failed:", error);
+    });
   }
 
   getMessagesAccessStatus(): MessagesAccessStatus {
@@ -327,11 +334,39 @@ export class OpenFolioCore {
     return this.embeddingSyncInFlight;
   }
 
+  private async syncSearchVectorIndex(batchSize = 250) {
+    let indexed = 0;
+    while (true) {
+      const batchIndexed = this.db.backfillSearchVectorIndex(batchSize);
+      indexed += batchIndexed;
+      if (batchIndexed === 0) break;
+      // Keep the Electron main process responsive during one-time upgrades from
+      // the legacy JSON-only embedding store.
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+    return indexed;
+  }
+
+  private queueSearchVectorIndexSync() {
+    if (this.vectorIndexSyncInFlight) return this.vectorIndexSyncInFlight;
+
+    this.vectorIndexSyncLastError = null;
+    this.vectorIndexSyncInFlight = this.syncSearchVectorIndex()
+      .catch((error) => {
+        this.vectorIndexSyncLastError = error instanceof Error ? error.message : "Local vector index sync failed.";
+        throw error;
+      })
+      .finally(() => {
+        this.vectorIndexSyncInFlight = null;
+      });
+    return this.vectorIndexSyncInFlight;
+  }
+
   getEmbeddingSyncStatus() {
     return {
       ...this.db.getEmbeddingSyncStatus(),
-      syncing: this.embeddingSyncInFlight !== null,
-      lastError: this.embeddingSyncLastError,
+      syncing: this.embeddingSyncInFlight !== null || this.vectorIndexSyncInFlight !== null,
+      lastError: this.embeddingSyncLastError ?? this.vectorIndexSyncLastError,
     };
   }
 
