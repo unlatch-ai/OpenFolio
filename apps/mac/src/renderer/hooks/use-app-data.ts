@@ -171,7 +171,13 @@ export function useAppData() {
     void advanceSemanticIndex();
     const interval = window.setInterval(advanceSemanticIndex, 1500);
     return () => window.clearInterval(interval);
-  }, [setupDismissed, Boolean(embeddingSync?.dirtyDocuments), embeddingSync?.lastError, setEmbeddingSync]);
+  }, [
+    setupDismissed,
+    Boolean(embeddingSync?.dirtyDocuments),
+    embeddingSync?.syncing,
+    embeddingSync?.lastError,
+    setEmbeddingSync,
+  ]);
 
   // Update state listener
   useEffect(() => {
