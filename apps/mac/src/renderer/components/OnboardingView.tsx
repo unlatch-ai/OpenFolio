@@ -1,13 +1,20 @@
 import {
   ArrowLeft,
   Check,
+  ContactRound,
   Database,
   LockKeyhole,
   RefreshCw,
   Search,
   ShieldCheck,
 } from "lucide-react";
-import type { EmbeddingPlanStats, EmbeddingPriority, MessagesImportJob } from "@openfolio/shared-types";
+import type {
+  ContactsAccessStatus,
+  ContactsSyncSummary,
+  EmbeddingPlanStats,
+  EmbeddingPriority,
+  MessagesImportJob,
+} from "@openfolio/shared-types";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getImportPrimaryAction, waitForImportJob } from "../import-jobs";
@@ -15,12 +22,10 @@ import { getOnboardingState } from "../onboarding";
 import { useAppStore } from "../store";
 import { Button } from "./ui/button";
 
-function StepMarker({ current }: { current: 1 | 2 | 3 }) {
+function StepMarker({ current }: { current: 1 | 2 | 3 | 4 }) {
   return (
-    <div className="onboarding-step-marker" aria-label={`Step ${current} of 3`}>
-      <span className="active" />
-      <span className={current >= 2 ? "active" : ""} />
-      <span className={current >= 3 ? "active" : ""} />
+    <div className="onboarding-step-marker" aria-label={`Step ${current} of 4`}>
+      {[1, 2, 3, 4].map((step) => <span key={step} className={current >= step ? "active" : ""} />)}
     </div>
   );
 }
@@ -158,6 +163,66 @@ function ImportStep({
   );
 }
 
+function ContactsStep({
+  busy,
+  status,
+  sync,
+  onSync,
+  onContinue,
+  onSkip,
+}: {
+  busy: boolean;
+  status: ContactsAccessStatus | null;
+  sync: ContactsSyncSummary | null;
+  onSync: () => void;
+  onContinue: () => void;
+  onSkip: () => void;
+}) {
+  const denied = status?.status === "denied";
+  const unavailable = status?.status === "restricted" || status?.status === "unsupported";
+
+  return (
+    <section className="onboarding-panel">
+      <StepMarker current={3} />
+      <div className={`onboarding-icon${sync ? " success" : ""}`} aria-hidden="true">
+        {sync ? <Check /> : <ContactRound />}
+      </div>
+      <h1>{sync ? "Names are ready." : "Match phone numbers to names."}</h1>
+      <p className="onboarding-lede">
+        {sync
+          ? "OpenFolio matched your Apple Contacts to the people in your message history."
+          : "Optionally sync Apple Contacts before choosing who to make meaning-searchable first."}
+      </p>
+      <div className="onboarding-assurance">
+        <strong>{sync ? `${sync.importedContacts.toLocaleString()} contacts read locally` : "Contacts are optional and stay local"}</strong>
+        <p>Matching happens entirely on this Mac. Contact names and details are never uploaded or sent to an API.</p>
+        <p>You can skip this now and sync later from Settings. Phone numbers remain available as labels.</p>
+      </div>
+      {(denied || unavailable) && !sync ? (
+        <p className="onboarding-recovery" role="status">
+          {unavailable
+            ? "Contacts access is unavailable on this Mac. You can continue with phone numbers as labels."
+            : "Contacts access is off. OpenFolio can continue without it, or you can enable access in System Settings and try again."}
+        </p>
+      ) : null}
+      <div className="onboarding-actions">
+        {sync ? (
+          <Button size="lg" onClick={onContinue}>Continue</Button>
+        ) : (
+          <>
+            <Button size="lg" onClick={onSync} disabled={busy || unavailable}>
+              {busy ? <RefreshCw className="animate-spin" /> : null}
+              {unavailable ? "Contacts unavailable" : denied ? "Open Contacts settings" : "Sync contacts"}
+            </Button>
+            <Button variant="ghost" onClick={onSkip} disabled={busy}>Skip for now</Button>
+          </>
+        )}
+      </div>
+      {!sync && !denied && !unavailable ? <p className="onboarding-help">macOS will ask for Contacts access. OpenFolio only reads it.</p> : null}
+    </section>
+  );
+}
+
 function formatDuration(seconds: number | null) {
   if (seconds == null) return "Calibrating after the first batch";
   if (seconds < 60) return "Less than a minute";
@@ -215,7 +280,7 @@ function MeaningSearchStep({
 
   return (
     <section className="onboarding-panel onboarding-meaning-search">
-      <StepMarker current={3} />
+      <StepMarker current={4} />
       <div className="onboarding-icon success" aria-hidden="true"><Check /></div>
       <h1>Choose what to make meaning-searchable first.</h1>
       <p className="onboarding-lede">
@@ -313,13 +378,18 @@ export function OnboardingView() {
   const [embeddingPlan, setEmbeddingPlan] = useState<EmbeddingPlanStats | null>(null);
   const {
     messagesStatus,
+    contactsStatus,
+    contactsSync,
     importJob,
     threads,
     busy,
     embeddingSync,
     setupDismissed,
     introSeen,
+    contactsSetupDone,
     setMessagesStatus,
+    setContactsStatus,
+    setContactsSync,
     setImportJob,
     setThreads,
     setThreadSummaries,
@@ -327,6 +397,7 @@ export function OnboardingView() {
     setBusy,
     setSetupDismissed,
     setIntroSeen,
+    setContactsSetupDone,
   } = useAppStore();
 
   const state = getOnboardingState({
@@ -352,7 +423,7 @@ export function OnboardingView() {
   }, [introSeen, messagesStatus?.status, setMessagesStatus]);
 
   useEffect(() => {
-    if (state.stage !== "ready" || setupDismissed) return;
+    if (state.stage !== "ready" || setupDismissed || !contactsSetupDone) return;
     let cancelled = false;
     void window.openfolio.embeddings.getPlan().then(async (nextPlan) => {
       if (cancelled) return;
@@ -363,7 +434,26 @@ export function OnboardingView() {
       if (!cancelled) setEmbeddingPlan(nextPlan);
     }).catch(() => toast.error("OpenFolio could not read embedding coverage."));
     return () => { cancelled = true; };
-  }, [state.stage, setupDismissed]);
+  }, [state.stage, setupDismissed, contactsSetupDone]);
+
+  async function syncContacts() {
+    setBusy(true);
+    try {
+      let status = contactsStatus;
+      if (status?.status !== "granted") {
+        status = await window.openfolio.contacts.requestAccess();
+        setContactsStatus(status);
+      }
+      if (status.status !== "granted") return;
+
+      const summary = await window.openfolio.contacts.sync();
+      setContactsSync(summary);
+    } catch {
+      toast.error("Contacts could not be matched. You can skip this and continue.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function updateEmbeddingPriority(priority: EmbeddingPriority) {
     try {
@@ -454,6 +544,15 @@ export function OnboardingView() {
         />
       ) : state.stage === "import" ? (
         <ImportStep busy={busy} importJob={importJob} onImport={() => void runImport()} />
+      ) : !contactsSetupDone ? (
+        <ContactsStep
+          busy={busy}
+          status={contactsStatus}
+          sync={contactsSync}
+          onSync={() => void syncContacts()}
+          onContinue={() => setContactsSetupDone(true)}
+          onSkip={() => setContactsSetupDone(true)}
+        />
       ) : (
         <MeaningSearchStep
           plan={embeddingPlan}

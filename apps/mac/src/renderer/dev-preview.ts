@@ -296,7 +296,10 @@ function readAppPreview(): View | null {
 
 export function installDevPreviewBridge() {
   const preview = readAppPreview();
-  if (!preview || window.openfolio) return;
+  const onboardingPreview = new URLSearchParams(window.location.search).get("onboarding-preview")
+    ?? import.meta.env.VITE_ONBOARDING_PREVIEW;
+  const hasOnboardingPreview = ["import", "contacts", "ready"].includes(onboardingPreview ?? "");
+  if ((!preview && !hasOnboardingPreview) || window.openfolio) return;
 
   const bridge = {
     dashboard: {
@@ -414,16 +417,18 @@ export function installDevPreviewBridge() {
 
   window.openfolio = bridge;
 
-  useAppStore.setState({
-    view: preview,
-    introSeen: true,
-    setupDismissed: true,
-    selectedPersonId: preview === "people" ? "person-jordan" : null,
-    selectedThreadId:
-      preview === "conversations" ? "thread-weekend" : null,
-  });
-  if (preview === "search") {
-    useAppStore.getState().setSearchQuery("ramen place Jordan recommended");
+  if (preview) {
+    useAppStore.setState({
+      view: preview,
+      introSeen: true,
+      setupDismissed: true,
+      selectedPersonId: preview === "people" ? "person-jordan" : null,
+      selectedThreadId:
+        preview === "conversations" ? "thread-weekend" : null,
+    });
+    if (preview === "search") {
+      useAppStore.getState().setSearchQuery("ramen place Jordan recommended");
+    }
   }
 }
 

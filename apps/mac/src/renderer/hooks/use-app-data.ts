@@ -8,9 +8,9 @@ import { toast } from "sonner";
  */
 export function useAppData() {
   const requestedPreview = import.meta.env.DEV
-    ? new URLSearchParams(window.location.search).get("onboarding-preview")
+    ? new URLSearchParams(window.location.search).get("onboarding-preview") ?? import.meta.env.VITE_ONBOARDING_PREVIEW
     : null;
-  const onboardingPreview = requestedPreview === "import" || requestedPreview === "ready"
+  const onboardingPreview = requestedPreview === "import" || requestedPreview === "contacts" || requestedPreview === "ready"
     ? requestedPreview
     : null;
   const {
@@ -28,6 +28,7 @@ export function useAppData() {
     setInitialized,
     setIntroSeen,
     setSetupDismissed,
+    setContactsSetupDone,
   } = useAppStore();
 
   const hasRun = useRef(false);
@@ -36,16 +37,17 @@ export function useAppData() {
     if (hasRun.current) return;
     hasRun.current = true;
 
-    if (onboardingPreview === "import" || onboardingPreview === "ready") {
+    if (onboardingPreview === "import" || onboardingPreview === "contacts" || onboardingPreview === "ready") {
       setIntroSeen(true);
       setSetupDismissed(false);
+      setContactsSetupDone(onboardingPreview === "ready");
       setMessagesStatus({
         status: "granted",
         chatDbPath: "/Users/you/Library/Messages/chat.db",
         details: "Messages access granted.",
       });
       setImportJob(
-        onboardingPreview === "ready"
+        onboardingPreview === "ready" || onboardingPreview === "contacts"
           ? {
               id: "preview-complete",
               status: "completed",
@@ -137,6 +139,7 @@ export function useAppData() {
     setInitialized,
     setIntroSeen,
     setSetupDismissed,
+    setContactsSetupDone,
     onboardingPreview,
   ]);
 
