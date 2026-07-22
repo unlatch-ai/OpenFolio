@@ -1,4 +1,5 @@
 import type {
+  EmbeddingPriority,
   MessageDetail,
   OpenFolioBridge,
   Person,
@@ -295,7 +296,10 @@ function readAppPreview(): View | null {
 
 export function installDevPreviewBridge() {
   const preview = readAppPreview();
-  if (!preview || window.openfolio) return;
+  const onboardingPreview = new URLSearchParams(window.location.search).get("onboarding-preview")
+    ?? import.meta.env.VITE_ONBOARDING_PREVIEW;
+  const hasOnboardingPreview = ["import", "contacts", "ready"].includes(onboardingPreview ?? "");
+  if ((!preview && !hasOnboardingPreview) || window.openfolio) return;
 
   const bridge = {
     dashboard: {
@@ -393,6 +397,8 @@ export function installDevPreviewBridge() {
     },
     embeddings: {
       getSyncStatus: async () => embeddingStatus,
+      getPlan: async () => embeddingPlan,
+      setPriority: async (priority: EmbeddingPriority) => ({ ...embeddingPlan, priority, priorityConfigured: true }),
       syncNow: async () => embeddingStatus,
     },
     mcp: {
@@ -411,16 +417,18 @@ export function installDevPreviewBridge() {
 
   window.openfolio = bridge;
 
-  useAppStore.setState({
-    view: preview,
-    introSeen: true,
-    setupDismissed: true,
-    selectedPersonId: preview === "people" ? "person-jordan" : null,
-    selectedThreadId:
-      preview === "conversations" ? "thread-weekend" : null,
-  });
-  if (preview === "search") {
-    useAppStore.getState().setSearchQuery("ramen place Jordan recommended");
+  if (preview) {
+    useAppStore.setState({
+      view: preview,
+      introSeen: true,
+      setupDismissed: true,
+      selectedPersonId: preview === "people" ? "person-jordan" : null,
+      selectedThreadId:
+        preview === "conversations" ? "thread-weekend" : null,
+    });
+    if (preview === "search") {
+      useAppStore.getState().setSearchQuery("ramen place Jordan recommended");
+    }
   }
 }
 
@@ -444,6 +452,30 @@ const embeddingStatus = {
   model: "all-MiniLM-L6-v2",
   syncing: false,
   lastError: null,
+};
+
+const embeddingPlan = {
+  priority: { startAt: now - 180 * day, endAt: null, personIds: [] as string[] },
+  priorityConfigured: true,
+  earliestMessageAt: now - 8 * 365 * day,
+  latestMessageAt: now,
+  selectedMessages: 12_482,
+  selectedConversations: 148,
+  selectedDirtyDocuments: 12_482,
+  selectedEmbeddedDocuments: 0,
+  documentsPerSecond: 42,
+  estimatedSeconds: 297,
+  estimateIsCalibrated: true,
+  timeline: Array.from({ length: 48 }, (_, index) => ({
+    month: new Date(now - (47 - index) * 30 * day).toISOString().slice(0, 7),
+    startAt: now - (47 - index) * 30 * day,
+    count: 300 + ((index * 173) % 1_700),
+  })),
+  people: [
+    { id: "person-1", displayName: "Jordan", messageCount: 8_412 },
+    { id: "person-2", displayName: "Maya", messageCount: 6_208 },
+    { id: "person-3", displayName: "Alex", messageCount: 4_994 },
+  ],
 };
 
 const updateState = {

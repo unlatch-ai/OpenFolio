@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { ConversationCitationInput, OpenFolioBridge, SearchQueryInput } from "@openfolio/shared-types";
+import type { ConversationCitationInput, EmbeddingPriority, OpenFolioBridge, SearchQueryInput } from "@openfolio/shared-types";
 
 const bridge: OpenFolioBridge = {
   dashboard: {
@@ -87,6 +87,8 @@ const bridge: OpenFolioBridge = {
   embeddings: {
     getStatus: () => ipcRenderer.invoke("openfolio:embeddings:getStatus"),
     getSyncStatus: () => ipcRenderer.invoke("openfolio:embeddings:getSyncStatus"),
+    getPlan: () => ipcRenderer.invoke("openfolio:embeddings:getPlan"),
+    setPriority: (priority: EmbeddingPriority) => ipcRenderer.invoke("openfolio:embeddings:setPriority", priority),
     syncNow: () => ipcRenderer.invoke("openfolio:embeddings:syncNow"),
   },
   insights: {

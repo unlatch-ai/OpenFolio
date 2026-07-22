@@ -1,6 +1,7 @@
 import type {
   ConnectorSyncResult,
   EditablePersonProfile,
+  EmbeddingPriority,
   MessagesAccessStatus,
   MessagesImportJob,
   ReminderSuggestion,
@@ -12,7 +13,7 @@ import type {
 import { OpenFolioDatabase } from "./db.js";
 import { AIOrchestrator } from "./ai.js";
 import { MessagesImporter, getMessagesAccessStatus, DEFAULT_MESSAGES_DB_PATH } from "./messages.js";
-import { LocalEmbeddingEngine } from "./local-embeddings.js";
+import { LocalEmbeddingEngine, type EmbeddingEngine } from "./local-embeddings.js";
 import { AnalyticsEngine } from "./analytics.js";
 import { ChatDbWatcher, type SyncWatcherState } from "./watcher.js";
 
@@ -29,7 +30,7 @@ export class OpenFolioCore {
 
   readonly messages: MessagesImporter;
 
-  readonly localEmbeddings: LocalEmbeddingEngine;
+  readonly localEmbeddings: EmbeddingEngine;
 
   readonly analytics: AnalyticsEngine;
 
@@ -39,16 +40,24 @@ export class OpenFolioCore {
 
   private embeddingSyncLastError: string | null = null;
 
+  private embeddingDocumentsPerSecond: number | null = null;
+
   constructor(options?: {
     dbPath?: string;
     enableLocalEmbeddings?: boolean;
+    embeddingEngine?: EmbeddingEngine;
     networkPolicy?: "offline";
   }) {
     this.db = new OpenFolioDatabase(options?.dbPath);
+    const storedEmbeddingRate = Number(this.db.getSetting("embedding_documents_per_second"));
+    this.embeddingDocumentsPerSecond = Number.isFinite(storedEmbeddingRate) && storedEmbeddingRate > 0
+      ? storedEmbeddingRate
+      : null;
 
     // Local embeddings enabled when explicitly requested, or in the Electron app (no API key).
-    const shouldUseLocal = options?.enableLocalEmbeddings === true;
-    this.localEmbeddings = shouldUseLocal ? new LocalEmbeddingEngine() : new LocalEmbeddingEngine({ modelId: "__disabled__" });
+    const shouldUseLocal = options?.enableLocalEmbeddings === true || options?.embeddingEngine != null;
+    this.localEmbeddings = options?.embeddingEngine
+      ?? (shouldUseLocal ? new LocalEmbeddingEngine() : new LocalEmbeddingEngine({ modelId: "__disabled__" }));
 
     // Network Lock is the only supported core runtime policy.
     void options?.networkPolicy;
@@ -63,10 +72,8 @@ export class OpenFolioCore {
 
   async startMessagesImport(): Promise<MessagesImportJob> {
     const job = await this.messages.importFromChatDb();
-    if (job.status === "completed") {
-      void this.queueEmbeddingSync().catch((error) => {
-        console.error("[openfolio-core] Background embedding sync failed:", error);
-      });
+    if (job.status === "completed" && job.importedMessages > 0) {
+      this.db.invalidateEmbeddingPriority();
     }
     return job;
   }
@@ -251,6 +258,7 @@ export class OpenFolioCore {
       return { embedded: 0, skipped: 0 };
     }
 
+    const startedAt = Date.now();
     const embeddings = await this.ai.embedDocuments(dirtyDocuments);
     const metadata = this.ai.getEmbeddingMetadata();
 
@@ -269,6 +277,15 @@ export class OpenFolioCore {
       embedded += 1;
     });
 
+    const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.001);
+    if (embedded > 0) {
+      const observedRate = embedded / elapsedSeconds;
+      this.embeddingDocumentsPerSecond = this.embeddingDocumentsPerSecond == null
+        ? observedRate
+        : (this.embeddingDocumentsPerSecond * 0.7) + (observedRate * 0.3);
+      this.db.setSetting("embedding_documents_per_second", String(this.embeddingDocumentsPerSecond));
+    }
+
     return { embedded, skipped: dirtyDocuments.length - embedded };
   }
 
@@ -283,6 +300,9 @@ export class OpenFolioCore {
       if (result.embedded === 0 || this.db.getDirtySearchDocuments(1).length === 0) {
         break;
       }
+      // Keep the Electron main process responsive between local SQLite writes
+      // and the next worker request.
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
     }
 
     return { embedded, skipped };
@@ -293,6 +313,7 @@ export class OpenFolioCore {
       return this.embeddingSyncInFlight;
     }
 
+    this.db.applyEmbeddingPriority();
     this.embeddingSyncLastError = null;
     this.embeddingSyncInFlight = this.syncAllDirtySearchDocuments(options?.batchSize, options?.maxBatches)
       .catch((error) => {
@@ -312,6 +333,15 @@ export class OpenFolioCore {
       syncing: this.embeddingSyncInFlight !== null,
       lastError: this.embeddingSyncLastError,
     };
+  }
+
+  getEmbeddingPlanStats() {
+    return this.db.getEmbeddingPlanStats(this.embeddingDocumentsPerSecond);
+  }
+
+  setEmbeddingPriority(priority: EmbeddingPriority) {
+    this.db.setEmbeddingPriority(priority);
+    return this.getEmbeddingPlanStats();
   }
 
   getRelationshipDigest(personId: string): RelationshipDigest | null {

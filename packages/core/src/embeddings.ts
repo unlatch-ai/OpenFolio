@@ -78,5 +78,11 @@ export function buildReminderSearchContent(input: {
 }
 
 export function normalizeDocumentForEmbedding(document: SearchDocument) {
-  return [document.title, document.content].filter(Boolean).join("\n\n");
+  // Bound raw text before tokenization as a second safety limit. Some local
+  // runtimes can attempt a very large allocation before model-level token
+  // truncation is applied to unusually long message or thread documents.
+  return [document.title, document.content]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 2_000);
 }

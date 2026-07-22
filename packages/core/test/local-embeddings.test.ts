@@ -77,4 +77,17 @@ describe("bundled local model verification", () => {
     },
     30_000,
   );
+
+  it.skipIf(!fs.existsSync(modelDirectory))(
+    "truncates unusually long local text before ONNX inference",
+    async () => {
+      const engine = new LocalEmbeddingEngine({ modelsDir: cacheRoot });
+      const vectors = await engine.embedBatch(
+        Array.from({ length: 8 }, (_, index) => `long local message ${index} `.repeat(20_000)),
+      );
+      expect(vectors).toHaveLength(8);
+      expect(vectors.every((vector) => vector?.length === APPROVED_LOCAL_MODEL.embeddingDimension)).toBe(true);
+    },
+    30_000,
+  );
 });

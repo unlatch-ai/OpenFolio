@@ -30,6 +30,14 @@ function writeIntroSeen(value: boolean) {
   if (typeof localStorage !== "undefined") localStorage.setItem("openfolio.introSeen", value ? "1" : "0");
 }
 
+function readContactsSetupDone() {
+  return typeof localStorage !== "undefined" && localStorage.getItem("openfolio.contactsSetupDone") === "1";
+}
+
+function writeContactsSetupDone(value: boolean) {
+  if (typeof localStorage !== "undefined") localStorage.setItem("openfolio.contactsSetupDone", value ? "1" : "0");
+}
+
 export type View = "search" | "people" | "conversations" | "wrapped" | "settings";
 export type SearchType = "all" | "messages" | "people" | "conversations";
 export type SearchDate = "any" | "this-year" | "last-year" | "custom";
@@ -104,6 +112,8 @@ export interface AppState {
   setSetupDismissed: (dismissed: boolean) => void;
   introSeen: boolean;
   setIntroSeen: (seen: boolean) => void;
+  contactsSetupDone: boolean;
+  setContactsSetupDone: (done: boolean) => void;
 }
 
 const initialFilters: SearchFilters = {
@@ -198,5 +208,10 @@ export const useAppStore = create<AppState>((set) => ({
   setIntroSeen: (introSeen) => {
     writeIntroSeen(introSeen);
     set({ introSeen });
+  },
+  contactsSetupDone: readContactsSetupDone(),
+  setContactsSetupDone: (contactsSetupDone) => {
+    writeContactsSetupDone(contactsSetupDone);
+    set({ contactsSetupDone });
   },
 }));
