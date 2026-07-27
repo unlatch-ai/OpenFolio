@@ -16,7 +16,7 @@
     "dev": "convex dev"
   },
   "dependencies": {
-    "@auth/core": "^0.37.4",
+    "@auth/core": "^0.41.3",
     "@convex-dev/auth": "^0.0.91",
     "@openfolio/shared-types": "workspace:*",
     "convex": "^1.42.1"
