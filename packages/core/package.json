@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@openfolio/shared-types": "workspace:*",
+    "libphonenumber-js": "^1.12.42",
     "openai": "^6.34.0"
   },
   "devDependencies": {

@@ -68,24 +68,22 @@ function Dashboard() {
       <div className="app-shell">
         <div className="window-drag-region" />
 
-        <SidebarProvider defaultOpen style={{ height: "100vh" }}>
-          <AppSidebar />
+        {onboarding.shouldShow ? (
+          <OnboardingView />
+        ) : (
+          <SidebarProvider defaultOpen style={{ height: "100vh" }}>
+            <AppSidebar />
 
-          <SidebarInset className="overflow-hidden flex flex-col">
-            {onboarding.shouldShow ? (
-              <OnboardingView />
-            ) : (
-              <>
-                {view === "inbox" && <InboxView />}
-                {view === "people" && <PeopleView />}
-                {view === "insights" && <InsightsView />}
-                {view === "settings" && <SettingsView />}
-              </>
-            )}
-          </SidebarInset>
-        </SidebarProvider>
+            <SidebarInset className="overflow-hidden flex flex-col">
+              {view === "inbox" && <InboxView />}
+              {view === "people" && <PeopleView />}
+              {view === "insights" && <InsightsView />}
+              {view === "settings" && <SettingsView />}
+            </SidebarInset>
+          </SidebarProvider>
+        )}
 
-        <CommandPalette />
+        {!onboarding.shouldShow && <CommandPalette />}
         <Toaster position="bottom-right" />
       </div>
     </TooltipProvider>

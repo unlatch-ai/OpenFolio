@@ -1,5 +1,5 @@
 import { Check, Database, KeyRound, MessageSquare, RefreshCw, Search, ShieldCheck, Users } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -51,6 +51,7 @@ function StepRow({ step, active, onAction, busy }: { step: OnboardingStep; activ
 }
 
 export function OnboardingView() {
+  const monitoredImportId = useRef<string | null>(null);
   const {
     messagesStatus,
     contactsStatus,
@@ -69,6 +70,7 @@ export function OnboardingView() {
     setEmbeddingSync,
     setBusy,
     setSetupDismissed,
+    setView,
   } = useAppStore();
 
   const state = getOnboardingState({
@@ -89,6 +91,15 @@ export function OnboardingView() {
     return () => window.clearInterval(interval);
   }, [embeddingSync?.syncing, setEmbeddingSync]);
 
+  useEffect(() => {
+    if (!importJob || (importJob.status !== "running" && importJob.status !== "cancelling")) return;
+    if (monitoredImportId.current === importJob.id) return;
+    monitoredImportId.current = importJob.id;
+    void finishImport(importJob.id).finally(() => {
+      monitoredImportId.current = null;
+    });
+  }, [importJob?.id, importJob?.status]);
+
   async function refreshAppData() {
     const [nextThreads, summaries, nextEmbeddingSync] = await Promise.all([
       window.openfolio.threads.list({ limit: 50 }),
@@ -98,6 +109,28 @@ export function OnboardingView() {
     setThreads(nextThreads);
     setThreadSummaries(summaries);
     setEmbeddingSync(nextEmbeddingSync);
+  }
+
+  async function finishImport(jobId: string) {
+    const finalJob = await waitForImportJob(jobId, setImportJob);
+
+    if (!finalJob) {
+      toast.error("Import status was lost.");
+      return;
+    }
+
+    if (finalJob.status === "cancelled") {
+      toast("Import cancelled");
+      return;
+    }
+
+    if (finalJob.status !== "completed") {
+      toast.error(finalJob.error || "Messages import failed.");
+      return;
+    }
+
+    toast.success(`Imported ${finalJob.importedMessages} messages`);
+    await refreshAppData();
   }
 
   async function runMessagesAccess() {
@@ -133,25 +166,16 @@ export function OnboardingView() {
       const isRunning = job.status === "running" || job.status === "cancelling";
       if (isRunning) {
         setBusy(false);
-      }
-      const finalJob = isRunning ? await waitForImportJob(job.id, setImportJob) : job;
-
-      if (!finalJob) {
-        toast.error("Import status was lost.");
+        toast("Messages import started. You can continue setup while it runs.");
+        monitoredImportId.current = job.id;
+        void finishImport(job.id).catch((error) => {
+          toast.error(error instanceof Error ? error.message : "Messages import failed.");
+        }).finally(() => {
+          monitoredImportId.current = null;
+        });
         return;
       }
-
-      if (finalJob.status === "cancelled") {
-        toast("Import cancelled");
-        return;
-      }
-
-      if (finalJob.status !== "completed") {
-        toast.error(finalJob.error || "Messages import failed.");
-        return;
-      }
-      toast.success(`Imported ${finalJob.importedMessages} messages`);
-      await refreshAppData();
+      await finishImport(job.id);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Messages import failed.");
     } finally {
@@ -203,19 +227,23 @@ export function OnboardingView() {
       <div className="setup-main">
         <div className="setup-hero">
           <Badge variant="secondary">Local-first setup</Badge>
-          <h1>Build your private message memory.</h1>
+          <h1>Set up OpenFolio</h1>
           <p>
-            OpenFolio reads Messages and Contacts locally, builds a searchable graph on this Mac,
-            and keeps hosted features optional.
+            Start with local Messages access and import. Contacts and semantic indexing can run after import starts,
+            and hosted features stay optional.
           </p>
           <div className="setup-hero-actions">
-            <Button
-              size="sm"
-              onClick={() => setSetupDismissed(true)}
-              disabled={!state.canEnterApp}
-            >
-              Enter OpenFolio
-            </Button>
+            {state.canEnterApp && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setView("inbox");
+                  setSetupDismissed(true);
+                }}
+              >
+                Open dashboard
+              </Button>
+            )}
             <Button
               size="sm"
               variant="secondary"

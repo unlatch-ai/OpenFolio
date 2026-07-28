@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { AiSettingsStatus, EmbeddingSyncStatus, LocalDataStatus, McpSetupStatus, SearchScaleStatus } from "@openfolio/shared-types";
+import type { AiSettingsStatus, EmbeddingSyncStatus, LocalDataStatus, McpSettingsStatus, McpSetupStatus, SearchScaleStatus } from "@openfolio/shared-types";
 import { Copy, Download, ExternalLink, FolderOpen, KeyRound, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "./ui/badge";
@@ -31,11 +31,13 @@ export function SettingsView() {
     setUpdateState,
     setBusy,
     setThreads,
+    setSetupDismissed,
   } = useAppStore();
 
   const [aiSettings, setAiSettings] = useState<AiSettingsStatus | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [useOpenAIEmbeddings, setUseOpenAIEmbeddings] = useState(false);
+  const [mcpSettings, setMcpSettings] = useState<McpSettingsStatus | null>(null);
   const [mcpSetup, setMcpSetup] = useState<McpSetupStatus | null>(null);
   const [embeddingSync, setEmbeddingSync] = useState<EmbeddingSyncStatus | null>(null);
   const [searchScale, setSearchScale] = useState<SearchScaleStatus | null>(null);
@@ -46,6 +48,7 @@ export function SettingsView() {
       setAiSettings(settings);
       setUseOpenAIEmbeddings(settings.useOpenAIEmbeddings);
     });
+    void window.openfolio.mcp.getSettings().then(setMcpSettings);
     void window.openfolio.mcp.getSetup().then(setMcpSetup);
     void window.openfolio.embeddings.getSyncStatus().then(setEmbeddingSync);
     void window.openfolio.search.getScaleStatus().then(setSearchScale);
@@ -143,11 +146,39 @@ export function SettingsView() {
     }
   }, [apiKey, useOpenAIEmbeddings]);
 
+  const setMcpEnabled = useCallback(async (enabled: boolean) => {
+    try {
+      const settings = await window.openfolio.mcp.setEnabled({ enabled });
+      setMcpSettings(settings);
+      const setup = await window.openfolio.mcp.getSetup();
+      setMcpSetup(setup);
+      toast.success(enabled ? "MCP is on" : "MCP is off");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update MCP.");
+    }
+  }, []);
+
   const importAction = getImportPrimaryAction(importJob, messagesStatus?.status === "granted");
 
   return (
     <div className="settings-view">
       <div className="settings-inner">
+        {/* Setup */}
+        <div className="settings-group">
+          <h3 className="settings-group-title">Setup</h3>
+          <div className="settings-row">
+            <div className="settings-row-info">
+              <p className="settings-row-label">Onboarding status</p>
+              <p className="settings-row-detail">Review Messages access, import progress, Contacts, and semantic indexing.</p>
+            </div>
+            <div className="settings-row-actions">
+              <Button variant="secondary" size="xs" onClick={() => setSetupDismissed(false)}>
+                Review setup
+              </Button>
+            </div>
+          </div>
+        </div>
+
         {/* Appearance */}
         <div className="settings-group">
           <h3 className="settings-group-title">Appearance</h3>
@@ -351,14 +382,18 @@ export function SettingsView() {
           <h3 className="settings-group-title">Integrations</h3>
           <div className="settings-row">
             <div className="settings-row-info">
-              <p className="settings-row-label">MCP setup</p>
+              <p className="settings-row-label">MCP access</p>
+              <p className="settings-row-detail">
+                Local AI apps can ask OpenFolio to search your local relationship graph. Raw Messages stay on this Mac; turn this on only when you want those clients to use OpenFolio.
+              </p>
               <p className="settings-row-detail">{mcpSetup?.details || "Loading local MCP setup..."}</p>
             </div>
             <div className="settings-row-actions">
-              <Badge variant={mcpSetup?.available ? "success" : "default"}>{mcpSetup?.available ? "available" : "checking"}</Badge>
+              <Badge variant={mcpSettings?.enabled ? "success" : "secondary"}>{mcpSettings?.enabled ? "on" : "off"}</Badge>
+              <Switch checked={Boolean(mcpSettings?.enabled)} onCheckedChange={setMcpEnabled} />
             </div>
           </div>
-          {mcpSetup?.clients.map((client) => (
+          {mcpSettings?.enabled && mcpSetup?.clients.map((client) => (
             <div className="settings-row settings-code-row" key={client.id}>
               <div className="settings-row-info">
                 <p className="settings-row-label">{client.name}</p>

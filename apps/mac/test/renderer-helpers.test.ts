@@ -10,9 +10,30 @@ import {
   orderProfileNotes,
 } from "../src/renderer/people-profile";
 import { describeSearchScale, formatCitationMeta, groupSearchResults } from "../src/renderer/search-results";
+import { getCachedInsightsYear, getInsightsEmptyCopy } from "../src/renderer/insights-state";
 import { getAppVersionLabel, getLastCheckedLabel, getReleaseNotesUrl, getUpdateStatusLabel, getUpdateVersionLabel } from "../src/renderer/update-labels";
 
 describe("renderer workflow helpers", () => {
+  it("keeps empty Insights years navigable and caches loaded years", () => {
+    const wrapped = {
+      periodLabel: "2020",
+      totalMessages: 0,
+      totalConversations: 0,
+      topContacts: [],
+      busiestMonth: null,
+      busiestHour: null,
+      avgDailyMessages: 0,
+      messagesByMonth: [],
+      messagesByDayOfWeek: [0, 0, 0, 0, 0, 0, 0],
+    };
+    const cached = { wrapped, heatmap: [] };
+
+    expect(getInsightsEmptyCopy(wrapped, 2020).title).toBe("No data for 2020");
+    expect(getInsightsEmptyCopy(null, 2020).title).toBe("Insights");
+    expect(getCachedInsightsYear({ 2020: cached }, 2020)).toBe(cached);
+    expect(getCachedInsightsYear({ 2020: cached }, 2019)).toBeNull();
+  });
+
   it("chooses import retry and cancel actions from concrete job state", () => {
     expect(getImportPrimaryAction(null, false)).toEqual({ kind: "blocked", label: "Grant access" });
     expect(getImportPrimaryAction(null, true)).toEqual({ kind: "start", label: "Import messages" });

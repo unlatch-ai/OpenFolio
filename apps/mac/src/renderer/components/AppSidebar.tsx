@@ -11,6 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  SidebarTrigger,
 } from "./ui/sidebar";
 import {
   Tooltip,
@@ -37,6 +38,7 @@ export function AppSidebar() {
           <span className="text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
             OpenFolio
           </span>
+          <SidebarTrigger className="ml-auto group-data-[collapsible=icon]:hidden" />
         </div>
       </SidebarHeader>
 

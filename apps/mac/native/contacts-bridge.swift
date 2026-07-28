@@ -16,6 +16,7 @@ struct ExportedContact: Codable {
   let jobTitle: String?
   let emails: [String]
   let phones: [String]
+  let avatarDataUrl: String?
 }
 
 struct ExportPayload: Codable {
@@ -116,6 +117,8 @@ struct ContactsBridge {
       CNContactJobTitleKey as CNKeyDescriptor,
       CNContactEmailAddressesKey as CNKeyDescriptor,
       CNContactPhoneNumbersKey as CNKeyDescriptor,
+      CNContactImageDataAvailableKey as CNKeyDescriptor,
+      CNContactThumbnailImageDataKey as CNKeyDescriptor,
       CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
     ]
 
@@ -134,6 +137,9 @@ struct ContactsBridge {
       let fallbackName = displayName?.isEmpty == false ? displayName! : (
         contact.organizationName.isEmpty ? (emails.first ?? phones.first ?? "Unknown Contact") : contact.organizationName
       )
+      let avatarDataUrl = contact.imageDataAvailable
+        ? contact.thumbnailImageData.map { "data:image/jpeg;base64,\($0.base64EncodedString())" }
+        : nil
 
       if fallbackName.isEmpty && emails.isEmpty && phones.isEmpty {
         return
@@ -148,7 +154,8 @@ struct ContactsBridge {
           organizationName: contact.organizationName.isEmpty ? nil : contact.organizationName,
           jobTitle: contact.jobTitle.isEmpty ? nil : contact.jobTitle,
           emails: emails,
-          phones: phones
+          phones: phones,
+          avatarDataUrl: avatarDataUrl
         )
       )
     }

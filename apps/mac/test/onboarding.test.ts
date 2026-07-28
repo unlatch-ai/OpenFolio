@@ -76,6 +76,45 @@ describe("onboarding state", () => {
     expect(state.progress.totalRequired).toBe(2);
   });
 
+  it("keeps the dashboard locked while import runs and advances setup to Contacts", () => {
+    const state = getOnboardingState({
+      messagesStatus: {
+        status: "granted",
+        chatDbPath: "/Users/me/Library/Messages/chat.db",
+        details: "Messages access granted.",
+      },
+      contactsStatus: {
+        status: "not-determined",
+        details: "Contacts access has not been requested.",
+        canPrompt: true,
+      },
+      threadCount: 0,
+      importJob: {
+        id: "job_running",
+        status: "running",
+        importedMessages: 400,
+        importedPeople: 12,
+        importedThreads: 8,
+        lastCursor: 400,
+        error: null,
+        startedAt: 1,
+        completedAt: null,
+      },
+      contactsSync: null,
+      embeddingSync: null,
+      setupDismissed: false,
+    });
+
+    const importStep = state.steps.find((step) => step.id === "import");
+    const contactsStep = state.steps.find((step) => step.id === "contacts");
+
+    expect(state.canEnterApp).toBe(false);
+    expect(state.activeStepId).toBe("contacts");
+    expect(importStep?.status).toBe("running");
+    expect(importStep?.description).toContain("continue setup");
+    expect(contactsStep?.status).toBe("optional");
+  });
+
   it("allows entry after a successful import even when no conversations are found", () => {
     const state = getOnboardingState({
       messagesStatus: {
@@ -164,6 +203,25 @@ describe("onboarding state", () => {
     });
 
     expect(state.shouldShow).toBe(false);
+    expect(state.canEnterApp).toBe(true);
+  });
+
+  it("shows onboarding again when setup review is requested", () => {
+    const state = getOnboardingState({
+      messagesStatus: {
+        status: "granted",
+        chatDbPath: "/Users/me/Library/Messages/chat.db",
+        details: "Messages access granted.",
+      },
+      contactsStatus: null,
+      threadCount: 3,
+      importJob: null,
+      contactsSync: null,
+      embeddingSync: null,
+      setupDismissed: false,
+    });
+
+    expect(state.shouldShow).toBe(true);
     expect(state.canEnterApp).toBe(true);
   });
 });

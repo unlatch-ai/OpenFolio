@@ -16,6 +16,7 @@ import type {
   DiagnosticsReport,
   EditablePersonProfile,
   LocalDataStatus,
+  McpSettingsStatus,
   McpSetupStatus,
   MessagesAccessStatus,
   MessagesImportJob,
@@ -35,8 +36,12 @@ import { OpenFolioUpdater } from "./updater";
 import { isAllowedExternalUrl, shouldOpenExternalUrl } from "./navigation";
 import { getBackupDirectoryPath, getLocalDataStatus } from "./local-data";
 
+const MCP_ENABLED_KEY = "mcp.enabled";
 const core = new OpenFolioCore({ enableLocalEmbeddings: true });
-const mcpController = new LocalMcpController();
+const mcpController = new LocalMcpController({
+  getEnabled: () => core.db.getSetting(MCP_ENABLED_KEY) === "1",
+  setEnabled: (enabled) => core.db.setSetting(MCP_ENABLED_KEY, enabled ? "1" : "0"),
+});
 const updater = new OpenFolioUpdater(() => mainWindow, (...args) => {
   logAppDebug("updates", ...args);
 });
@@ -648,6 +653,7 @@ const api: OpenFolioBridge = {
             phone: contact.phones[0] ?? null,
             companyName: contact.organizationName ?? null,
             jobTitle: contact.jobTitle ?? null,
+            avatarDataUrl: contact.avatarDataUrl ?? null,
             sourceKind: "apple_contacts" as const,
             sourceId: contact.identifier,
             metadata: {
@@ -829,10 +835,14 @@ const api: OpenFolioBridge = {
     },
     getSetup: async (): Promise<McpSetupStatus> => {
       const command = "pnpm --filter @openfolio/mcp exec openfolio mcp serve";
+      const settings = await mcpController.getSettings();
       return {
         available: true,
+        enabled: settings.enabled,
         command,
-        details: "OpenFolio MCP runs locally over stdio. Your messages stay in the local SQLite database; clients receive only tool results.",
+        details: settings.enabled
+          ? "MCP is on. Local AI clients can ask OpenFolio to search your local relationship graph over stdio."
+          : "MCP is off. Turn it on only if you want local AI clients to request OpenFolio tool results.",
         clients: [
           {
             id: "claude",
@@ -856,6 +866,12 @@ const api: OpenFolioBridge = {
           },
         ],
       };
+    },
+    getSettings: async (): Promise<McpSettingsStatus> => mcpController.getSettings(),
+    setEnabled: async (input: { enabled: boolean }): Promise<McpSettingsStatus> => {
+      const settings = await mcpController.setEnabled(Boolean(input.enabled));
+      logAppDebug("mcp", "setEnabled", settings);
+      return settings;
     },
   },
   people: {
@@ -989,6 +1005,8 @@ safeHandle("openfolio:mcp:getStatus", () => api.mcp.getStatus());
 safeHandle("openfolio:mcp:start", () => api.mcp.start());
 safeHandle("openfolio:mcp:stop", () => api.mcp.stop());
 safeHandle("openfolio:mcp:getSetup", () => api.mcp.getSetup());
+safeHandle("openfolio:mcp:getSettings", () => api.mcp.getSettings());
+safeHandle("openfolio:mcp:setEnabled", (_, input: { enabled: boolean }) => api.mcp.setEnabled(input));
 safeHandle("openfolio:people:list", (_, input?: { limit?: number; query?: string }) => api.people.list(input));
 safeHandle("openfolio:people:getProfile", (_, personId: string) => api.people.getProfile(personId));
 safeHandle("openfolio:people:updateProfile", (_, input: { personId: string; profile: EditablePersonProfile }) => api.people.updateProfile(input));

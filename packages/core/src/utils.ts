@@ -1,5 +1,22 @@
 import crypto from "node:crypto";
 
+import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js/min";
+
+function getDefaultPhoneRegion(): CountryCode {
+  const configured = process.env.OPENFOLIO_PHONE_REGION?.trim().toUpperCase();
+  if (configured && /^[A-Z]{2}$/.test(configured)) {
+    return configured as CountryCode;
+  }
+
+  const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+  const region = locale.match(/[-_]([A-Z]{2})\b/i)?.[1]?.toUpperCase();
+  return (region || "US") as CountryCode;
+}
+
+function uniqueValues(values: Array<string | null | undefined>) {
+  return values.filter((value, index, all): value is string => Boolean(value) && all.indexOf(value) === index);
+}
+
 export function createId(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`;
 }
@@ -66,6 +83,11 @@ export function normalizeHandle(value: string | null | undefined) {
     return lower;
   }
 
+  const parsed = parsePhoneNumberFromString(trimmed, getDefaultPhoneRegion());
+  if (parsed?.isPossible()) {
+    return parsed.number;
+  }
+
   const digits = trimmed.replace(/[^\d+]/g, "");
   if (!digits) {
     return trimmed;
@@ -76,4 +98,27 @@ export function normalizeHandle(value: string | null | undefined) {
   }
 
   return digits.replace(/\D/g, "");
+}
+
+export function getHandleCandidates(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const normalized = normalizeHandle(trimmed);
+  if (normalized?.includes("@")) {
+    return [normalized];
+  }
+
+  const parsed = parsePhoneNumberFromString(trimmed, getDefaultPhoneRegion());
+  const digits = trimmed.replace(/\D/g, "");
+  const digitOnly = digits.startsWith("+") ? digits.slice(1) : digits;
+
+  return uniqueValues([
+    normalized,
+    parsed?.number,
+    parsed?.nationalNumber,
+    digitOnly || null,
+  ]);
 }

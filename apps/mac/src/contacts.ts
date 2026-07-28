@@ -25,19 +25,43 @@ type HelperContact = {
   jobTitle?: string | null;
   emails: string[];
   phones: string[];
+  avatarDataUrl?: string | null;
 };
 
 type HelperExportPayload = {
   contacts: HelperContact[];
 };
 
-function getHelperAppPath() {
-  const relativeAppPath = path.join("bin", HELPER_APP_NAME);
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, relativeAppPath);
-  }
+export type ContactsHelperPathInput = {
+  isPackaged: boolean;
+  resourcesPath: string;
+  appPath: string;
+};
 
-  return path.join(app.getAppPath(), relativeAppPath);
+export type ContactsHelperPaths = {
+  helperAppPath: string;
+  executablePath: string;
+  launchCwd: string;
+};
+
+export function resolveContactsHelperPaths(input: ContactsHelperPathInput): ContactsHelperPaths {
+  const relativeAppPath = path.join("bin", HELPER_APP_NAME);
+  const basePath = input.isPackaged ? input.resourcesPath : input.appPath;
+  const helperAppPath = path.join(basePath, relativeAppPath);
+
+  return {
+    helperAppPath,
+    executablePath: path.join(helperAppPath, "Contents", "MacOS", "OpenFolioContacts"),
+    launchCwd: path.dirname(helperAppPath),
+  };
+}
+
+function getHelperPaths() {
+  return resolveContactsHelperPaths({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+  });
 }
 
 function getBuildScriptPath() {
@@ -45,9 +69,10 @@ function getBuildScriptPath() {
 }
 
 async function ensureHelperBinary() {
-  const helperAppPath = getHelperAppPath();
-  if (fs.existsSync(helperAppPath)) {
-    return helperAppPath;
+  const paths = getHelperPaths();
+  if (fs.existsSync(paths.helperAppPath)) {
+    validateHelperBundle(paths);
+    return paths;
   }
 
   if (app.isPackaged) {
@@ -64,20 +89,46 @@ async function ensureHelperBinary() {
     maxBuffer: 8 * 1024 * 1024,
   });
 
-  if (!fs.existsSync(helperAppPath)) {
+  if (!fs.existsSync(paths.helperAppPath)) {
     throw new Error("Contacts helper app did not build successfully.");
   }
 
-  return helperAppPath;
+  validateHelperBundle(paths);
+  return paths;
+}
+
+export function validateHelperBundle(paths: ContactsHelperPaths) {
+  const appStat = fs.existsSync(paths.helperAppPath) ? fs.statSync(paths.helperAppPath) : null;
+  if (!appStat?.isDirectory()) {
+    throw new Error(`Contacts helper app is unavailable at ${paths.helperAppPath}.`);
+  }
+
+  const executableStat = fs.existsSync(paths.executablePath) ? fs.statSync(paths.executablePath) : null;
+  if (!executableStat?.isFile()) {
+    throw new Error(`Contacts helper executable is missing at ${paths.executablePath}.`);
+  }
+
+  const cwdStat = fs.existsSync(paths.launchCwd) ? fs.statSync(paths.launchCwd) : null;
+  if (!cwdStat?.isDirectory()) {
+    throw new Error(`Contacts helper launch directory is unavailable at ${paths.launchCwd}.`);
+  }
 }
 
 async function runHelper<T>(command: "status" | "request" | "export"): Promise<T> {
-  const helperAppPath = await ensureHelperBinary();
+  const helperPaths = await ensureHelperBinary();
   const outputPath = path.join(os.tmpdir(), `openfolio-contacts-${process.pid}-${Date.now()}.json`);
-  const { stderr } = await execFileAsync("open", ["-n", helperAppPath, "--args", command, "--output", outputPath], {
-    cwd: app.getAppPath(),
-    maxBuffer: 16 * 1024 * 1024,
-  });
+  let stderr = "";
+
+  try {
+    const result = await execFileAsync("open", ["-n", helperPaths.helperAppPath, "--args", command, "--output", outputPath], {
+      cwd: helperPaths.launchCwd,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    stderr = result.stderr;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown launch error.";
+    throw new Error(`Could not launch the Contacts helper. ${message}`);
+  }
 
   if (stderr.trim()) {
     throw new Error(stderr.trim());

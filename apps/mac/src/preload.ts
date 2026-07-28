@@ -69,6 +69,8 @@ const bridge: OpenFolioBridge = {
     start: () => ipcRenderer.invoke("openfolio:mcp:start"),
     stop: () => ipcRenderer.invoke("openfolio:mcp:stop"),
     getSetup: () => ipcRenderer.invoke("openfolio:mcp:getSetup"),
+    getSettings: () => ipcRenderer.invoke("openfolio:mcp:getSettings"),
+    setEnabled: (input: { enabled: boolean }) => ipcRenderer.invoke("openfolio:mcp:setEnabled", input),
   },
   people: {
     list: (input?: { limit?: number; query?: string }) => ipcRenderer.invoke("openfolio:people:list", input),

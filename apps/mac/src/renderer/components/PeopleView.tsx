@@ -49,6 +49,8 @@ export function PeopleView() {
   const [aliasKind, setAliasKind] = useState<PersonAlias["kind"]>("other");
   const [editDraft, setEditDraft] = useState<EditablePersonProfile>(emptyProfileDraft(null));
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [searchingProfile, setSearchingProfile] = useState(false);
 
   useEffect(() => {
@@ -67,6 +69,9 @@ export function PeopleView() {
 
   async function refreshProfile(personId: string) {
     const nextProfile = await window.openfolio.people.getProfile(personId);
+    if (!nextProfile) {
+      throw new Error("Could not load this person.");
+    }
     setProfile(nextProfile);
     setEditDraft(emptyProfileDraft(nextProfile));
   }
@@ -75,9 +80,34 @@ export function PeopleView() {
     if (!selectedPersonId) {
       setProfile(null);
       setProfileResults([]);
+      setProfileError(null);
       return;
     }
-    refreshProfile(selectedPersonId).catch(console.error);
+    setProfileLoading(true);
+    setProfileError(null);
+    setProfile(null);
+    setProfileResults([]);
+    setProfileResultOffset(0);
+    let cancelled = false;
+    window.openfolio.people.getProfile(selectedPersonId)
+      .then((nextProfile) => {
+        if (cancelled) return;
+        if (!nextProfile) {
+          throw new Error("Could not load this person.");
+        }
+        setProfile(nextProfile);
+        setEditDraft(emptyProfileDraft(nextProfile));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setProfileError(error instanceof Error ? error.message : "Could not load this person.");
+      })
+      .finally(() => {
+        if (!cancelled) setProfileLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedPersonId]);
 
   async function runProfileSearch(nextOffset = 0) {
@@ -202,7 +232,7 @@ export function PeopleView() {
               className={`people-row ${selectedPersonId === person.id ? "active" : ""}`}
               onClick={() => selectPerson(person.id)}
             >
-              <ContactAvatar name={person.displayName} size={34} />
+              <ContactAvatar name={person.displayName} avatarDataUrl={person.avatarDataUrl} size={34} />
               <span>
                 <strong>{person.displayName}</strong>
                 <small>{person.email || person.phone || person.primaryHandle || "No handle"}</small>
@@ -213,7 +243,17 @@ export function PeopleView() {
       </div>
 
       <div className="person-profile">
-        {!profile ? (
+        {profileLoading ? (
+          <div className="inbox-detail-empty">
+            <div className="thread-panel-loading-dot" />
+            <p>Loading person...</p>
+          </div>
+        ) : profileError ? (
+          <div className="inbox-detail-empty">
+            <MessageSquare size={24} className="text-muted-foreground/40" />
+            <p>{profileError}</p>
+          </div>
+        ) : !profile ? (
           <div className="inbox-detail-empty">
             <MessageSquare size={24} className="text-muted-foreground/40" />
             <p>Select a person</p>
@@ -221,7 +261,7 @@ export function PeopleView() {
         ) : (
           <div className="person-profile-scroll">
             <div className="person-header">
-              <ContactAvatar name={profile.person.displayName} size={56} />
+              <ContactAvatar name={profile.person.displayName} avatarDataUrl={profile.person.avatarDataUrl} size={56} />
               <div>
                 <h2>{profile.person.displayName}</h2>
                 <p>{profile.person.email || profile.person.phone || profile.person.primaryHandle || "No primary handle"}</p>

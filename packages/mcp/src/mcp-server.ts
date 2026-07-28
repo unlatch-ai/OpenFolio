@@ -3,6 +3,17 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { OpenFolioCore } from "@openfolio/core";
 
+const MCP_ENABLED_KEY = "mcp.enabled";
+const MCP_DISABLED_MESSAGE = "OpenFolio MCP access is off in OpenFolio Settings. Turn on MCP before AI clients can search your local relationship graph.";
+
+export function isMcpEnabled(core: OpenFolioCore) {
+  return core.db.getSetting(MCP_ENABLED_KEY) === "1";
+}
+
+export function getMcpDisabledMessage() {
+  return MCP_DISABLED_MESSAGE;
+}
+
 export async function startOpenFolioMcpServer(options?: { dbPath?: string }) {
   const core = new OpenFolioCore({ dbPath: options?.dbPath });
   const server = new McpServer(
@@ -16,6 +27,30 @@ export async function startOpenFolioMcpServer(options?: { dbPath?: string }) {
       },
     }
   );
+
+  if (!isMcpEnabled(core)) {
+    server.registerTool(
+      "openfolio_mcp_status",
+      {
+        title: "OpenFolio MCP Status",
+        description: "Explain why OpenFolio MCP tools are not available.",
+        inputSchema: z.object({}),
+      },
+      async () => ({
+        content: [
+          {
+            type: "text",
+            text: MCP_DISABLED_MESSAGE,
+          },
+        ],
+        structuredContent: { enabled: false, message: MCP_DISABLED_MESSAGE },
+      })
+    );
+
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    return server;
+  }
 
   server.registerTool(
     "search",

@@ -71,6 +71,7 @@ export interface Person {
   jobTitle?: string | null;
   bio?: string | null;
   location?: string | null;
+  avatarDataUrl?: string | null;
   sourceKinds?: SourceKind[];
   createdAt: number;
   updatedAt: number;
@@ -93,6 +94,7 @@ export interface EditablePersonProfile {
   jobTitle?: string | null;
   bio?: string | null;
   location?: string | null;
+  avatarDataUrl?: string | null;
 }
 
 export interface Company {
@@ -357,6 +359,7 @@ export interface NormalizedConnectorPerson {
   jobTitle?: string | null;
   bio?: string | null;
   location?: string | null;
+  avatarDataUrl?: string | null;
   sourceKind: SourceKind;
   sourceId: string;
   metadata?: Record<string, unknown>;
@@ -433,6 +436,7 @@ export interface EmbeddingSyncStatus {
 export interface RelationshipStats {
   personId: string;
   displayName: string;
+  avatarDataUrl?: string | null;
   totalMessages: number;
   sentByMe: number;
   sentByThem: number;
@@ -490,6 +494,7 @@ export interface PersonProfile {
 
 export interface McpSetupStatus {
   available: boolean;
+  enabled: boolean;
   command: string;
   clients: Array<{
     id: "claude" | "cursor" | "codex" | "chatgpt";
@@ -503,8 +508,13 @@ export interface McpRuntimeStatus {
   running: boolean;
   mode: "stdio";
   available: boolean;
+  enabled: boolean;
   command: string;
   details: string;
+}
+
+export interface McpSettingsStatus {
+  enabled: boolean;
 }
 
 export interface OpenFolioBridge {
@@ -567,6 +577,8 @@ export interface OpenFolioBridge {
     start(): Promise<McpRuntimeStatus>;
     stop(): Promise<McpRuntimeStatus>;
     getSetup(): Promise<McpSetupStatus>;
+    getSettings(): Promise<McpSettingsStatus>;
+    setEnabled(input: { enabled: boolean }): Promise<McpSettingsStatus>;
   };
   people: {
     list(input?: { limit?: number; query?: string }): Promise<Person[]>;

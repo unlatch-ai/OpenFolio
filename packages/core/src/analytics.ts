@@ -3,6 +3,7 @@ import type { OpenFolioDatabase } from "./db.js";
 export interface RelationshipStats {
   personId: string;
   displayName: string;
+  avatarDataUrl?: string | null;
   totalMessages: number;
   sentByMe: number;
   sentByThem: number;
@@ -73,6 +74,7 @@ export class AnalyticsEngine {
       return {
         personId,
         displayName: person.displayName,
+        avatarDataUrl: person.avatarDataUrl ?? null,
         totalMessages: 0,
         sentByMe: 0,
         sentByThem: 0,
@@ -139,6 +141,7 @@ export class AnalyticsEngine {
     return {
       personId,
       displayName: person.displayName,
+      avatarDataUrl: person.avatarDataUrl ?? null,
       totalMessages: Number(row.total),
       sentByMe: Number(row.sentByMe),
       sentByThem: Number(row.sentByThem),

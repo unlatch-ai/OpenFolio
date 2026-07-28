@@ -30,7 +30,7 @@ import {
   buildReminderSearchContent,
   buildThreadSearchContent,
 } from "./embeddings.js";
-import { contentHash, cosineSimilarity, createId, normalizeHandle, normalizeQueryForFts, now } from "./utils.js";
+import { contentHash, cosineSimilarity, createId, getHandleCandidates, normalizeHandle, normalizeQueryForFts, now } from "./utils.js";
 
 const DEFAULT_DB_DIR = path.join(os.homedir(), "Library", "Application Support", "OpenFolio");
 const CURRENT_SCHEMA_VERSION = 3;
@@ -81,6 +81,7 @@ function mapPerson(row: Record<string, unknown>): Person {
     jobTitle: (row.jobTitle as string | null) ?? null,
     bio: (row.bio as string | null) ?? null,
     location: (row.location as string | null) ?? null,
+    avatarDataUrl: (row.avatarDataUrl as string | null) ?? null,
     sourceKinds: parseJsonArray(row.sourceKinds) as Person["sourceKinds"],
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
@@ -278,6 +279,7 @@ export class OpenFolioDatabase {
         job_title TEXT,
         bio TEXT,
         location TEXT,
+        avatar_data_url TEXT,
         source_kinds TEXT NOT NULL DEFAULT '[]',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -433,6 +435,9 @@ export class OpenFolioDatabase {
     this.ensureSearchDocumentColumn("content_hash", "TEXT NOT NULL DEFAULT ''");
     this.ensureSearchDocumentColumn("embedded_at", "INTEGER");
     this.ensureSearchDocumentColumn("dirty", "INTEGER NOT NULL DEFAULT 1");
+    this.ensurePeopleColumn("avatar_data_url", "TEXT");
+    this.ensureTableColumn("notes", "pinned", "INTEGER NOT NULL DEFAULT 0");
+    this.ensureTableColumn("notes", "pinned_at", "INTEGER");
     this.db.exec(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION};`);
   }
 
@@ -443,6 +448,19 @@ export class OpenFolioDatabase {
     }
 
     this.db.exec(`ALTER TABLE search_documents ADD COLUMN ${column} ${type};`);
+  }
+
+  private ensurePeopleColumn(column: string, type: string) {
+    this.ensureTableColumn("people", column, type);
+  }
+
+  private ensureTableColumn(table: string, column: string, type: string) {
+    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    if (columns.some((entry) => entry.name === column)) {
+      return;
+    }
+
+    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);
   }
 
   private buildSearchTargets(targets?: SearchTargets) {
@@ -516,7 +534,7 @@ export class OpenFolioDatabase {
       const existing = this.db
         .prepare(`
           SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
-            email, phone, company_name AS companyName, job_title AS jobTitle, bio, location,
+            email, phone, company_name AS companyName, job_title AS jobTitle, bio, location, avatar_data_url AS avatarDataUrl,
             source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
           FROM people WHERE primary_handle = ?
         `)
@@ -557,8 +575,8 @@ export class OpenFolioDatabase {
     return (this.db
       .prepare(`
         SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
-          email, phone, company_name AS companyName, job_title AS jobTitle, bio, location,
-          source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
+          email, phone, company_name AS companyName, job_title AS jobTitle, bio, location, avatar_data_url AS avatarDataUrl,
+            source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
         FROM people ORDER BY updated_at DESC
       `)
       .all() as Array<Record<string, unknown>>).map(mapPerson);
@@ -723,8 +741,8 @@ export class OpenFolioDatabase {
     const row = this.db
       .prepare(`
         SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
-          email, phone, company_name AS companyName, job_title AS jobTitle, bio, location,
-          source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
+          email, phone, company_name AS companyName, job_title AS jobTitle, bio, location, avatar_data_url AS avatarDataUrl,
+            source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
         FROM people WHERE id = ?
       `)
       .get(personId) as Record<string, unknown> | undefined;
@@ -750,6 +768,7 @@ export class OpenFolioDatabase {
           job_title = ?,
           bio = ?,
           location = ?,
+          avatar_data_url = ?,
           updated_at = ?
         WHERE id = ?
       `)
@@ -762,6 +781,7 @@ export class OpenFolioDatabase {
         profile.jobTitle === undefined ? existing.jobTitle ?? null : profile.jobTitle?.trim() || null,
         profile.bio === undefined ? existing.bio ?? null : profile.bio?.trim() || null,
         profile.location === undefined ? existing.location ?? null : profile.location?.trim() || null,
+        profile.avatarDataUrl === undefined ? existing.avatarDataUrl ?? null : profile.avatarDataUrl?.trim() || null,
         updatedAt,
         personId,
       );
@@ -1211,12 +1231,17 @@ export class OpenFolioDatabase {
     const normalizedPrimaryHandle = normalizeHandle(person.primaryHandle);
     const normalizedEmail = normalizeHandle(person.email ?? null);
     const normalizedPhone = normalizeHandle(person.phone ?? null);
+    const avatarDataUrl = typeof person.avatarDataUrl === "string"
+      ? person.avatarDataUrl
+      : typeof person.metadata?.avatarDataUrl === "string"
+        ? person.metadata.avatarDataUrl
+        : null;
     const normalizedHandles = [
-      normalizedPrimaryHandle,
-      normalizedEmail,
-      normalizedPhone,
+      ...getHandleCandidates(person.primaryHandle),
+      ...getHandleCandidates(person.email),
+      ...getHandleCandidates(person.phone),
       ...(Array.isArray(person.metadata?.handles) ? person.metadata.handles : [])
-        .map((value) => typeof value === "string" ? normalizeHandle(value) : null),
+        .flatMap((value) => typeof value === "string" ? getHandleCandidates(value) : []),
     ].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
 
     const persistDetails = (existing: Person, nextPrimaryHandle: string | null) => {
@@ -1233,6 +1258,7 @@ export class OpenFolioDatabase {
             job_title = COALESCE(?, job_title),
             bio = COALESCE(?, bio),
             location = COALESCE(?, location),
+            avatar_data_url = COALESCE(?, avatar_data_url),
             source_kinds = ?,
             updated_at = ?
           WHERE id = ?
@@ -1246,6 +1272,7 @@ export class OpenFolioDatabase {
           person.jobTitle ?? null,
           person.bio ?? null,
           person.location ?? null,
+          avatarDataUrl,
           stringify(sourceKinds),
           updatedAt,
           existing.id,
@@ -1260,9 +1287,17 @@ export class OpenFolioDatabase {
         jobTitle: existing.jobTitle ?? person.jobTitle ?? null,
         bio: existing.bio ?? person.bio ?? null,
         location: existing.location ?? person.location ?? null,
+        avatarDataUrl: existing.avatarDataUrl ?? avatarDataUrl,
         sourceKinds,
         updatedAt,
       };
+    };
+
+    const rememberHandles = (personId: string) => {
+      for (const handle of normalizedHandles) {
+        this.addPersonAlias(personId, handle, "handle");
+        this.setSourceRef(person.sourceKind, `${person.sourceId}:handle:${handle}`, "person", personId);
+      }
     };
 
     const existingSource = this.getSourceRef(person.sourceKind, person.sourceId, "person");
@@ -1270,7 +1305,9 @@ export class OpenFolioDatabase {
       const existing = this.getPerson(existingSource.entityId);
       if (existing) {
         const nextPrimaryHandle = existing.primaryHandle ?? normalizedPrimaryHandle;
-        return persistDetails(existing, nextPrimaryHandle);
+        const persisted = persistDetails(existing, nextPrimaryHandle);
+        rememberHandles(existing.id);
+        return persisted;
       }
     }
 
@@ -1279,12 +1316,14 @@ export class OpenFolioDatabase {
       const nextPrimaryHandle = matchedPerson.primaryHandle ?? normalizedPrimaryHandle;
       const persisted = persistDetails(matchedPerson, nextPrimaryHandle);
       this.setSourceRef(person.sourceKind, person.sourceId, "person", matchedPerson.id);
+      rememberHandles(matchedPerson.id);
       return persisted;
     }
 
     const persisted = this.getOrCreatePerson(normalizedPrimaryHandle ?? normalizedHandles[0] ?? null, person.displayName);
     const enriched = persistDetails(persisted, persisted.primaryHandle ?? normalizedPrimaryHandle ?? normalizedHandles[0] ?? null);
     this.setSourceRef(person.sourceKind, person.sourceId, "person", persisted.id);
+    rememberHandles(persisted.id);
     return enriched;
   }
 
@@ -1293,12 +1332,16 @@ export class OpenFolioDatabase {
       const row = this.db
         .prepare(`
           SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
-            email, phone, company_name AS companyName, job_title AS jobTitle, bio, location,
+            email, phone, company_name AS companyName, job_title AS jobTitle, bio, location, avatar_data_url AS avatarDataUrl,
             source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
           FROM people
           WHERE primary_handle = ? OR email = ? OR phone = ?
+            OR EXISTS (
+              SELECT 1 FROM person_aliases pa
+              WHERE pa.person_id = people.id AND pa.kind = 'handle' AND pa.value = ?
+            )
         `)
-        .get(handle, handle, handle) as Record<string, unknown> | undefined;
+        .get(handle, handle, handle, handle) as Record<string, unknown> | undefined;
       if (row) {
         return mapPerson(row);
       }
@@ -1763,8 +1806,8 @@ export class OpenFolioDatabase {
       ? this.db
           .prepare(`
             SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
-              email, phone, company_name AS companyName, job_title AS jobTitle, bio, location,
-              source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
+              email, phone, company_name AS companyName, job_title AS jobTitle, bio, location, avatar_data_url AS avatarDataUrl,
+            source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
             FROM people
             WHERE display_name LIKE ? OR primary_handle LIKE ? OR email LIKE ? OR phone LIKE ?
               OR EXISTS (
@@ -1778,8 +1821,8 @@ export class OpenFolioDatabase {
       : this.db
           .prepare(`
             SELECT id, display_name AS displayName, primary_handle AS primaryHandle,
-              email, phone, company_name AS companyName, job_title AS jobTitle, bio, location,
-              source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
+              email, phone, company_name AS companyName, job_title AS jobTitle, bio, location, avatar_data_url AS avatarDataUrl,
+            source_kinds AS sourceKinds, created_at AS createdAt, updated_at AS updatedAt
             FROM people
             ORDER BY updated_at DESC
             LIMIT ?

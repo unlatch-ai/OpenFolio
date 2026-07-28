@@ -39,10 +39,11 @@ interface ContactAvatarProps {
   name: string;
   size?: number;
   isGroup?: boolean;
+  avatarDataUrl?: string | null;
   className?: string;
 }
 
-export function ContactAvatar({ name, size = 36, isGroup = false, className = "" }: ContactAvatarProps) {
+export function ContactAvatar({ name, size = 36, isGroup = false, avatarDataUrl = null, className = "" }: ContactAvatarProps) {
   const style = useMemo(() => {
     const idx = hashString(name) % GRADIENT_PAIRS.length;
     const [from, to] = GRADIENT_PAIRS[idx];
@@ -67,6 +68,23 @@ export function ContactAvatar({ name, size = 36, isGroup = false, className = ""
       <div style={style} className={className}>
         <Users size={size * 0.4} />
       </div>
+    );
+  }
+
+  if (avatarDataUrl) {
+    return (
+      <img
+        src={avatarDataUrl}
+        alt=""
+        className={className}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "50%",
+          objectFit: "cover",
+          flexShrink: 0,
+        }}
+      />
     );
   }
 

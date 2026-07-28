@@ -109,6 +109,7 @@ describe("OpenFolioCore", () => {
     chatDbPath = tempPath("chat.db");
     seedMessagesDb(chatDbPath);
     process.env.OPENFOLIO_MESSAGES_DB_PATH = chatDbPath;
+    process.env.OPENFOLIO_PHONE_REGION = "US";
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENFOLIO_IMPORT_BATCH_SIZE;
   });
@@ -150,6 +151,28 @@ describe("OpenFolioCore", () => {
     const db = new DatabaseSync(dbPath, { readOnly: true });
     expect((db.prepare("SELECT value FROM settings WHERE key = 'future'").get() as { value: string }).value).toBe("keep");
     db.close();
+  });
+
+  it("adds missing note pin columns to existing local databases", () => {
+    const legacyPath = tempPath("legacy-notes.sqlite");
+    const db = new DatabaseSync(legacyPath);
+    db.exec(`
+      PRAGMA user_version = 3;
+      CREATE TABLE notes (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+    `);
+    db.close();
+
+    const core = new OpenFolioCore({ dbPath: legacyPath });
+    const columns = core.db.query<{ name: string }>("PRAGMA table_info(notes)").map((row) => row.name);
+
+    expect(columns).toContain("pinned");
+    expect(columns).toContain("pinned_at");
   });
 
   it("imports only the delta on the next Messages sync", async () => {
@@ -364,6 +387,93 @@ describe("OpenFolioCore", () => {
     expect(people).toHaveLength(1);
     expect(people[0]?.displayName).toBe("Ada Lovelace");
     expect(people[0]?.primaryHandle).toBe("+15555550123");
+  });
+
+  it("matches local US phone numbers to E.164 message handles", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+
+    core.applyConnectorSync({
+      people: [{
+        displayName: "Ada Local",
+        primaryHandle: "(555) 555-0123",
+        phone: "555-555-0123",
+        sourceKind: "apple_contacts",
+        sourceId: "contact-local-ada",
+        metadata: { handles: ["555-555-0123"] },
+      }],
+      interactions: [],
+      cursor: null,
+      hasMore: false,
+    });
+
+    const people = core.db.listPeople();
+    expect(people).toHaveLength(1);
+    expect(people[0]?.displayName).toBe("Ada Local");
+    expect(people[0]?.phone).toBe("+15555550123");
+  });
+
+  it("stores all contact handles as aliases for future matching", async () => {
+    const core = new OpenFolioCore({ dbPath });
+    await core.startMessagesImport();
+    const person = core.db.listPeople()[0];
+    expect(person).toBeTruthy();
+
+    core.applyConnectorSync({
+      people: [{
+        displayName: "Ada Lovelace",
+        primaryHandle: "ada@example.com",
+        email: "ada@example.com",
+        phone: "555-555-0123",
+        avatarDataUrl: "data:image/jpeg;base64,abc123",
+        sourceKind: "apple_contacts",
+        sourceId: "contact-ada-aliases",
+        metadata: { handles: ["ada@example.com", "555-555-0123"] },
+      }],
+      interactions: [],
+      cursor: null,
+      hasMore: false,
+    });
+
+    const updated = core.db.listPeople()[0];
+    const aliases = core.db.getPersonAliases(updated.id).map((alias) => alias.value);
+
+    expect(core.db.listPeople()).toHaveLength(1);
+    expect(updated.avatarDataUrl).toBe("data:image/jpeg;base64,abc123");
+    expect(aliases).toContain("ada@example.com");
+    expect(aliases).toContain("+15555550123");
+    expect(core.db.query(
+      "SELECT entity_id AS entityId FROM source_item_refs WHERE source_id = ?",
+      "contact-ada-aliases:handle:5555550123",
+    )[0]?.entityId).toBe(updated.id);
+  });
+
+  it("does not merge same-name contacts without a shared handle", () => {
+    const core = new OpenFolioCore({ dbPath });
+
+    core.applyConnectorSync({
+      people: [
+        {
+          displayName: "Jordan Lee",
+          primaryHandle: "jordan.one@example.com",
+          email: "jordan.one@example.com",
+          sourceKind: "apple_contacts",
+          sourceId: "jordan-one",
+        },
+        {
+          displayName: "Jordan Lee",
+          primaryHandle: "jordan.two@example.com",
+          email: "jordan.two@example.com",
+          sourceKind: "apple_contacts",
+          sourceId: "jordan-two",
+        },
+      ],
+      interactions: [],
+      cursor: null,
+      hasMore: false,
+    });
+
+    expect(core.db.listPeople()).toHaveLength(2);
   });
 
   it("builds a person profile from messages, contacts, notes, and reminders", async () => {

@@ -61,14 +61,16 @@ function importStep(input: OnboardingInput, messagesGranted: boolean): Onboardin
       ? importedThreadCount > 0
         ? `${importedThreadCount} conversations are ready.`
         : "Import finished. No local conversations were found yet."
-      : "Build the local graph from Messages. This reads data locally and does not modify Messages.",
+      : running || cancelling
+        ? `${input.importJob?.importedMessages ?? 0} messages imported so far. You can continue setup while this runs.`
+        : "Build the local graph from Messages. Large imports can take time, run locally, and do not modify Messages.",
     status: imported ? "complete" : running || cancelling ? "running" : messagesGranted ? "active" : "blocked",
     required: true,
     actionLabel: running ? "Cancel import" : cancelling ? "Cancelling..." : imported ? "Import again" : failed || cancelled ? "Retry import" : "Import messages",
   };
 }
 
-function contactsStep(input: OnboardingInput, requiredDone: boolean): OnboardingStep {
+function contactsStep(input: OnboardingInput, canRequestContacts: boolean): OnboardingStep {
   const granted = input.contactsStatus?.status === "granted";
   const synced = Boolean(input.contactsSync && input.contactsSync.importedContacts >= 0);
   const needsSettings = input.contactsStatus?.status === "denied" || input.contactsStatus?.status === "restricted";
@@ -80,7 +82,7 @@ function contactsStep(input: OnboardingInput, requiredDone: boolean): Onboarding
       : needsSettings || input.contactsStatus?.status === "unsupported"
         ? input.contactsStatus?.details ?? "Contacts access is unavailable."
       : "Resolve phone numbers and emails to real names from Apple Contacts.",
-    status: synced ? "complete" : granted ? "active" : needsSettings ? "blocked" : requiredDone ? "optional" : "waiting",
+    status: synced ? "complete" : granted ? "active" : needsSettings ? "blocked" : canRequestContacts ? "optional" : "waiting",
     required: false,
     actionLabel: granted ? "Sync contacts" : needsSettings ? "Open Settings" : "Allow and sync",
   };
@@ -106,16 +108,19 @@ function embeddingsStep(input: OnboardingInput, imported: boolean): OnboardingSt
 export function getOnboardingState(input: OnboardingInput) {
   const messagesGranted = input.messagesStatus?.status === "granted";
   const imported = input.threadCount > 0 || input.importJob?.status === "completed";
+  const importing = input.importJob?.status === "running" || input.importJob?.status === "cancelling";
   const requiredDone = messagesGranted && imported;
+  const canRequestContacts = messagesGranted && (importing || requiredDone);
 
   const steps = [
     messagesStep(input),
     importStep(input, messagesGranted),
-    contactsStep(input, requiredDone),
+    contactsStep(input, canRequestContacts),
     embeddingsStep(input, imported),
   ];
 
-  const activeStep = steps.find((step) => step.status === "active")
+  const activeStep = steps.find((step) => step.id === "contacts" && (step.status === "active" || step.status === "optional") && importing)
+    ?? steps.find((step) => step.status === "active")
     ?? steps.find((step) => step.status === "optional")
     ?? steps.find((step) => step.status === "running")
     ?? steps[0];

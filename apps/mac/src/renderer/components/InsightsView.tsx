@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
   BarChart3,
   TrendingUp,
@@ -28,6 +28,7 @@ import type {
   RelationshipStats,
   MessageHeatmapEntry,
 } from "@openfolio/shared-types";
+import { getCachedInsightsYear, getInsightsEmptyCopy, type InsightsYearCache } from "../insights-state";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const HOUR_LABELS = Array.from({ length: 24 }, (_, i) => {
@@ -98,7 +99,7 @@ function TopContactsList({ contacts }: { contacts: RelationshipStats[] }) {
             transition={{ duration: 0.2, delay: i * 0.05 }}
           >
             <span className="top-contact-rank">#{i + 1}</span>
-            <ContactAvatar name={contact.displayName} size={34} />
+            <ContactAvatar name={contact.displayName} avatarDataUrl={contact.avatarDataUrl} size={34} />
             <div className="top-contact-info">
               <span className="top-contact-name">{contact.displayName}</span>
               <span className="top-contact-meta">
@@ -301,15 +302,47 @@ function MessageHeatmap({ data, year }: { data: MessageHeatmapEntry[]; year: num
   );
 }
 
+function YearSelector({ year, currentYear, setYear }: { year: number; currentYear: number; setYear: Dispatch<SetStateAction<number>> }) {
+  return (
+    <div className="year-selector">
+      <Button
+        variant="ghost"
+        size="xs"
+        onClick={() => setYear((y) => y - 1)}
+      >
+        <ChevronLeft size={14} />
+      </Button>
+      <span className="year-label">{year}</span>
+      <Button
+        variant="ghost"
+        size="xs"
+        onClick={() => setYear((y) => Math.min(y + 1, currentYear))}
+        disabled={year >= currentYear}
+      >
+        <ChevronRight size={14} />
+      </Button>
+    </div>
+  );
+}
+
 /* ─── Main Insights View ─── */
 export function InsightsView() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [wrapped, setWrapped] = useState<WrappedSummary | null>(null);
   const [heatmap, setHeatmap] = useState<MessageHeatmapEntry[]>([]);
+  const [cache, setCache] = useState<InsightsYearCache>({});
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async (targetYear: number) => {
+    const cached = getCachedInsightsYear(cache, targetYear);
+    if (cached) {
+      setWrapped(cached.wrapped);
+      setHeatmap(cached.heatmap);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const [w, h] = await Promise.all([
@@ -318,12 +351,13 @@ export function InsightsView() {
       ]);
       setWrapped(w);
       setHeatmap(h);
+      setCache((current) => ({ ...current, [targetYear]: { wrapped: w, heatmap: h } }));
     } catch (error) {
       console.error("[insights] Failed to load:", error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cache]);
 
   useEffect(() => {
     void loadData(year);
@@ -344,19 +378,23 @@ export function InsightsView() {
   }
 
   if (!wrapped || wrapped.totalMessages === 0) {
+    const emptyCopy = getInsightsEmptyCopy(wrapped, year);
     return (
       <div className="insights-view">
         <div className="insights-header">
-          <h2>Insights</h2>
-          <p>Import your messages to see your relationship stats.</p>
+          <div>
+            <h2>{emptyCopy.title}</h2>
+            <p>{emptyCopy.description}</p>
+          </div>
+          <YearSelector year={year} currentYear={currentYear} setYear={setYear} />
         </div>
         <div className="inbox-empty">
           <div className="inbox-empty-card">
             <div className="inbox-empty-icon">
               <BarChart3 size={32} />
             </div>
-            <h2>No data yet</h2>
-            <p>Import your iMessage history from Settings to unlock your Wrapped experience.</p>
+            <h2>{emptyCopy.cardTitle}</h2>
+            <p>{emptyCopy.cardDescription}</p>
           </div>
         </div>
       </div>
@@ -378,24 +416,7 @@ export function InsightsView() {
             {formatNumber(wrapped.totalConversations)} conversations
           </p>
         </div>
-        <div className="year-selector">
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => setYear((y) => y - 1)}
-          >
-            <ChevronLeft size={14} />
-          </Button>
-          <span className="year-label">{year}</span>
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => setYear((y) => Math.min(y + 1, currentYear))}
-            disabled={year >= currentYear}
-          >
-            <ChevronRight size={14} />
-          </Button>
-        </div>
+        <YearSelector year={year} currentYear={currentYear} setYear={setYear} />
       </div>
 
       {/* Stat cards */}
