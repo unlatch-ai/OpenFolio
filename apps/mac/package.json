@@ -53,7 +53,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
-    "electron": "^39.8.1",
+    "electron": "^39.8.10",
     "electron-builder": "26.8.1",
     "electron-vite": "^4.0.1",
     "tailwindcss": "^4.2.2",
